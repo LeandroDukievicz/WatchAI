@@ -1,0 +1,289 @@
+/* ==========================================================================
+   WatchAI — estilos
+   As cores vêm do tema (`watchai/theme.py`) como variáveis $aw-*.
+   Regra de ouro: neon só em status, título, seleção e teclas. O resto é
+   branco suave e cinza.
+   ========================================================================== */
+
+Screen {
+    background: $aw-bg;
+    color: $aw-text;
+    scrollbar-size-vertical: 1;
+    scrollbar-background: $aw-bg;
+    scrollbar-background-hover: $aw-bg;
+    scrollbar-background-active: $aw-bg;
+    scrollbar-color: $aw-line-hi;
+    scrollbar-color-hover: $aw-muted;
+    scrollbar-color-active: $aw-cyan-2;
+}
+
+/* ---- Dashboard ---------------------------------------------------------- */
+
+/* O dashboard nunca rola: quem rola é a área de sessões. Assim o header e o
+   keybar ficam sempre visíveis, mesmo num terminal muito baixo. */
+Dashboard {
+    layout: vertical;
+    overflow-y: hidden;
+}
+
+AppHeader {
+    height: 3;
+    margin: 0 1;
+    padding: 0 1;
+    background: $aw-bg;
+    border: round $aw-line-hi;
+    border-title-align: left;
+}
+
+PanelTitle {
+    height: 1;
+    margin: 0 2;
+}
+
+/* `height: auto` encosta o EVENT STREAM logo abaixo dos cards (sem vão morto).
+   O teto vem do Dashboard.on_resize (`sessions_max_height`), não daqui: em fr o
+   Textual não garante espaço para o stream. Passando do teto, esta área rola. */
+#sessions-area {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+    scrollbar-background: $aw-bg;
+    scrollbar-background-hover: $aw-bg;
+    scrollbar-background-active: $aw-bg;
+    scrollbar-color: $aw-line-hi;
+    scrollbar-color-hover: $aw-muted;
+    scrollbar-color-active: $aw-cyan-2;
+}
+/* O EVENT STREAM ocupa toda a altura que sobra: quanto mais alto o terminal,
+   mais histórico aparece. */
+EventStream {
+    height: 1fr;
+    min-height: 4;
+    margin: 0 1;
+    padding: 0 1;
+    background: $aw-bg;
+    border: round $aw-line-hi;
+    border-title-color: $aw-muted;
+    border-title-style: bold;
+    border-subtitle-color: $aw-cyan-2;
+}
+EventStream.-focused {
+    border: round $aw-cyan;
+    border-title-color: $aw-cyan;
+}
+
+KeyBar {
+    height: 1;
+    dock: bottom;
+    padding: 0 2;
+    background: $aw-bg-2;
+}
+
+/* ---- Grid de cards -------------------------------------------------------- */
+
+#cards {
+    grid-size: 3;
+    grid-gutter: 0 2;
+    grid-rows: auto;
+    height: auto;
+}
+/* Sem caixa, os cards compactos precisam de uma linha de respiro entre si. */
+Dashboard.-tiny #cards {
+    grid-gutter: 1 0;
+}
+
+SessionCard {
+    layout: horizontal;
+    height: auto;
+    padding: 0 2;
+    background: $aw-bg;
+    border: round $aw-line;
+    border-title-color: $aw-text;
+    border-title-style: bold;
+    border-subtitle-color: $aw-muted;
+}
+
+/* Coluna de texto do card: ocupa o que sobra à esquerda do semáforo. */
+.card-main {
+    width: 1fr;
+    height: auto;
+}
+
+TrafficLight {
+    margin-left: 2;
+}
+SessionCard.-compact TrafficLight {
+    display: none;
+}
+
+CardName {
+    display: none;
+    height: 1;
+}
+SessionCard.-compact CardName {
+    display: block;
+}
+
+SessionCard .card-light {
+    width: 1fr;
+}
+
+CardBody {
+    height: auto;
+    margin-top: 1;
+}
+SessionCard.-compact CardBody {
+    margin: 0 0 0 2;
+}
+SessionCard.-compact .card-light {
+    margin-left: 2;
+}
+
+/* Bordas por estado: só READY / INPUT / ERROR acendem forte. WORKING e
+   WAITING ficam num tom apagado; OFFLINE quase some. */
+SessionCard.-working  { border: round $aw-edge-working; }
+SessionCard.-starting { border: round $aw-edge-working; }
+SessionCard.-waiting  { border: round $aw-edge-waiting; }
+SessionCard.-offline  { border: round $aw-line; border-title-color: $aw-ghost; border-subtitle-color: $aw-ghost; }
+SessionCard.-ready    { border: round $aw-green;   background: $aw-tint-green; }
+SessionCard.-input    { border: round $aw-magenta; background: $aw-tint-magenta; }
+SessionCard.-error    { border: round $aw-red;     background: $aw-tint-red; }
+
+/* Selecionado: borda cyan + título cyan com ▶ + leve tinta de fundo.
+   Em estados de atenção a moldura MANTÉM a cor do estado (um READY
+   selecionado continua verde); só o título/subtítulo viram cyan. */
+SessionCard.-selected {
+    border: round $aw-cyan;
+    border-title-color: $aw-cyan;
+    border-subtitle-color: $aw-cyan-2;
+    background: $aw-tint-select;
+}
+SessionCard.-selected.-ready { border: round $aw-green;   background: $aw-tint-green-sel; }
+SessionCard.-selected.-input { border: round $aw-magenta; background: $aw-tint-magenta-sel; }
+SessionCard.-selected.-error { border: round $aw-red;     background: $aw-tint-red-sel; }
+
+/* Compacto (< 60 colunas): sem caixa; barra lateral na cor do estado. */
+SessionCard.-compact {
+    border: none;
+    border-left: outer $aw-line;
+    padding: 0 1;
+}
+SessionCard.-compact.-working  { border: none; border-left: outer $aw-edge-working; }
+SessionCard.-compact.-starting { border: none; border-left: outer $aw-edge-working; }
+SessionCard.-compact.-waiting  { border: none; border-left: outer $aw-yellow; }
+SessionCard.-compact.-offline  { border: none; border-left: outer $aw-line; }
+SessionCard.-compact.-ready    { border: none; border-left: outer $aw-green; }
+SessionCard.-compact.-input    { border: none; border-left: outer $aw-magenta; }
+SessionCard.-compact.-error    { border: none; border-left: outer $aw-red; }
+SessionCard.-compact.-selected { border: none; border-left: outer $aw-cyan; background: $aw-tint-select; }
+SessionCard.-compact.-selected.-ready  { border: none; border-left: outer $aw-green;   background: $aw-tint-green-sel; }
+SessionCard.-compact.-selected.-input  { border: none; border-left: outer $aw-magenta; background: $aw-tint-magenta-sel; }
+SessionCard.-compact.-selected.-error  { border: none; border-left: outer $aw-red;     background: $aw-tint-red-sel; }
+
+/* ---- Visão LIST ------------------------------------------------------------ */
+
+#rows {
+    height: auto;
+    padding: 0 1;
+}
+
+ListHeader {
+    height: 2;
+    layout: horizontal;
+    padding: 0 1;
+    color: $aw-muted;
+    text-style: bold;
+    border-bottom: solid $aw-line;
+}
+
+SessionRow {
+    height: 1;
+    padding: 0 1;
+    background: $aw-bg;
+}
+SessionRow.-ready    { background: $aw-tint-green; }
+SessionRow.-input    { background: $aw-tint-magenta; }
+SessionRow.-error    { background: $aw-tint-red; }
+SessionRow.-selected { background: $aw-tint-select; }
+SessionRow.-selected.-ready { background: $aw-tint-green-sel; }
+SessionRow.-selected.-input { background: $aw-tint-magenta-sel; }
+SessionRow.-selected.-error { background: $aw-tint-red-sel; }
+
+ListHeader .marker, SessionRow .marker { width: 2; height: 1; }
+ListHeader .name,   SessionRow .name   { width: 11; height: 1; }
+ListHeader .status, SessionRow .status { width: 12; height: 1; }
+ListHeader .project, SessionRow .project { width: 1fr; height: 1; }
+ListHeader .time,   SessionRow .time   { width: 8; height: 1; text-align: right; }
+
+Dashboard.-tiny ListHeader .name, Dashboard.-tiny SessionRow .name { width: 9; }
+Dashboard.-tiny ListHeader .status, Dashboard.-tiny SessionRow .status { width: 10; }
+Dashboard.-tiny ListHeader .time, Dashboard.-tiny SessionRow .time { width: 6; }
+
+/* ---- Modais ---------------------------------------------------------------- */
+
+DetailsScreen, HelpScreen {
+    align: center middle;
+    background: $aw-bg 80%;
+}
+
+#details {
+    width: 74;
+    max-width: 96%;
+    height: auto;
+    max-height: 100%;
+    padding: 0 2;
+    background: $aw-bg;
+    border: round $aw-cyan;
+    border-title-color: $aw-cyan;
+    border-title-style: bold;
+    overflow-y: auto;
+}
+
+#d-name {
+    height: 1;
+    margin-top: 1;
+    margin-bottom: 1;
+    text-style: bold;
+}
+#d-status-row {
+    height: 1;
+}
+.d-key {
+    width: 11;
+    height: 1;
+    color: $aw-muted;
+}
+#d-light {
+    width: 1fr;
+}
+#d-fields {
+    height: auto;
+}
+.d-section {
+    height: 1;
+    margin-top: 1;
+    color: $aw-cyan-2;
+    text-style: bold;
+}
+#d-activity, #d-events {
+    height: auto;
+}
+#d-hint {
+    height: 1;
+    margin-top: 1;
+}
+
+#help {
+    width: 46;
+    max-width: 96%;
+    height: auto;
+    padding: 1 3;
+    background: $aw-bg;
+    border: round $aw-cyan;
+    border-title-color: $aw-cyan;
+    border-title-style: bold;
+}
+#help-body {
+    height: auto;
+}
