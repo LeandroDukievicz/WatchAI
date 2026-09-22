@@ -189,7 +189,7 @@ def test_layout_sem_vao_morto():
             card = next(iter(dash.query(SessionCard)))
             assert card.region.width == 48
             assert card.region.height == 10  # a altura vem do semáforo (8 linhas)
-            assert card.query_one(TrafficLight).region.width == 9
+            assert card.query_one(TrafficLight).region.width == 8
 
     run(main())
 

@@ -87,9 +87,11 @@ class Palette:
     tint_green: str
     tint_magenta: str
     tint_red: str
+    tint_yellow: str
     tint_green_sel: str
     tint_magenta_sel: str
     tint_red_sel: str
+    tint_yellow_sel: str
 
     def off(self, color: str, forca: float = 1.0, sobre: str | None = None) -> str:
         """A versão **apagada** de uma cor, do jeito certo para esta paleta.
@@ -161,9 +163,11 @@ def palette(
         "tint_green": blend(green, bg, tinta),
         "tint_magenta": blend(magenta, bg, tinta),
         "tint_red": blend(red, bg, tinta),
+        "tint_yellow": blend(yellow, bg, tinta),
         "tint_green_sel": blend(green, bg, tinta_sel),
         "tint_magenta_sel": blend(magenta, bg, tinta_sel),
         "tint_red_sel": blend(red, bg, tinta_sel),
+        "tint_yellow_sel": blend(yellow, bg, tinta_sel),
     }
     unknown = set(overrides) - set(derived)
     if unknown:

@@ -3,17 +3,17 @@
 É a leitura "de longe": antes de ler qualquer texto, a lâmpada acesa já diz se
 a sessão está rodando, pronta ou com problema.
 
-    ╭───────╮
-    │ ▄███▄ │   vermelha · ERROR
-    │ ▀███▀ │
-    │ ▄███▄ │   amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
-    │ ▀███▀ │
-    │ ▄███▄ │   verde    · READY
-    │ ▀███▀ │
-    ╰───────╯
+    ╭──────╮
+    │ ▗██▖ │   vermelha · ERROR
+    │ ▝██▘ │
+    │ ▗██▖ │   amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
+    │ ▝██▘ │
+    │ ▗██▖ │   verde    · READY
+    │ ▝██▘ │
+    ╰──────╯
 
-Cada lâmpada ocupa **duas linhas cheias**, com os quatro cantos cortados por
-meio-blocos: o que sobra é um octógono — a bola mais redonda que uma grade de
+Cada lâmpada ocupa **duas linhas cheias**, com as quatro pontas cortadas por
+quadrantes: o que sobra é um círculo — o mais redondo que uma grade de
 caracteres permite — em vez de um ponto. Em terminais estreitos entra a versão pequena (`●`, cinco linhas), que é
 o que cabe.
 
@@ -40,23 +40,33 @@ from textual.widget import Widget
 from ..models import Status
 from ..theme import blend, colors, fade
 
-WIDTH = 9
+WIDTH = 8
 HEIGHT = 8
 
 # Versão pequena, para quando não há largura nem altura (modo compacto).
 SMALL_WIDTH = 7
 SMALL_HEIGHT = 5
 
-# A bola: duas linhas cheias, com os cantos cortados por meio-blocos. As pontas
-# da linha de cima são meio-baixas (o canto superior fica vazio) e as de baixo
-# são meio-altas — o que sobra é um octógono de 5x2, que é o mais redondo que
-# uma grade de caracteres permite.
-LAMP_TOP = "▄███▄"
-LAMP_BOTTOM = "▀███▀"
+# A bola: duas linhas cheias com as quatro pontas cortadas por **quadrantes**.
+# Meio-bloco (`▄`) tira metade da ponta; o quadrante (`▗`) tira três quartos —
+# e é essa diferença que separa um bloco de um círculo. Em sub-células:
+#
+#     ..####..
+#     .######.
+#     .######.
+#     ..####..
+#
+# São **4** células por 2 linhas, e a largura não é arbitrária: a célula do
+# terminal é ~2x mais alta que larga, então 4 de largura por 2 de altura dá um
+# quadrado — e aí o corte de um quadrante vale 25% nos dois eixos. Com 5 de
+# largura o corte valeria 10% na horizontal contra 25% na vertical, e o que
+# aparecia era um retângulo de cantos lascados.
+LAMP_TOP = "▗██▖"
+LAMP_BOTTOM = "▝██▘"
 LAMP_SMALL = " ● "
 
-CAP_TOP = "╭───────╮"
-CAP_BOTTOM = "╰───────╯"
+CAP_TOP = "╭──────╮"
+CAP_BOTTOM = "╰──────╯"
 SMALL_CAP_TOP = "╭─────╮"
 SMALL_CAP_BOTTOM = "╰─────╯"
 WALL = "│"

@@ -152,14 +152,16 @@ SessionCard.-compact TrafficLight {
 }
 
 
-/* Bordas por estado: só READY / INPUT / ERROR acendem forte. WORKING e
-   WAITING ficam num tom apagado; OFFLINE quase some. */
-SessionCard.-working  { border: round $aw-edge-working; }
-SessionCard.-starting { border: round $aw-edge-working; }
-SessionCard.-waiting  { border: round $aw-edge-waiting; }
+/* O card veste a cor da LÂMPADA — ele é o semáforo em tamanho grande.
+   Vermelha: ERROR. Amarela: WORKING, WAITING, STARTING e INPUT. Verde: READY.
+   IDLE e OFFLINE não acendem lâmpada nenhuma e ficam neutros. */
+SessionCard.-working  { border: round $aw-yellow; background: $aw-tint-yellow; }
+SessionCard.-starting { border: round $aw-yellow; background: $aw-tint-yellow; }
+SessionCard.-waiting  { border: round $aw-yellow; background: $aw-tint-yellow; }
+SessionCard.-idle     { border: round $aw-line; border-title-color: $aw-ghost; }
 SessionCard.-offline  { border: round $aw-line; border-title-color: $aw-ghost; border-subtitle-color: $aw-ghost; }
 SessionCard.-ready    { border: round $aw-green;   background: $aw-tint-green; }
-SessionCard.-input    { border: round $aw-magenta; background: $aw-tint-magenta; }
+SessionCard.-input    { border: round $aw-yellow;  background: $aw-tint-yellow; }
 SessionCard.-error    { border: round $aw-red;     background: $aw-tint-red; }
 
 /* Selecionado: borda cyan + título cyan com ▶ + leve tinta de fundo.
@@ -171,9 +173,12 @@ SessionCard.-selected {
     border-subtitle-color: $aw-cyan-2;
     background: $aw-tint-select;
 }
-SessionCard.-selected.-ready { border: round $aw-green;   background: $aw-tint-green-sel; }
-SessionCard.-selected.-input { border: round $aw-magenta; background: $aw-tint-magenta-sel; }
-SessionCard.-selected.-error { border: round $aw-red;     background: $aw-tint-red-sel; }
+SessionCard.-selected.-ready    { border: round $aw-green;  background: $aw-tint-green-sel; }
+SessionCard.-selected.-error    { border: round $aw-red;    background: $aw-tint-red-sel; }
+SessionCard.-selected.-input    { border: round $aw-yellow; background: $aw-tint-yellow-sel; }
+SessionCard.-selected.-working  { border: round $aw-yellow; background: $aw-tint-yellow-sel; }
+SessionCard.-selected.-waiting  { border: round $aw-yellow; background: $aw-tint-yellow-sel; }
+SessionCard.-selected.-starting { border: round $aw-yellow; background: $aw-tint-yellow-sel; }
 
 /* Compacto (< 60 colunas): sem caixa; barra lateral na cor do estado. */
 SessionCard.-compact {
@@ -181,16 +186,17 @@ SessionCard.-compact {
     border-left: outer $aw-line;
     padding: 0 1;
 }
-SessionCard.-compact.-working  { border: none; border-left: outer $aw-edge-working; }
-SessionCard.-compact.-starting { border: none; border-left: outer $aw-edge-working; }
+SessionCard.-compact.-working  { border: none; border-left: outer $aw-yellow; }
+SessionCard.-compact.-starting { border: none; border-left: outer $aw-yellow; }
 SessionCard.-compact.-waiting  { border: none; border-left: outer $aw-yellow; }
+SessionCard.-compact.-idle     { border: none; border-left: outer $aw-line; }
 SessionCard.-compact.-offline  { border: none; border-left: outer $aw-line; }
 SessionCard.-compact.-ready    { border: none; border-left: outer $aw-green; }
-SessionCard.-compact.-input    { border: none; border-left: outer $aw-magenta; }
+SessionCard.-compact.-input    { border: none; border-left: outer $aw-yellow; }
 SessionCard.-compact.-error    { border: none; border-left: outer $aw-red; }
 SessionCard.-compact.-selected { border: none; border-left: outer $aw-cyan; background: $aw-tint-select; }
 SessionCard.-compact.-selected.-ready  { border: none; border-left: outer $aw-green;   background: $aw-tint-green-sel; }
-SessionCard.-compact.-selected.-input  { border: none; border-left: outer $aw-magenta; background: $aw-tint-magenta-sel; }
+SessionCard.-compact.-selected.-input  { border: none; border-left: outer $aw-yellow; background: $aw-tint-yellow-sel; }
 SessionCard.-compact.-selected.-error  { border: none; border-left: outer $aw-red;     background: $aw-tint-red-sel; }
 
 /* ---- Visão LIST ------------------------------------------------------------ */
@@ -214,13 +220,20 @@ SessionRow {
     padding: 0 1;
     background: $aw-bg;
 }
+/* A linha da lista segue a mesma regra do card: a cor é a da lâmpada. */
 SessionRow.-ready    { background: $aw-tint-green; }
-SessionRow.-input    { background: $aw-tint-magenta; }
 SessionRow.-error    { background: $aw-tint-red; }
+SessionRow.-input    { background: $aw-tint-yellow; }
+SessionRow.-working  { background: $aw-tint-yellow; }
+SessionRow.-waiting  { background: $aw-tint-yellow; }
+SessionRow.-starting { background: $aw-tint-yellow; }
 SessionRow.-selected { background: $aw-tint-select; }
-SessionRow.-selected.-ready { background: $aw-tint-green-sel; }
-SessionRow.-selected.-input { background: $aw-tint-magenta-sel; }
-SessionRow.-selected.-error { background: $aw-tint-red-sel; }
+SessionRow.-selected.-ready    { background: $aw-tint-green-sel; }
+SessionRow.-selected.-error    { background: $aw-tint-red-sel; }
+SessionRow.-selected.-input    { background: $aw-tint-yellow-sel; }
+SessionRow.-selected.-working  { background: $aw-tint-yellow-sel; }
+SessionRow.-selected.-waiting  { background: $aw-tint-yellow-sel; }
+SessionRow.-selected.-starting { background: $aw-tint-yellow-sel; }
 
 ListHeader .marker, SessionRow .marker { width: 2; height: 1; }
 ListHeader .name,   SessionRow .name   { width: 11; height: 1; }

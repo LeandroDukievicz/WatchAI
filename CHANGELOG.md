@@ -34,6 +34,15 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   de quem está trabalhando: quem decide se quer é o usuário (`N`). O bip
   continua ligado por padrão — ele avisa sem atrapalhar.
 
+- **O card inteiro veste a cor da lâmpada**: âmbar em WORKING, WAITING,
+  STARTING e INPUT; verde em READY; vermelho em ERROR. Antes só READY, INPUT e
+  ERROR tingiam, e os estados "calmos" ficavam propositalmente apagados — a
+  regra virou "o card é o semáforo em tamanho grande".
+- **Lâmpadas redondas**: as pontas passaram a ser cortadas por **quadrantes**
+  (25% nos dois eixos) e a bola encolheu de 5 para 4 células de largura, que na
+  proporção do terminal é um quadrado. Antes o corte valia 10% na horizontal
+  contra 25% na vertical, e o resultado era um retângulo de cantos lascados.
+
 ### Corrigido
 - Matar um processo de notificação que já havia morrido sozinho levantava
   `ProcessLookupError` e chegava como **falha de worker** — o CI do Windows

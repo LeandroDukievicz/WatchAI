@@ -234,11 +234,16 @@ se o foco está no EVENT STREAM (`TAB`).
 | `elapsed` | Há quanto tempo o terminal está aberto |
 | Semáforo | As 3 lâmpadas — ver [seção própria](#o-semáforo) |
 
-- **A moldura carrega o estado**: verde (READY), magenta (INPUT) e vermelho
-  (ERROR) acendem forte e ganham uma tinta de fundo; WORKING e WAITING ficam em
-  tons apagados (é o estado normal, não deve chamar atenção); OFFLINE quase some.
+- **O card inteiro veste a cor da lâmpada** — ele é o semáforo em tamanho
+  grande, e é o que se lê do outro lado da sala: moldura e fundo em **verde**
+  (READY), **vermelho** (ERROR) ou **âmbar** (WORKING, WAITING, STARTING e
+  INPUT — os quatro estados da lâmpada amarela). IDLE e OFFLINE não acendem
+  lâmpada nenhuma e ficam neutros.
 - **Selecionado** ganha fundo levemente mais claro e título cyan — mas a moldura
   **mantém a cor do estado**: um READY selecionado continua verde.
+- Os estados dentro do âmbar continuam se distinguindo pelo **símbolo, pelo
+  label e pela lâmpada**: só o INPUT pisca, e só ele e o ERROR deixam o
+  contador em negrito depois de um minuto.
 - **`for MM:SS` fica em negrito depois de 1 minuto** em READY, INPUT e ERROR — é
   o "terminou há dois minutos e você ainda não voltou".
 - **Terminal sem agente** fica `IDLE`, apagado: a aba continua aberta, não há
@@ -379,19 +384,25 @@ Cada card carrega um semáforo de 3 lâmpadas — é a leitura "de longe", antes
 ler qualquer texto. É também a identidade do produto.
 
 ```
-╭───────╮
-│ ▄███▄ │  vermelha · ERROR
-│ ▀███▀ │
-│ ▄███▄ │  amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
-│ ▀███▀ │
-│ ▄███▄ │  verde    · READY
-│ ▀███▀ │
-╰───────╯
+╭──────╮
+│ ▗██▖ │  vermelha · ERROR
+│ ▝██▘ │
+│ ▗██▖ │  amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
+│ ▝██▘ │
+│ ▗██▖ │  verde    · READY
+│ ▝██▘ │
+╰──────╯
 ```
 
-Cada lâmpada ocupa **duas linhas cheias com os quatro cantos cortados** por
-meio-blocos — um octógono, que é a bola mais redonda que uma grade de
-caracteres permite. Em terminais estreitos entra a versão pequena (`●`).
+Cada lâmpada ocupa **duas linhas cheias com as quatro pontas cortadas por
+quadrantes** — um círculo, o mais redondo que uma grade de caracteres permite.
+Em terminais estreitos entra a versão pequena (`●`).
+
+A largura não é arbitrária: a célula do terminal é ~2× mais alta que larga,
+então **4 de largura por 2 de altura** dá um quadrado, e aí o corte de um
+quadrante vale 25% nos dois eixos. Com 5 de largura o corte valia 10% na
+horizontal contra 25% na vertical — e o que aparecia era um retângulo de cantos
+lascados.
 
 É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](assets/watchai.svg))
 desenhado em texto: carcaça de contorno cyan, interior escuro e três lâmpadas.
@@ -504,11 +515,11 @@ Cor **e** símbolo **e** label — dá para ler sem depender só de cor.
 
 | Estado | Símbolo | Cor | Semáforo | Significado | Card |
 |---|---|---|---|---|---|
-| READY | `●` (pulso lento) | verde | **verde** | terminou, pronta p/ nova instrução | borda verde + tinta + label/tempo em negrito |
-| WORKING | `◐◓◑◒` (giro lento) | cyan | **amarela** | executando | borda cyan apagada, sem negrito (calmo) |
-| WAITING | `◇` | amarelo | **amarela** | esperando processo externo | borda âmbar apagada |
-| INPUT | `◆` (pulso lento) | magenta | **amarela piscando** | esperando ação do usuário | borda magenta + tinta |
-| ERROR | `▲` (estático) | vermelho | **vermelha** | problema detectado | borda vermelha + tinta |
+| READY | `●` (pulso lento) | verde | **verde** | terminou, pronta p/ nova instrução | card verde + label/tempo em negrito |
+| WORKING | `◐◓◑◒` (giro lento) | cyan | **amarela** | executando | card âmbar |
+| WAITING | `◇` | amarelo | **amarela** | esperando processo externo | card âmbar |
+| INPUT | `◆` (pulso lento) | magenta | **amarela piscando** | esperando ação do usuário | card âmbar + tempo em negrito |
+| ERROR | `▲` (estático) | vermelho | **vermelha** | problema detectado | card vermelho |
 | OFFLINE | `○` (apagado) | cinza escuro | todas apagadas | terminal fechado | quase some no fundo |
 | STARTING | `◌ ○` | cyan secundário | **amarela** | acabou de iniciar | borda apagada |
 | IDLE | `·` | cinza | todas apagadas | aba aberta, nenhum agente | apagado |
