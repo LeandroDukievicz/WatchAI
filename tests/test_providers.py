@@ -485,7 +485,7 @@ class FocoFalso:
         return "janela em evidência"
 
 
-def test_g_leva_para_a_janela_da_sessao_selecionada():
+def test_shift_a_leva_para_a_janela_da_sessao_selecionada():
     import asyncio
 
     from watchai.app import WatchAIApp
@@ -507,7 +507,7 @@ def test_g_leva_para_a_janela_da_sessao_selecionada():
             await pilot.pause()
             await pilot.pause()
             app.screen.selected = 1  # segundo card
-            await pilot.press("g")
+            await pilot.press("A")  # Shift+A
             await app.workers.wait_for_complete()
             assert len(foco.pedidos) == 1
             pedido = foco.pedidos[0]
@@ -552,3 +552,51 @@ def test_com_varias_janelas_no_mesmo_processo_o_titulo_desempata(monkeypatch):
     assert asyncio.run(focuser._janela_wmctrl(4242, "watchai")) == "0x03000002"
     assert asyncio.run(focuser._janela_wmctrl(4242, "inexistente")) == "0x03000001"
     assert asyncio.run(focuser._janela_wmctrl(1, "watchai")) is None
+
+
+def test_window_calls_foca_a_janela_exata(monkeypatch):
+    """Com a extensão instalada dá para focar a janela certa no Wayland —
+    sem ela, o melhor possível é levantar o terminal."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    chamadas: list[list[str]] = []
+    lista = (
+        '(\'[{"id":77,"pid":4242,"wm_class":"gnome-terminal-server","title":"outro"},'
+        '{"id":88,"pid":4242,"wm_class":"gnome-terminal-server","title":"watchai — claude"},'
+        '{"id":99,"pid":1,"wm_class":"firefox","title":"web"}]\',)'
+    )
+
+    async def falso(comando, timeout=5.0):
+        chamadas.append(comando)
+        if comando[-1].endswith(".List"):
+            return 0, lista
+        return 0, "()"
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(
+        focuser.focus(pid=4242, app="gnome-terminal-server", tty="", title="watchai")
+    )
+    assert resultado == "janela em evidência"
+    activate = [c for c in chamadas if c[-2].endswith(".Activate")]
+    assert activate and activate[0][-1] == "88"  # a janela cujo título casa
+
+
+def test_sem_a_extensao_cai_no_activate_do_terminal(monkeypatch):
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    async def falso(comando, timeout=5.0):
+        if comando[-1].endswith(".List"):
+            return 1, ""  # extensão não instalada
+        return 0, "()"
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(
+        focuser.focus(pid=4242, app="gnome-terminal-server", tty="", title="x")
+    )
+    assert resultado == "terminal chamado para a frente"

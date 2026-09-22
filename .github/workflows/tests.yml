@@ -40,3 +40,31 @@ jobs:
 
       - name: Lint (imports mortos)
         run: pyflakes src tests main.py
+
+  # A promessa "roda igual nos três" só vale verificada: instala pelo pipx e
+  # confere que o comando existe e responde, em Linux, macOS e Windows.
+  pipx:
+    name: pipx (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Instalar com pipx
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip pipx
+          pipx install .
+          pipx list
+
+      - name: O comando roda
+        shell: bash
+        run: pipx run --spec . watchai --version

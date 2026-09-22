@@ -81,6 +81,20 @@ Atualizado em 2026-09-22.
 - [x] **Modo estreito**: sobram nome, projeto e semáforo — o resto do texto sai,
       porque ler três lâmpadas não precisa de texto
 
+### M7 — o semáforo cresce, o Light funciona, o pipx garante os três
+
+- [x] **Lâmpadas com ~10× a área**: duas linhas cheias com os cantos cortados
+      (octógono), carcaça de 9 colunas, cores mais vivas
+- [x] **Halo ao lado da bola**, não atrás — atrás, ele preenchia os cantos
+      cortados e a bola virava retângulo
+- [x] **Tema claro corrigido na raiz**: níveis de apagado/tinta/borda dependem
+      da polaridade da paleta; contraste medido antes e depois
+- [x] **`⇧A`** no lugar do `G`
+- [x] **Window Calls**: foco de janela exato no Wayland quando a extensão existe
+- [x] **`pipx` verificado nos três sistemas** por job de CI
+- [x] Workflow de publicação no PyPI, inerte até `PYPI_READY`
+- [x] `.gitignore` auditado
+
 ### M5 — permanência e distribuição
 
 - [x] **Histórico do EVENT STREAM entre execuções** (`~/.config/watchai/events.json`)
@@ -110,12 +124,20 @@ Atualizado em 2026-09-22.
 - [ ] **Diário do Aider** — grava `.aider.chat.history.md` na pasta do projeto.
       Não está instalado aqui, então o formato não foi verificado.
 
-- [ ] **Publicar no PyPI** (`pipx install watchai`), para não depender de clonar
-      o repositório. Falta conta, token e um `python -m build` no CI.
+- [ ] **Publicar no PyPI** (`pipx install watchai`). O workflow já existe e
+      empacota; falta **você** criar o projeto no PyPI, apontar o *trusted
+      publisher* para este repositório (workflow `publish.yml`, ambiente `pypi`)
+      e definir a variável `PYPI_READY=true`. Enquanto isso, o caminho é
+      `pipx install git+https://github.com/LeandroDukievicz/WatchAI.git`.
 
-- [ ] **Focar a aba exata no Wayland.** Hoje o `Activate` levanta a janela do
-      terminal e o sino marca a aba; escolher a aba programaticamente depende de
-      cada emulador expor isso (o GNOME Terminal não expõe).
+- [ ] **Focar a aba exata no Wayland.** Com o Window Calls o WatchAI já foca a
+      **janela** certa; escolher a **aba** dentro dela continua dependendo de
+      cada emulador expor isso (o GNOME Terminal não expõe) — o sino é o que
+      resolve na prática.
+
+- [ ] **Empacotar para Snap** em `classic` (`snapcraft.yaml` + job de build no
+      CI + pedido de revisão) e **avisar na tela quando a varredura falhar por
+      permissão**, em vez de mostrar "nenhuma sessão detectada".
 
 - [ ] **Ordenar os cards por atenção** (decidir antes de fazer). Hoje a ordem é
       a de descoberta. Quem pede você primeiro subir ao topo ajuda com muitas

@@ -41,6 +41,19 @@ Requisitos: **Python 3.10+** e um terminal com Unicode. A única dependência
 além do Textual é o [`psutil`](https://github.com/giampaolo/psutil), que é quem
 lê a tabela de processos igual nos três sistemas.
 
+**O jeito mais curto, igual nos três sistemas:**
+
+```bash
+pipx install git+https://github.com/LeandroDukievicz/WatchAI.git
+watchai
+```
+
+O `pipx` põe o WatchAI num ambiente isolado e o comando no PATH — sem mexer no
+Python do sistema. Funciona em **Linux, macOS e Windows**, e o CI verifica isso
+a cada commit: instala por `pipx` e roda o comando nos três.
+
+**Para mexer no código:**
+
 ```bash
 git clone git@github.com:LeandroDukievicz/WatchAI.git
 cd WatchAI
@@ -164,7 +177,7 @@ A tela tem quatro regiões fixas:
  ╭─ EVENT STREAM ───────────────────────────────────────────────╮
  │ 21:25:19 ◆ OPENCODE INPUT    waiting for confirmation        │   ④ event stream
  ╰──────────────────────────────────────────────────────────────╯
-  ↑↓ NAV │ ENTER OPEN │ G GO │ TAB PANEL │ T THEMES │ V VIEW │ R … ⑤ keybar
+  ↑↓ NAV │ ENTER OPEN │ ⇧A GO │ TAB PANEL │ T THEMES │ V VIEW │ … ⑤ keybar
 ```
 
 ## ① Cabeçalho — resumo global
@@ -284,7 +297,7 @@ rodou enquanto você estava fora é justamente o que você não viu.
 ## ⑤ Keybar
 
 ```
- ↑↓ NAV │ ENTER OPEN │ G GO │ TAB PANEL │ T THEMES │ V VIEW │ R REFRESH │ B BIP │ N NOTIF │ ? HELP │ Q QUIT
+ ↑↓ NAV │ ENTER OPEN │ ⇧A GO │ TAB PANEL │ T THEMES │ V VIEW │ R REFRESH │ B BIP │ N NOTIF │ ? HELP │ Q QUIT
 ```
 
 Rodapé de atalhos que se adapta à largura: quando não cabe, descarta os itens
@@ -332,10 +345,10 @@ fazendo —, o diretório, quando a aba abriu e os **últimos 4 eventos só dela
   primeira), e a seleção do dashboard acompanha.
 - Sessão OFFLINE mostra `—` nos campos que perderam sentido.
 
-## Ir para a janela da sessão (`G`)
+## Ir para a janela da sessão (`⇧A`)
 
-O card diz que o CLAUDE terminou; `G` põe na frente a janela do terminal em que
-ele roda. É o fim natural do fluxo: ver, decidir, voltar. Funciona com o card
+O card diz que o CLAUDE terminou; **`Shift+A`** põe na frente a janela do
+terminal em que ele roda. É o fim natural do fluxo: ver, decidir, voltar. Funciona com o card
 selecionado no dashboard ou com os detalhes abertos.
 
 | Sistema | Como |
@@ -343,7 +356,9 @@ selecionado no dashboard ou com os detalhes abertos.
 | **macOS** | `System Events` ativa o processo pelo PID |
 | **Windows** | `AppActivate` do WScript.Shell, também pelo PID |
 | **Linux/X11** | `wmctrl` ou `xdotool`; com várias janelas no mesmo processo (um servidor de terminal hospeda todas as abas), o título da sessão desempata |
-| **Linux/Wayland** | o compositor **proíbe** um app levantar a janela de outro — é proteção contra roubo de foco. Resta pedir ao próprio terminal por D-Bus (`org.freedesktop.Application.Activate`), o que funciona com GNOME Terminal, Ptyxis, Console, Konsole e afins |
+| **Linux/Wayland** | o compositor **proíbe** um app levantar a janela de outro — é proteção contra roubo de foco. Com a extensão **[Window Calls]** instalada, o WatchAI usa o D-Bus dela e foca a **janela exata** por PID; sem ela, pede ao próprio terminal que se levante (`org.freedesktop.Application.Activate`), o que traz a janela mas não escolhe a aba |
+
+[Window Calls]: https://extensions.gnome.org/extension/4724/window-calls/
 
 **E o sino.** Em qualquer Unix, o WatchAI também toca o bell **na tty da
 sessão** — o terminal marca aquela aba como "precisa de atenção" e a janela
@@ -364,19 +379,27 @@ Cada card carrega um semáforo de 3 lâmpadas — é a leitura "de longe", antes
 ler qualquer texto. É também a identidade do produto.
 
 ```
-╭─────╮
-│  ●  │  vermelha · ERROR
-│  ●  │  amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
-│  ●  │  verde    · READY
-╰─────╯
+╭───────╮
+│ ▄███▄ │  vermelha · ERROR
+│ ▀███▀ │
+│ ▄███▄ │  amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
+│ ▀███▀ │
+│ ▄███▄ │  verde    · READY
+│ ▀███▀ │
+╰───────╯
 ```
+
+Cada lâmpada ocupa **duas linhas cheias com os quatro cantos cortados** por
+meio-blocos — um octógono, que é a bola mais redonda que uma grade de
+caracteres permite. Em terminais estreitos entra a versão pequena (`●`).
 
 É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](assets/watchai.svg))
 desenhado em texto: carcaça de contorno cyan, interior escuro e três lâmpadas.
 
-**A lâmpada acesa brilha**: cor cheia, negrito e um fundo tingido da própria cor
-nas três células. É esse halo que faz o semáforo ser lido antes do texto, de
-longe e de canto de olho.
+**A lâmpada acesa brilha**: cor cheia, negrito e um halo tingido da própria cor
+nas células ao lado da bola — ao lado, e não atrás, senão o fundo preencheria os
+cantos cortados e a bola viraria um retângulo. É esse halo que faz o semáforo
+ser lido antes do texto, de longe e de canto de olho.
 
 Como num semáforo de verdade, as lâmpadas apagadas não somem: ficam num tom bem
 escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. INPUT é o
@@ -445,7 +468,7 @@ Oito paletas, trocáveis com o app rodando:
 | Tema | O que é |
 |---|---|
 | **WatchAI** | o original: fundo quase preto e neon cyan/magenta (padrão) |
-| **Light** | fundo claro — as tintas de estado viram pastel em vez de sumir |
+| **Light** | fundo claro, com contraste verificado: em tema claro, "apagado" tem que ser **mais escuro** que o fundo, e não mais claro (ver abaixo) |
 | **Dark** | escuro neutro, sem neon |
 | **Night Owl** | azul-petróleo com verdes suaves |
 | **Vampire** | Dracula (o roxo `#BD93F9` entra como acento secundário) |
@@ -466,6 +489,11 @@ Oito paletas, trocáveis com o app rodando:
 - O tema **não muda símbolo nem label** — só cor. O **Grey** é a prova: mesmo sem
   matiz nenhum, `◐ WORKING` e `▲ ERROR` continuam distinguíveis, que é a garantia
   de quem não enxerga cor.
+- **Tema claro não é tema escuro invertido.** Apagar uma cor é misturá-la com o
+  fundo: em fundo escuro isso escurece (e funciona), em fundo claro isso
+  *clareia* e some. Por isso os níveis de apagado, tinta e borda dependem da
+  polaridade da paleta — sem isso, no Light as bordas ficavam em 1,5:1 e as
+  lâmpadas apagadas em 1,2:1, ou seja, invisíveis.
 
 ## Linguagem visual dos estados
 
@@ -501,7 +529,7 @@ branco suave e cinza.
 | `ENTER` | abre os detalhes da sessão selecionada |
 | `ESC` | volta / fecha o modal |
 | `TAB` | alterna o painel **SESSIONS ⇄ EVENTS** |
-| `G` | põe na frente a janela do terminal onde a sessão roda |
+| `⇧A` | põe na frente a janela do terminal onde a sessão roda |
 | `T` | abre o seletor de temas (preview ao vivo; `ENTER` salva, `ESC` desfaz) |
 | `V` | alterna **CARDS ⇄ LIST** |
 | `R` | refresh — varre os processos na hora (no `--mock`, avança a simulação) |
@@ -531,7 +559,7 @@ Por largura:
 | ≥ 130 | 3 cards por linha |
 | 90–129 | 2 cards por linha |
 | 60–89 | 1 card por linha |
-| < 60 | compacto: sem caixa, barra lateral na cor do estado — sobram **o nome, o projeto e o semáforo** |
+| < 60 | compacto: sem caixa, barra lateral na cor do estado — sobram **o nome, o projeto e o semáforo** (na versão pequena, de uma linha por lâmpada) |
 
 No modo compacto o resto do texto sai (estado, atividade, tempo) e ficam as três
 informações que se leem de relance: **que sessão é, em que projeto, e como está**.
@@ -619,7 +647,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-53 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
+55 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).

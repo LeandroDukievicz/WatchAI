@@ -3,11 +3,19 @@
 É a leitura "de longe": antes de ler qualquer texto, a lâmpada acesa já diz se
 a sessão está rodando, pronta ou com problema.
 
-    ╭─────╮
-    │  ●  │   vermelha · ERROR
-    │  ●  │   amarela   · WORKING, WAITING, STARTING e INPUT (piscando)
-    │  ●  │   verde     · READY
-    ╰─────╯
+    ╭───────╮
+    │ ▄███▄ │   vermelha · ERROR
+    │ ▀███▀ │
+    │ ▄███▄ │   amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
+    │ ▀███▀ │
+    │ ▄███▄ │   verde    · READY
+    │ ▀███▀ │
+    ╰───────╯
+
+Cada lâmpada ocupa **duas linhas cheias**, com os quatro cantos cortados por
+meio-blocos: o que sobra é um octógono — a bola mais redonda que uma grade de
+caracteres permite — em vez de um ponto. Em terminais estreitos entra a versão pequena (`●`, cinco linhas), que é
+o que cabe.
 
 É o mesmo semáforo do ícone do app (`assets/watchai.svg`), desenhado em texto:
 carcaça de contorno **cyan**, interior escuro e três lâmpadas. A lâmpada acesa
@@ -32,23 +40,36 @@ from textual.widget import Widget
 from ..models import Status
 from ..theme import blend, colors, fade
 
-WIDTH = 7
-HEIGHT = 5
+WIDTH = 9
+HEIGHT = 8
 
-LAMP = "●"
-CAP_TOP = "╭─────╮"
-CAP_BOTTOM = "╰─────╯"
-WALL_LEFT = "│ "
-WALL_RIGHT = " │"
-HALO = " {} "  # as três células que formam o brilho da lâmpada
+# Versão pequena, para quando não há largura nem altura (modo compacto).
+SMALL_WIDTH = 7
+SMALL_HEIGHT = 5
 
-# Brilho das lâmpadas apagadas (0.0 = some no fundo, 1.0 = cor cheia).
-DIM = 0.16
-DIM_OFFLINE = 0.07
+# A bola: duas linhas cheias, com os cantos cortados por meio-blocos. As pontas
+# da linha de cima são meio-baixas (o canto superior fica vazio) e as de baixo
+# são meio-altas — o que sobra é um octógono de 5x2, que é o mais redondo que
+# uma grade de caracteres permite.
+LAMP_TOP = "▄███▄"
+LAMP_BOTTOM = "▀███▀"
+LAMP_SMALL = " ● "
+
+CAP_TOP = "╭───────╮"
+CAP_BOTTOM = "╰───────╯"
+SMALL_CAP_TOP = "╭─────╮"
+SMALL_CAP_BOTTOM = "╰─────╯"
+WALL = "│"
+PAD = " "  # a célula entre a parede e a bola: é aqui que mora o halo
+
+# Quanto do "apagado" da paleta cada caso usa (1.0 = o padrão dela).
+DIM = 1.0
+DIM_OFFLINE = 0.45
 HOUSING_OFFLINE = 0.25
 
 # Fundo tingido atrás da lâmpada acesa: é daqui que vem o destaque.
 GLOW = 0.22
+GLOW_LIGHT = 0.34  # no branco, um tingido fraco não aparece
 
 RED_LAMP, AMBER_LAMP, GREEN_LAMP = 0, 1, 2
 LAMPS = 3
@@ -76,10 +97,12 @@ BLINK_TICKS = 2  # tick do app = 0,5 s -> 1 s aceso, 1 s apagado
 class TrafficLight(Widget):
     DEFAULT_CSS = f"""
     TrafficLight {{ width: {WIDTH}; height: {HEIGHT}; }}
+    TrafficLight.-small {{ width: {SMALL_WIDTH}; height: {SMALL_HEIGHT}; }}
     """
 
     status: reactive[Status] = reactive(Status.OFFLINE)
     tick: reactive[int] = reactive(0)
+    small: reactive[bool] = reactive(False)
 
     def __init__(self, status: Status = Status.OFFLINE, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -87,6 +110,11 @@ class TrafficLight(Widget):
 
     def on_mount(self) -> None:
         self.watch(self.app, "tick", self._on_tick)
+        self.set_class(self.small, "-small")
+
+    def watch_small(self, small: bool) -> None:
+        if self.is_mounted:
+            self.set_class(small, "-small")
 
     def _on_tick(self, value: int) -> None:
         # Só repinta quando há o que piscar.
@@ -104,14 +132,25 @@ class TrafficLight(Widget):
         return lamp
 
     def _lamp_style(self, index: int, lit: int | None) -> Style:
-        """A lâmpada, sempre sobre o interior escuro da carcaça (como no ícone)."""
+        """A lâmpada. O fundo é sempre o interior da carcaça: é o que deixa os
+        cantos cortados aparecerem e a bola ficar **redonda** — pintar o fundo
+        atrás dela a transformaria num retângulo."""
+        paleta = colors()
         color = lamp_colors()[index]
         dentro = self._inside()
         if index == lit:
-            # Cor cheia, negrito e halo: a lâmpada acesa ocupa as três células.
-            return Style(color=color, bgcolor=blend(color, dentro, GLOW), bold=True)
-        level = DIM_OFFLINE if self.status is Status.OFFLINE else DIM
-        return Style(color=blend(color, dentro, level), bgcolor=dentro)
+            return Style(color=color, bgcolor=dentro, bold=True)
+        forca = DIM_OFFLINE if self.status is Status.OFFLINE else DIM
+        return Style(color=paleta.off(color, forca, sobre=dentro), bgcolor=dentro)
+
+    def _pad_style(self, index: int, lit: int | None) -> Style:
+        """As células ao lado da bola: no acesa, elas viram o halo."""
+        dentro = self._inside()
+        if index != lit:
+            return Style(bgcolor=dentro)
+        paleta = colors()
+        brilho = GLOW if paleta.dark else GLOW_LIGHT
+        return Style(bgcolor=blend(lamp_colors()[index], dentro, brilho))
 
     def _inside(self) -> str:
         """O fundo de dentro da carcaça — o `#080D16` do ícone, na paleta ativa."""
@@ -132,16 +171,25 @@ class TrafficLight(Widget):
         lit = self.lit_lamp()
         housing = self._housing_style()
         parede = self._wall_style()
+        pequeno = self.small
+        topo = SMALL_CAP_TOP if pequeno else CAP_TOP
+        base = SMALL_CAP_BOTTOM if pequeno else CAP_BOTTOM
+        linhas = (LAMP_SMALL,) if pequeno else (LAMP_TOP, LAMP_BOTTOM)
 
         out = Text(no_wrap=True)
-        out.append(CAP_TOP, housing)
+        out.append(topo, housing)
         for index in range(LAMPS):
-            out.append("\n")
-            out.append(WALL_LEFT, parede)
-            out.append(HALO.format(LAMP), self._lamp_style(index, lit))
-            out.append(WALL_RIGHT, parede)
+            estilo = self._lamp_style(index, lit)
+            halo = self._pad_style(index, lit)
+            for linha in linhas:
+                out.append("\n")
+                out.append(WALL, parede)
+                out.append(PAD, halo)
+                out.append(linha, estilo)
+                out.append(PAD, halo)
+                out.append(WALL, parede)
         out.append("\n")
-        out.append(CAP_BOTTOM, housing)
+        out.append(base, housing)
         return out
 
 

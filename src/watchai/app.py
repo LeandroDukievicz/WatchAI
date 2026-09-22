@@ -66,7 +66,7 @@ class WatchAIApp(App):
         Binding("b", "toggle_sound", "Bip"),
         Binding("t", "themes", "Themes"),
         Binding("n", "toggle_notify", "Notify"),
-        Binding("g", "goto", "Go to window"),
+        Binding("A", "goto", "Go to window"),
     ]
 
     # `tick` anima; `version` sobe a cada mudança de dados. Os widgets

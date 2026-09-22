@@ -24,3 +24,14 @@ htmlcov/
 
 # Sistema
 .DS_Store
+
+# Segredos e ruído local
+.env
+*.log
+.tox/
+*.orig
+*.rej
+
+# Rascunho local (está em docs/, que é publicado no GitHub Pages: enquanto
+# estiver aqui, esta página não vai ao ar)
+docs/publicacao-snap.html

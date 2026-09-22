@@ -9,9 +9,15 @@ Cada sistema tem um jeito, e não é por capricho:
 * **Windows** — `AppActivate` do WScript.Shell, também pelo PID.
 * **Linux/X11** — `wmctrl` ou `xdotool` casam janela e PID.
 * **Linux/Wayland** — o compositor **proíbe** um app levantar a janela de
-  outro (é proteção contra roubo de foco). Resta pedir ao próprio terminal, via
-  D-Bus (`org.freedesktop.Application.Activate`), quando ele for um app GTK que
-  expõe essa interface.
+  outro (é proteção contra roubo de foco). Há dois caminhos:
+  1. a extensão do GNOME **[Window Calls]**, que expõe `List` e `Activate` no
+     D-Bus e permite focar a **janela exata** por PID — é a única forma de foco
+     preciso no Wayland, e por isso é a preferida quando está instalada;
+  2. sem ela, pedir ao próprio terminal que se levante
+     (`org.freedesktop.Application.Activate`), o que traz a janela mas não
+     escolhe a aba.
+
+  [Window Calls]: https://extensions.gnome.org/extension/4724/window-calls/
 
 E quando nada disso existe, sobra o recurso mais antigo do Unix: **tocar o sino
 na tty da sessão**. O terminal marca a janela como "precisa de atenção" — na
@@ -22,6 +28,7 @@ lugar onde a tty seja sua.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import sys
@@ -67,6 +74,13 @@ EMULADORES = frozenset(
     }
 )
 
+# A extensão Window Calls, quando instalada, mora aqui.
+WINDOW_CALLS = (
+    "org.gnome.Shell",
+    "/org/gnome/Shell/Extensions/Windows",
+    "org.gnome.Shell.Extensions.Windows",
+)
+
 OSASCRIPT = (
     'tell application "System Events" to set frontmost of '
     "(first process whose unix id is {pid}) to true"
@@ -81,13 +95,28 @@ def detect() -> str | None:
         return "osascript" if shutil.which("osascript") else None
     if sys.platform == "win32":
         return "powershell" if shutil.which("powershell") or shutil.which("pwsh") else None
-    if shutil.which("wmctrl"):
-        return "wmctrl"
-    if shutil.which("xdotool"):
-        return "xdotool"
+    # No Wayland o wmctrl/xdotool até existem, mas não enxergam janela nativa:
+    # usá-los seria falhar com cara de sucesso.
+    wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
+    if not wayland:
+        if shutil.which("wmctrl"):
+            return "wmctrl"
+        if shutil.which("xdotool"):
+            return "xdotool"
     if shutil.which("gdbus"):
         return "gdbus"
     return None
+
+
+def _gvariant_string(saida: str) -> str | None:
+    """O conteúdo de um `('...',)` devolvido pelo gdbus."""
+    texto = saida.strip()
+    if not (texto.startswith("(") and texto.endswith(")")):
+        return None
+    dentro = texto[1:-1].rstrip(",").strip()
+    if len(dentro) < 2 or dentro[0] != "'" or dentro[-1] != "'":
+        return None
+    return dentro[1:-1].replace("\\'", "'").replace("\\\\", "\\")
 
 
 async def _rodar(comando: list[str], timeout: float = 5.0) -> tuple[int, str]:
@@ -138,6 +167,40 @@ class Focuser:
     @property
     def available(self) -> bool:
         return bool(self.method)
+
+    async def _janela_window_calls(self, pid: int, title: str | None) -> int | None:
+        """O id da janela daquele processo, segundo a extensão Window Calls.
+
+        Devolve None quando a extensão não está instalada — e aí o caminho
+        segue para o `Activate` do terminal.
+        """
+        código, saida = await _rodar(
+            ["gdbus", "call", "--session", "--dest", WINDOW_CALLS[0],
+             "--object-path", WINDOW_CALLS[1], "--method", f"{WINDOW_CALLS[2]}.List"]
+        )
+        if código != 0:
+            return None
+        bruto = _gvariant_string(saida)
+        if not bruto:
+            return None
+        try:
+            janelas = json.loads(bruto)
+        except ValueError:
+            return None
+        if not isinstance(janelas, list):
+            return None
+        candidatas = [j for j in janelas if isinstance(j, dict) and j.get("pid") == pid]
+        if not candidatas:
+            return None
+        if title and len(candidatas) > 1:
+            alvo = title.lower()
+            for janela in candidatas:
+                texto = " ".join(
+                    str(janela.get(chave, "")) for chave in ("title", "wm_class", "wm_class_instance")
+                ).lower()
+                if alvo in texto:
+                    return janela.get("id")
+        return candidatas[0].get("id")
 
     async def _janela_wmctrl(self, pid: int, title: str | None) -> str | None:
         """O id da janela daquele processo.
@@ -200,8 +263,20 @@ class Focuser:
                 código, _ = await _rodar(["xdotool", "windowactivate", ids[-1]])
                 if código == 0:
                     return "janela em evidência"
-        elif self.method == "gdbus" and app:
-            destino = APPS_DBUS.get(app)
+        elif self.method == "gdbus":
+            # 1) Window Calls: foco exato, a única forma precisa no Wayland.
+            if pid:
+                janela = await self._janela_window_calls(pid, title)
+                if janela is not None:
+                    código, _ = await _rodar(
+                        ["gdbus", "call", "--session", "--dest", WINDOW_CALLS[0],
+                         "--object-path", WINDOW_CALLS[1],
+                         "--method", f"{WINDOW_CALLS[2]}.Activate", str(janela)]
+                    )
+                    if código == 0:
+                        return "janela em evidência"
+            # 2) sem a extensão: pedir ao terminal que se levante.
+            destino = APPS_DBUS.get(app or "")
             if destino:
                 caminho = "/" + destino.replace(".", "/")
                 código, _ = await _rodar(

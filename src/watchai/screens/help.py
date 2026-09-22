@@ -15,7 +15,7 @@ HELP_KEYS = [
     ("↑ ↓", "select session"),
     ("← →", "navigate cards"),
     ("ENTER", "session details"),
-    ("G", "go to the session window"),
+    ("⇧A", "go to the session window"),
     ("TAB", "change panel"),
     ("T", "theme picker"),
     ("V", "cards / list view"),

@@ -132,7 +132,10 @@ SessionCard .card-light {
 }
 
 CardBody {
-    height: auto;
+    /* O semáforo tem 8 linhas e o texto tem 3: o corpo ocupa o que sobra e
+       centraliza, para o card não ficar com um vão embaixo. */
+    height: 1fr;
+    content-align: left middle;
     margin-top: 1;
 }
 SessionCard.-compact CardBody {

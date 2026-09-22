@@ -22,7 +22,7 @@ NOTIFY_KEY = "N"  # alterna a notificação do sistema: vira MUDO quando desliga
 KEYS = [
     ("↑↓", "NAV", 11),
     ("ENTER", "OPEN", 10),
-    ("G", "GO", 9),
+    ("⇧A", "GO", 9),
     ("TAB", "PANEL", 5),
     ("T", "THEMES", 4),
     ("V", "VIEW", 8),

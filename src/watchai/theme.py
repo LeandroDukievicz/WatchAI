@@ -25,9 +25,19 @@ from textual.color import Color
 from textual.theme import Theme
 
 # Níveis usados para calcular as cores derivadas a partir das base.
+#
+# Misturar uma cor com o fundo é o jeito de "apagar" — mas o resultado depende
+# da polaridade do tema: em fundo escuro a mistura escurece (e some do jeito
+# certo), em fundo claro ela **clareia** e some de vez. Por isso cada nível tem
+# a sua versão clara, mais forte, calibrada para continuar visível no branco.
 EDGE_LEVEL = 0.30  # bordas de estado "calmo" (WORKING/WAITING)
+EDGE_LEVEL_LIGHT = 0.62
 TINT_LEVEL = 0.07  # tinta de fundo dos estados de atenção
+TINT_LEVEL_LIGHT = 0.11
 TINT_SELECTED = 0.14  # a mesma tinta, no card selecionado
+TINT_SELECTED_LIGHT = 0.20
+DIM_LEVEL = 0.16  # "apagado": lâmpada off, traços sem atenção
+DIM_LEVEL_LIGHT = 0.34
 
 # Campos cujo nome no TCSS não sai da conversão automática `_` -> `-`.
 CSS_NAMES = {"bg2": "bg-2", "cyan2": "cyan-2", "text2": "text-2"}
@@ -81,6 +91,15 @@ class Palette:
     tint_magenta_sel: str
     tint_red_sel: str
 
+    def off(self, color: str, forca: float = 1.0, sobre: str | None = None) -> str:
+        """A versão **apagada** de uma cor, do jeito certo para esta paleta.
+
+        `forca` < 1 apaga mais ainda (OFFLINE); `sobre` troca o fundo contra o
+        qual a mistura acontece — o interior da carcaça do semáforo, por exemplo.
+        """
+        nivel = (DIM_LEVEL if self.dark else DIM_LEVEL_LIGHT) * forca
+        return blend(color, sobre or self.bg, nivel)
+
     def css_variables(self) -> dict[str, str]:
         """As mesmas cores como `$aw-*` para o TCSS."""
         skip = {"key", "label", "dark"}
@@ -132,16 +151,19 @@ def palette(
     **overrides: str,
 ) -> Palette:
     """Monta uma paleta calculando as derivadas (sobrescrevíveis por `overrides`)."""
+    borda = EDGE_LEVEL if dark else EDGE_LEVEL_LIGHT
+    tinta = TINT_LEVEL if dark else TINT_LEVEL_LIGHT
+    tinta_sel = TINT_SELECTED if dark else TINT_SELECTED_LIGHT
     derived = {
-        "edge_working": blend(cyan, bg, EDGE_LEVEL),
-        "edge_waiting": blend(yellow, bg, EDGE_LEVEL + 0.05),
-        "tint_select": blend(cyan, bg, TINT_LEVEL + 0.03),
-        "tint_green": blend(green, bg, TINT_LEVEL),
-        "tint_magenta": blend(magenta, bg, TINT_LEVEL),
-        "tint_red": blend(red, bg, TINT_LEVEL),
-        "tint_green_sel": blend(green, bg, TINT_SELECTED),
-        "tint_magenta_sel": blend(magenta, bg, TINT_SELECTED),
-        "tint_red_sel": blend(red, bg, TINT_SELECTED),
+        "edge_working": blend(cyan, bg, borda),
+        "edge_waiting": blend(yellow, bg, borda + 0.05),
+        "tint_select": blend(cyan, bg, tinta + 0.03),
+        "tint_green": blend(green, bg, tinta),
+        "tint_magenta": blend(magenta, bg, tinta),
+        "tint_red": blend(red, bg, tinta),
+        "tint_green_sel": blend(green, bg, tinta_sel),
+        "tint_magenta_sel": blend(magenta, bg, tinta_sel),
+        "tint_red_sel": blend(red, bg, tinta_sel),
     }
     unknown = set(overrides) - set(derived)
     if unknown:
@@ -181,9 +203,9 @@ WATCHAI = palette(
     cyan="#00E5FF",
     cyan2="#00AFC8",
     magenta="#FF2BD6",
-    green="#39FF88",
-    yellow="#FFD166",
-    red="#FF4D6D",
+    green="#00FF85",  # semáforo: verde de sinal, não menta
+    yellow="#FFC400",  # âmbar cheio
+    red="#FF2A45",  # vermelho vivo
     gray="#657080",
     text="#D8E2F0",
     text2="#A9B5C7",
@@ -219,9 +241,9 @@ LIGHT = palette(
     text="#1F2328",
     text2="#3B424A",
     muted="#656D76",
-    line="#D8DEE4",
-    line_hi="#AFB8C1",
-    ghost="#B6BEC7",
+    line="#BFC9D4",  # borda neutra: no branco, #D8DEE4 ficava em 1,3:1 — invisível
+    line_hi="#98A2AE",
+    ghost="#9AA4AF",  # OFFLINE ainda tem que dar para ler
 )
 
 DARK = palette(

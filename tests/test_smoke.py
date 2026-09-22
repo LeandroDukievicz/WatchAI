@@ -188,8 +188,8 @@ def test_layout_sem_vao_morto():
             assert dash.query_one("#keybar").region.y == 35
             card = next(iter(dash.query(SessionCard)))
             assert card.region.width == 48
-            assert card.region.height == 7
-            assert card.query_one(TrafficLight).region.width == 7
+            assert card.region.height == 10  # a altura vem do semáforo (8 linhas)
+            assert card.query_one(TrafficLight).region.width == 9
 
     run(main())
 

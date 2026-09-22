@@ -6,6 +6,33 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Adicionado
+- **Suporte à extensão [Window Calls]** do GNOME: com ela instalada, o `⇧A` foca
+  a **janela exata** por PID mesmo no Wayland — é a única forma de foco preciso
+  ali. Sem ela, segue o caminho anterior (levantar o terminal + sino na aba).
+- **Instalação por `pipx`** como caminho principal, igual nos três sistemas, com
+  job no CI que instala e roda o comando em Linux, macOS e Windows.
+- Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
+
+### Mudado
+- **Semáforo maior e mais redondo**: cada lâmpada passou a ocupar **duas linhas
+  cheias com os cantos cortados** (um octógono, ~10× a área do ponto anterior),
+  numa carcaça de 9 colunas. O card foi de 7 para 10 linhas — a 150×36 continuam
+  cabendo duas fileiras. No modo estreito entra a versão pequena.
+- **Cores do semáforo mais vivas**: vermelho `#FF2A45`, âmbar `#FFC400`, verde
+  `#00FF85`.
+- O halo da lâmpada acesa foi para **as células ao lado** da bola: atrás dela, o
+  fundo preenchia os cantos cortados e a bola virava um retângulo.
+- **`G` virou `⇧A`** (Shift+A).
+- **Tema claro corrigido na raiz**: os níveis de apagado, tinta e borda passaram
+  a depender da polaridade da paleta. No Light, bordas de estado saíram de 1,5:1
+  para 2,5:1, lâmpadas apagadas de 1,2:1 para 1,7:1 e o `ghost` do OFFLINE de
+  1,8:1 para 2,5:1 — antes, simplesmente não apareciam.
+- `.gitignore`: `.env`, `*.log`, `.tox/`, `*.orig`, `*.rej` e o rascunho
+  `docs/publicacao-snap.html`.
+
+[Window Calls]: https://extensions.gnome.org/extension/4724/window-calls/
+
+### Adicionado (antes)
 - **`G` — ir para a janela da sessão**: põe na frente o terminal onde o agente
   roda (`System Events` no macOS, `AppActivate` no Windows, `wmctrl`/`xdotool`
   no X11, `org.freedesktop.Application.Activate` no Wayland) e toca o **sino na

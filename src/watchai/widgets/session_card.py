@@ -209,6 +209,8 @@ class SessionCard(Widget):
         self._light.status = s.status
         self._light.set_suffix(timer_text(s.status, seconds), timer_style(s.status, seconds))
         self._traffic.status = s.status
+        # Estreito: o semáforo continua, mas na versão que cabe.
+        self._traffic.small = self.compact
 
         for status in Status:
             self.set_class(status is s.status, status.css)
