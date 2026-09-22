@@ -88,11 +88,6 @@ KeyBar {
     grid-rows: auto;
     height: auto;
 }
-/* Sem caixa, os cards compactos precisam de uma linha de respiro entre si. */
-Dashboard.-tiny #cards {
-    grid-gutter: 1 0;
-}
-
 SessionCard {
     layout: horizontal;
     height: auto;
@@ -123,6 +118,10 @@ CardName {
     display: none;
     height: 1;
 }
+/* No micro sobra o essencial: o nome e o semáforo. */
+SessionCard.-micro CardBody {
+    display: none;
+}
 SessionCard.-compact CardName {
     display: block;
 }
@@ -147,6 +146,14 @@ SessionCard.-compact .card-main {
     height: 5;
     align-vertical: middle;
 }
+/* No micro o card inteiro é UMA linha: nome e as três lâmpadas, lado a lado. */
+SessionCard.-micro .card-main {
+    height: 1;
+    align-vertical: top;
+}
+SessionCard.-micro CardName {
+    display: block;
+}
 SessionCard.-compact TrafficLight {
     margin-left: 1;
 }
@@ -158,7 +165,6 @@ SessionCard.-compact TrafficLight {
 SessionCard.-working  { border: round $aw-yellow; background: $aw-tint-yellow; }
 SessionCard.-starting { border: round $aw-yellow; background: $aw-tint-yellow; }
 SessionCard.-waiting  { border: round $aw-yellow; background: $aw-tint-yellow; }
-SessionCard.-idle     { border: round $aw-line; border-title-color: $aw-ghost; }
 SessionCard.-offline  { border: round $aw-line; border-title-color: $aw-ghost; border-subtitle-color: $aw-ghost; }
 SessionCard.-ready    { border: round $aw-green;   background: $aw-tint-green; }
 SessionCard.-input    { border: round $aw-yellow;  background: $aw-tint-yellow; }
@@ -189,7 +195,6 @@ SessionCard.-compact {
 SessionCard.-compact.-working  { border: none; border-left: outer $aw-yellow; }
 SessionCard.-compact.-starting { border: none; border-left: outer $aw-yellow; }
 SessionCard.-compact.-waiting  { border: none; border-left: outer $aw-yellow; }
-SessionCard.-compact.-idle     { border: none; border-left: outer $aw-line; }
 SessionCard.-compact.-offline  { border: none; border-left: outer $aw-line; }
 SessionCard.-compact.-ready    { border: none; border-left: outer $aw-green; }
 SessionCard.-compact.-input    { border: none; border-left: outer $aw-yellow; }

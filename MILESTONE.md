@@ -55,6 +55,19 @@ Atualizado em 2026-09-22.
 - [x] **ERROR de verdade no Claude Code**: `isApiErrorMessage` pega limite de
       uso e token expirado — a sessão que parou e não volta sozinha
 
+### M9 — a janela funciona em qualquer tamanho, e o card tem fim
+
+- [x] **Responsividade em dois eixos**: largura manda nas colunas, **altura
+      manda no tamanho do card**. Abaixo de 130×30 o card de 13 linhas não
+      cabia e nenhum aparecia inteiro
+- [x] Escada de formatos: full (13) → short (7) → compact (5) → **micro (1
+      linha)**, onde sobram o nome e as três lâmpadas deitadas
+- [x] **Semáforo deitado** (`● ● ●`) para janelas minúsculas
+- [x] Teste que varre de 20×10 a 300×80: nada estoura, keybar e EVENT STREAM
+      nunca somem, semáforo sempre presente
+- [x] **Sessão sem agente tem prazo** mesmo com a aba aberta — antes, agente
+      encerrado com o terminal vivo deixava o card `IDLE` para sempre
+
 ### M8 — detecção para todo mundo, não só para esta máquina
 
 - [x] **17 agentes conhecidos** no registro (Claude Code, Codex, Gemini,

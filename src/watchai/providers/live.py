@@ -37,8 +37,7 @@ ATIVIDADE = {
     Status.WORKING: "working",
     Status.READY: "idle",
     Status.STARTING: "starting",
-    Status.IDLE: "no agent running",
-    Status.OFFLINE: "terminal closed",
+    Status.OFFLINE: "session ended",
 }
 
 
@@ -259,15 +258,13 @@ class LiveProvider:
         return self._agregar(sessao, now) or mudou
 
     def _sem_agentes(self, sessao: Session, vivo: bool, now: datetime) -> bool:
-        """Terminal sem agente: ocioso se a aba continua aberta, senão fechado."""
-        if vivo:
-            if sessao.agents or sessao.status is not Status.IDLE:
-                sessao.agents = []
-                sessao.closed_at = None
-                self.store.transition(sessao, Status.IDLE, ATIVIDADE[Status.IDLE], now)
-                return True
-            return False
+        """Sem agente rodando, a sessão acabou — e começa a contagem para sair.
 
+        Vale igual para a aba fechada e para o agente encerrado com a aba ainda
+        aberta: o que o card monitora é a **sessão de IA**, não o terminal. Uma
+        aba que você deixou aberta depois de sair do agente não é notícia, e
+        ficar na tela para sempre só ocupa espaço de quem está rodando.
+        """
         if sessao.closed_at is None:
             sessao.agents = []
             sessao.closed_at = now
@@ -288,7 +285,7 @@ class LiveProvider:
         atividade = (
             f"{dono.label}: {dono.activity}"
             if dono and len(sessao.agents) > 1
-            else (dono.activity if dono else ATIVIDADE[Status.IDLE])
+            else (dono.activity if dono else ATIVIDADE[Status.OFFLINE])
         )
         if status is sessao.status and atividade == sessao.activity:
             return False

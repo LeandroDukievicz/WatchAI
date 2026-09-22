@@ -65,6 +65,20 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - Agente **sem terminal** (dentro de uma IDE) agora vira um card identificado
   pelo próprio processo (`antigravity #4312`) em vez de um card sem nome.
 
+- **Responsividade em dois eixos.** A altura passou a decidir o tamanho do card
+  — antes, abaixo de 130×30 o card de 13 linhas não cabia na área de sessões e
+  **nenhum card aparecia inteiro**. Agora ele desce em degraus: full (13) →
+  short (7) → compact (5) → **micro (1 linha)**, onde sobram só o nome e as três
+  lâmpadas deitadas. A 40×12 cabem quatro sessões; antes, nenhuma.
+- **Semáforo deitado** (`● ● ●`), o formato para janelas minúsculas.
+
+### Mudado (ciclo de vida)
+- **Sessão sem agente agora tem prazo**, mesmo com a aba aberta. Antes, agente
+  encerrado com o terminal vivo virava `IDLE` e o card ficava **para sempre** —
+  só a aba fechada tinha contagem. O card monitora a sessão de IA, não o
+  terminal: sem agente, ela acabou. OFFLINE por 5 minutos, aviso por 2, e sai.
+- O estado `IDLE` deixou de existir.
+
 ### Corrigido
 - **O app morria ao abrir ou fechar um agente** com outro já na tela.
   Reconstruir a lista de cards a cada mudança parecia inofensivo, mas o

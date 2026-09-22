@@ -15,7 +15,7 @@ from textual.events import Resize
 from textual.reactive import reactive
 from textual.screen import Screen
 
-from ..layout import Layout, layout_for, sessions_max_height
+from ..layout import CardMode, card_mode, Layout, layout_for, sessions_max_height
 from ..widgets import (
     AppHeader,
     EventStream,
@@ -43,6 +43,7 @@ class Dashboard(Screen):
     panel: reactive[str] = reactive("sessions")  # "sessions" | "events"
     view: reactive[str] = reactive("cards")  # "cards" | "list"
     layout_mode: Layout = Layout.LARGE
+    card_mode: CardMode = CardMode.FULL
 
     # -- composição ----------------------------------------------------------
     def compose(self):
@@ -120,7 +121,7 @@ class Dashboard(Screen):
 
     def _after_reconcile(self) -> None:
         for card in self.query(SessionCard):
-            card.compact = self.layout_mode.compact
+            card.mode = self.card_mode
         self._sync_selection()
         self._apply_empty()
         self._reveal_selected()
@@ -148,9 +149,17 @@ class Dashboard(Screen):
         self.query_one("#cards", Grid).styles.grid_size_columns = mode.columns
         # A área encolhe até o conteúdo (sem vão morto) mas nunca além deste teto,
         # senão ela empurraria o EVENT STREAM para fora da tela.
-        self.query_one("#sessions-area").styles.max_height = sessions_max_height(height)
+        teto = sessions_max_height(height)
+        self.query_one("#sessions-area").styles.max_height = teto
+        # O formato do card depende dos dois eixos: largura manda nas colunas,
+        # altura manda no tamanho — um card mais alto que a área não aparece.
+        self.card_mode = card_mode(width, teto)
+        grade = self.query_one("#cards", Grid)
+        # Sem caixa, os cards precisam de uma linha de respiro entre si — menos
+        # no micro, onde o card é uma linha só e o respiro dobraria o custo.
+        grade.styles.grid_gutter_vertical = 1 if self.card_mode is CardMode.COMPACT else 0
         for card in self.query(SessionCard):
-            card.compact = mode.compact
+            card.mode = self.card_mode
         self.call_after_refresh(self._reveal_selected)
 
     @property

@@ -26,7 +26,6 @@ class Status(Enum):
     ERROR = ("ERROR", "red", "▲", True)  # problema detectado
     OFFLINE = ("OFFLINE", "ghost", "○", False)  # terminal fechado
     STARTING = ("STARTING", "cyan2", "◌", False)  # acabou de iniciar
-    IDLE = ("IDLE", "gray", "·", False)  # terminal aberto, nenhum agente rodando
 
     def __init__(self, label: str, slot: str, symbol: str, attention: bool) -> None:
         self.label = label
@@ -45,13 +44,14 @@ class Status(Enum):
         return f"-{self.name.lower()}"
 
 
-# Terminal fechado: o card fica, avisa que vai sair, e sai. Você precisa ver
-# que a sessão terminou mesmo tendo saído da frente do computador.
+# Sessão encerrada — aba fechada ou agente finalizado: o card fica, avisa que
+# vai sair, e sai. Você precisa poder ver que ela terminou mesmo tendo saído da
+# frente do computador; depois disso, é só ocupar espaço.
 AVISO_FECHADO = timedelta(minutes=5)
 REMOCAO_FECHADO = timedelta(minutes=7)
 
-# Ordem de exibição no resumo global (posições estáveis; STARTING e IDLE só
-# aparecem quando existem)
+# Ordem de exibição no resumo global (posições estáveis; STARTING só aparece
+# quando existe)
 SUMMARY_ORDER = (
     Status.WORKING,
     Status.READY,
@@ -60,7 +60,6 @@ SUMMARY_ORDER = (
     Status.ERROR,
     Status.OFFLINE,
     Status.STARTING,
-    Status.IDLE,
 )
 
 # Um terminal tem vários agentes: o estado do card é o do agente que mais pede
@@ -73,7 +72,6 @@ PRIORIDADE = (
     Status.WAITING,
     Status.WORKING,
     Status.STARTING,
-    Status.IDLE,
     Status.OFFLINE,
 )
 

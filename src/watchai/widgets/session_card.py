@@ -25,6 +25,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 
 from ..format import DASH, ellipsize, fmt_hms, fmt_timer
+from ..layout import CardMode
 from ..models import Session, Status
 from ..theme import colors, fade
 from .status_light import StatusLight
@@ -172,7 +173,7 @@ class SessionCard(Widget):
             self.open = open
 
     selected: reactive[bool] = reactive(False)
-    compact: reactive[bool] = reactive(False)
+    mode: reactive[CardMode] = reactive(CardMode.FULL)
 
     def __init__(self, session: Session) -> None:
         super().__init__(id=f"card-{session.id}")
@@ -198,8 +199,13 @@ class SessionCard(Widget):
     def watch_selected(self) -> None:
         self.sync()
 
-    def watch_compact(self) -> None:
+    def watch_mode(self) -> None:
         self.sync()
+
+    @property
+    def compact(self) -> bool:
+        """Sem caixa: o card vira duas linhas e uma barra lateral."""
+        return not self.mode.boxed
 
     # -- sincronização com o modelo ----------------------------------------
     def sync(self) -> None:
@@ -209,12 +215,15 @@ class SessionCard(Widget):
         self._light.status = s.status
         self._light.set_suffix(timer_text(s.status, seconds), timer_style(s.status, seconds))
         self._traffic.status = s.status
-        # Estreito: o semáforo continua, mas na versão que cabe.
-        self._traffic.small = self.compact
+        # Apertado: o semáforo continua — é a última coisa a sair —, mas na
+        # versão que cabe.
+        self._traffic.form = self.mode.light
 
         for status in Status:
             self.set_class(status is s.status, status.css)
         self.set_class(self.selected, "-selected")
+        for modo in CardMode:
+            self.set_class(modo is self.mode, f"-{modo.css}")
         self.set_class(self.compact, "-compact")
 
         if self.compact:

@@ -292,8 +292,8 @@ se o foco está no EVENT STREAM (`TAB`).
 - **O card inteiro veste a cor da lâmpada** — ele é o semáforo em tamanho
   grande, e é o que se lê do outro lado da sala: moldura e fundo em **verde**
   (READY), **vermelho** (ERROR) ou **âmbar** (WORKING, WAITING, STARTING e
-  INPUT — os quatro estados da lâmpada amarela). IDLE e OFFLINE não acendem
-  lâmpada nenhuma e ficam neutros.
+  INPUT — os quatro estados da lâmpada amarela). OFFLINE não acende lâmpada
+  nenhuma e fica neutro.
 - **Selecionado** ganha fundo levemente mais claro e título cyan — mas a moldura
   **mantém a cor do estado**: um READY selecionado continua verde.
 - Os estados dentro do âmbar continuam se distinguindo pelo **símbolo, pelo
@@ -301,11 +301,13 @@ se o foco está no EVENT STREAM (`TAB`).
   contador em negrito depois de um minuto.
 - **`for MM:SS` fica em negrito depois de 1 minuto** em READY, INPUT e ERROR — é
   o "terminou há dois minutos e você ainda não voltou".
-- **Terminal sem agente** fica `IDLE`, apagado: a aba continua aberta, não há
-  nada rodando. **Terminal fechado** vira OFFLINE.
-- **Terminal fechado não some na hora.** Fica 5 minutos como OFFLINE, depois
-  troca a linha dos agentes por `⚠ removing in 01:59` e sai aos 7 — você precisa
-  poder ver que a sessão terminou mesmo tendo saído da frente do computador.
+- **Sessão sem agente é sessão encerrada.** Vale igual para a aba fechada e
+  para o agente finalizado com a aba ainda aberta: o card monitora a **sessão de
+  IA**, não o terminal — uma aba esquecida aberta não é notícia.
+- **Ela não some na hora.** Fica 5 minutos como OFFLINE, depois troca a linha
+  dos agentes por `⚠ removing in 01:59` e sai aos 7 — você precisa poder ver que
+  a sessão terminou mesmo tendo saído da frente do computador. Passou disso, só
+  ocupa espaço de quem está rodando.
 - **Textos longos truncam com `…`**, nunca quebram linha.
 - Se os cards não couberem na altura, o painel rola (`↑ ↓` seguem a seleção).
 
@@ -317,7 +319,6 @@ se o foco está no EVENT STREAM (`TAB`).
  ▶ pts/10     ● READY     devs-a-deriva          ● claude           04:12
    pts/6      ◐ WORKING   ninou-app              ◐ codex            01:42
    pts/3      ◆ INPUT     watchai                ◆ claude ● codex   00:27
-   pts/9      · IDLE      —                      —                      —
    pts/2      ○ OFFLINE   —                      —                      —
 ```
 
@@ -467,7 +468,9 @@ cantos cortados em diagonal. Em sub-células (cada caractere vale 2×2):
 12 sub-colunas por 6 sub-linhas — e como a célula do terminal é ~2× mais alta
 que larga, isso dá **6w × 6w**: um quadrado com cantos cortados de verdade. Com
 2 linhas cabia só **um** degrau por canto, que o olho lê como entalhe, não como
-lado do octógono. Em terminais estreitos entra a versão pequena (`●`).
+lado do octógono. Em janelas apertadas entram as versões menores: a **pequena** (`●`, cinco
+linhas) e, no limite, a **deitada** — as três lâmpadas numa linha só (`● ● ●`),
+sem carcaça, porque nesse tamanho ela só roubaria colunas do nome.
 
 É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](assets/watchai.svg))
 desenhado em texto: carcaça de contorno cyan, **sem fundo próprio** — o card
@@ -562,7 +565,7 @@ Oito paletas, trocáveis com o app rodando:
 | **Steampunk** | sépia e latão, com verdete no lugar do cyan |
 | **Grey** | sem matiz nenhum: os estados se separam só por brilho |
 
-![Light, Vampire, Cyberpunk e Steampunk](docs/themes.png)
+![Os oito temas do WatchAI: WatchAI, Light, Dark, Night Owl, Vampire, Cyberpunk, Steampunk e Grey](docs/themes.png)
 
 - **Mover a seleção aplica o tema na hora** — o dashboard inteiro atrás do modal
   troca de cor, então dá para comparar antes de decidir. `ENTER` confirma,
@@ -594,7 +597,6 @@ Cor **e** símbolo **e** label — dá para ler sem depender só de cor.
 | ERROR | `▲` (estático) | vermelho | **vermelha** | problema detectado | card vermelho |
 | OFFLINE | `○` (apagado) | cinza escuro | todas apagadas | terminal fechado | quase some no fundo |
 | STARTING | `◌ ○` | cyan secundário | **amarela** | acabou de iniciar | borda apagada |
-| IDLE | `·` | cinza | todas apagadas | aba aberta, nenhum agente | apagado |
 
 Todas as animações são discretas e guiadas pelo mesmo relógio de 0,5 s: o giro do
 WORKING, o pulso lento de READY e INPUT (~4,5 s por ciclo) e o `◌ ○` alternando do
@@ -638,21 +640,32 @@ detalhes.
 
 ## Responsividade
 
-Por largura:
+A janela encolhe em dois eixos, e cada um manda numa coisa. **A largura decide
+quantas colunas** de cards cabem:
 
-| Largura | Layout |
+| Largura | Colunas |
 |---|---|
-| ≥ 130 | 3 cards por linha |
-| 90–129 | 2 cards por linha |
-| 60–89 | 1 card por linha |
-| < 60 | compacto: sem caixa, barra lateral na cor do estado — sobram **o nome, o projeto e o semáforo** (na versão pequena, de uma linha por lâmpada) |
+| ≥ 130 | 3 |
+| 90–129 | 2 |
+| 60–89 | 1 |
 
-No modo compacto o resto do texto sai (estado, atividade, tempo) e ficam as três
-informações que se leem de relance: **que sessão é, em que projeto, e como está**.
-O estado quem dá é o semáforo — ler três lâmpadas não precisa de texto. Tudo
-continua no modal de detalhes (`ENTER`).
+**A altura decide o tamanho do card** — e isso não é detalhe: um card mais alto
+que a área de sessões simplesmente não aparece, e o painel fica vazio. Por isso
+o card desce em degraus, perdendo sempre o que é secundário:
 
-Por altura: a área de sessões encolhe até o conteúdo e o EVENT STREAM ocupa tudo
+| Formato | Quando | O que mostra |
+|---|---|---|
+| **full** (13 linhas) | área ≥ 13 | semáforo grande, estado, agentes, atividade, tempo |
+| **short** (7) | área ≥ 7 | o mesmo texto, com o semáforo pequeno |
+| **compact** (5) | área ≥ 5, ou largura < 60 | sem caixa: nome, projeto e semáforo pequeno |
+| **micro** (1) | área < 5, ou largura < 34 | **uma linha**: o nome e as três lâmpadas deitadas (`● ● ●`) |
+
+O que sobra no fim é o que se lê sem ler: **o semáforo e o nome**. O estado quem
+dá são as lâmpadas — não precisa de texto —, e o resto continua a um `ENTER` de
+distância, no modal de detalhes. No micro cabem quatro sessões num terminal de
+12 linhas.
+
+Por altura, a área de sessões encolhe até o conteúdo e o EVENT STREAM ocupa tudo
 que sobra — quanto mais alto o terminal, mais histórico, e nunca um vão morto no
 meio. Se as sessões não couberem, a área rola em vez de empurrar o stream para
 fora: o stream nunca fica com menos que suas 6 linhas de eventos, e header e
@@ -733,7 +746,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-65 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
+67 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).
@@ -747,7 +760,7 @@ morto e os temas (incluindo a checagem de que toda paleta fornece cada variável
 o `node.exe` do Windows e o falso positivo de um plugin com "claude" no
 caminho), a árvore de três processos do `codex` contando como um agente só, o
 agrupamento por terminal, a prioridade de estado entre agentes, o ciclo
-IDLE → OFFLINE → aviso → remoção, os estados lidos do diário (terminou,
+OFFLINE → aviso → remoção, os estados lidos do diário (terminou,
 ferramenta pendente com processo parado = INPUT, com processo ocupado =
 WORKING) a garantia de que diário corrompido ou varredura que explode não derrubam
 nada, o tempo do estado vindo do diário (inclusive carimbo no futuro, que não

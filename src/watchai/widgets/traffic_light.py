@@ -46,9 +46,14 @@ from ..theme import blend, colors, fade
 WIDTH = 10
 HEIGHT = 11
 
-# Versão pequena, para quando não há largura nem altura (modo compacto).
+# Versão pequena, para quando falta altura (modo compacto).
 SMALL_WIDTH = 7
 SMALL_HEIGHT = 5
+
+# Versão deitada: as três lâmpadas numa linha só. É o que cabe quando a janela
+# fica minúscula — e continua dizendo o estado sem uma palavra de texto.
+ROW_WIDTH = 5
+ROW_HEIGHT = 1
 
 # A bola: duas linhas cheias com as quatro pontas cortadas por **quadrantes**.
 # Meio-bloco (`▄`) tira metade da ponta; o quadrante (`▗`) tira três quartos —
@@ -85,6 +90,7 @@ LAMP_ROWS = (
     ("", "██████", ""),
     ("▝", "▜██▛", "▘"),
 )
+LAMP = "●"
 LAMP_SMALL = " ● "
 
 CAP_TOP = "╭────────╮"
@@ -138,14 +144,17 @@ BLINK_TICKS = 2  # tick do app = 0,5 s -> 1 s aceso, 1 s apagado
 
 
 class TrafficLight(Widget):
+    """O semáforo em três formatos: `big` (padrão), `small` e `row` (deitado)."""
+
     DEFAULT_CSS = f"""
     TrafficLight {{ width: {WIDTH}; height: {HEIGHT}; }}
     TrafficLight.-small {{ width: {SMALL_WIDTH}; height: {SMALL_HEIGHT}; }}
+    TrafficLight.-row {{ width: {ROW_WIDTH}; height: {ROW_HEIGHT}; }}
     """
 
     status: reactive[Status] = reactive(Status.OFFLINE)
     tick: reactive[int] = reactive(0)
-    small: reactive[bool] = reactive(False)
+    form: reactive[str] = reactive("big")  # "big" | "small" | "row"
 
     def __init__(self, status: Status = Status.OFFLINE, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -153,11 +162,15 @@ class TrafficLight(Widget):
 
     def on_mount(self) -> None:
         self.watch(self.app, "tick", self._on_tick)
-        self.set_class(self.small, "-small")
+        self._apply_form()
 
-    def watch_small(self, small: bool) -> None:
+    def watch_form(self) -> None:
         if self.is_mounted:
-            self.set_class(small, "-small")
+            self._apply_form()
+
+    def _apply_form(self) -> None:
+        self.set_class(self.form == "small", "-small")
+        self.set_class(self.form == "row", "-row")
 
     def _on_tick(self, value: int) -> None:
         # Só repinta quando há o que piscar.
@@ -173,6 +186,17 @@ class TrafficLight(Widget):
         if self.status in BLINKING and (self.tick // BLINK_TICKS) % 2:
             return None
         return lamp
+
+    def _render_row(self, lit: int | None) -> Text:
+        """As três lâmpadas deitadas: `● ● ●`. Sem carcaça — nesse tamanho ela
+        só roubaria colunas do nome do projeto."""
+        out = Text(no_wrap=True)
+        for index in range(LAMPS):
+            if index:
+                out.append(" ")
+            miolo, _ = self._lamp_styles(index, lit)
+            out.append(LAMP, miolo)
+        return out
 
     def _lamp_styles(self, index: int, lit: int | None) -> tuple[Style, Style]:
         """(miolo, ponta) da lâmpada. Sem fundo próprio: o card aparece atrás,
@@ -215,9 +239,11 @@ class TrafficLight(Widget):
 
     def render(self) -> Text:
         lit = self.lit_lamp()
+        if self.form == "row":
+            return self._render_row(lit)
         housing = self._housing_style()
         parede = self._wall_style()
-        pequeno = self.small
+        pequeno = self.form == "small"
 
         out = Text(no_wrap=True)
         out.append(SMALL_CAP_TOP if pequeno else CAP_TOP, housing)

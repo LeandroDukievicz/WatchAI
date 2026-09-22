@@ -124,7 +124,10 @@ def test_estado_do_card_e_o_do_agente_que_mais_pede_voce():
 # ---- ciclo de vida do terminal ---------------------------------------------
 
 
-def test_terminal_aberto_sem_agente_fica_ocioso():
+def test_agente_encerrado_comeca_a_contagem_para_sair():
+    """Mesmo com a aba aberta: o que o card monitora é a sessão de IA, não o
+    terminal. Sem agente, ela acabou — e o card tem prazo, senão uma aba
+    esquecida ocupa a tela para sempre."""
     store = SessionStore()
     fonte = Fonte(snap(obs(10)))
     p = provider(store, fonte)
@@ -132,8 +135,11 @@ def test_terminal_aberto_sem_agente_fica_ocioso():
     fonte.s = snap(terminais=["/dev/pts/1"])  # agente saiu, aba continua aberta
     p.poll(AGORA + timedelta(seconds=5))
     sessao = store.sessions[0]
-    assert sessao.status is Status.IDLE
-    assert sessao.agents == [] and sessao.closed_at is None
+    assert sessao.status is Status.OFFLINE
+    assert sessao.agents == [] and sessao.closed_at is not None
+    # e some no mesmo prazo de uma aba fechada
+    p.poll(AGORA + REMOCAO_FECHADO + timedelta(minutes=1))
+    assert store.sessions == []
 
 
 def test_terminal_fechado_avisa_por_dois_minutos_e_some():

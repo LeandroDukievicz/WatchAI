@@ -217,6 +217,66 @@ def test_stream_nunca_e_empurrado_para_fora_da_tela():
     run(main())
 
 
+def test_a_janela_funciona_em_qualquer_tamanho():
+    """De 20×10 a 300×80: nada estoura, o EVENT STREAM e a keybar nunca sumem,
+    e o semáforo está sempre lá — encolhendo, ele é a última coisa a sair."""
+
+    TAMANHOS = [
+        (300, 80), (150, 36), (130, 30), (120, 24), (100, 20),
+        (90, 18), (80, 16), (70, 14), (60, 12), (50, 11), (40, 10),
+        (33, 10), (24, 10), (20, 10),
+    ]
+
+    async def main():
+        app = WatchAIApp(seed=3, mock=True)
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            for largura, altura in TAMANHOS:
+                await pilot.resize_terminal(largura, altura)
+                await pilot.pause()
+                dash = app.screen
+                linhas = [s.text for s in dash._compositor.render_strips()]
+                assert len(linhas) == altura, (largura, altura)
+                assert all(len(linha) <= largura for linha in linhas), (largura, altura)
+                assert dash.query_one("#keybar").region.y == altura - 1, (largura, altura)
+                assert dash.query_one("#events").region.height >= 1, (largura, altura)
+                assert all(luz.display for luz in dash.query(TrafficLight)), (largura, altura)
+
+    run(main())
+
+
+def test_o_card_encolhe_em_degraus_ate_virar_uma_linha():
+    """Largura manda nas colunas; **altura manda no tamanho do card** — um card
+    mais alto que a área de sessões simplesmente não aparece, e o usuário vê um
+    painel vazio."""
+    from watchai.layout import CardMode, card_mode
+
+    assert card_mode(150, 23) is CardMode.FULL
+    assert card_mode(150, 11) is CardMode.SHORT  # largura sobra, altura não
+    assert card_mode(100, 7) is CardMode.SHORT
+    assert card_mode(90, 5) is CardMode.COMPACT
+    assert card_mode(50, 20) is CardMode.COMPACT  # altura sobra, largura não
+    assert card_mode(80, 4) is CardMode.MICRO  # nem o compacto cabe
+    assert card_mode(30, 20) is CardMode.MICRO
+
+    async def main():
+        app = WatchAIApp(seed=3, mock=True)
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            assert next(iter(app.screen.query(SessionCard))).region.height == 13
+
+            await pilot.resize_terminal(40, 12)  # micro
+            await pilot.pause()
+            cards = list(app.screen.query(SessionCard))
+            assert app.screen.card_mode is CardMode.MICRO
+            assert cards[0].region.height == 1  # uma linha por sessão
+            texto = "\n".join(s.text for s in app.screen._compositor.render_strips())
+            assert cards[0].session.short in texto  # o nome fica
+            assert "●" in texto  # e as três lâmpadas também
+
+    run(main())
+
+
 def test_no_estreito_sobram_nome_projeto_e_semaforo():
     """Estreitando, o semáforo é a última coisa a sair — é ele que dá o estado
     sem texto nenhum. Quem sai é a linha de estado e o resto do corpo."""
