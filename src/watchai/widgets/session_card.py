@@ -127,25 +127,13 @@ class CardBody(Widget):
         terminal = bool(s.key)
 
         if card.compact:
-            # 3ª e 4ª linha do card compacto: PROJECT/AGENTES e ACTIVITY
-            if terminal and s.agents:
-                topo = Text(no_wrap=True, overflow="ellipsis")
-                for i, agent in enumerate(s.agents):
-                    if i:
-                        topo.append(" ")
-                    topo.append(agent.status.symbol, Style(color=agent.status.color))
-                    topo.append(" " + agent.label, Style(color=colors().text2))
-            else:
-                topo = Text(
-                    ellipsize(project, width),
-                    Style(color=colors().ghost if dead else colors().text),
-                )
+            # Estreito: sobram o nome (em CardName) e o projeto. O estado quem
+            # dá é o semáforo ao lado — ler três lâmpadas não precisa de texto.
             lines = [
-                topo,
                 Text(
-                    ellipsize(s.activity, width),
-                    Style(color=colors().ghost if dead else colors().muted),
-                ),
+                    ellipsize(project, max(1, width)),
+                    Style(color=colors().ghost if dead else colors().text2),
+                )
             ]
         else:
             if falta is not None:

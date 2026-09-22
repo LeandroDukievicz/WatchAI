@@ -18,6 +18,7 @@ EVENTS_FILE = "events.json"
 MAX_EVENTOS_SALVOS = 200
 THEME_KEY = "theme"
 ALERTS_KEY = "alerts"
+NOTIFY_KEY = "notify"
 
 
 def config_dir() -> Path:
@@ -101,6 +102,17 @@ def save_alerts(ligado: bool) -> bool:
     return save(**{ALERTS_KEY: bool(ligado)})
 
 
+def load_notify(default: bool = True) -> bool:
+    """Se a notificação do sistema está ligada — interruptor próprio, separado
+    do bip: tem quem queira o som sem o pop-up, e vice-versa."""
+    value = load().get(NOTIFY_KEY)
+    return value if isinstance(value, bool) else default
+
+
+def save_notify(ligado: bool) -> bool:
+    return save(**{NOTIFY_KEY: bool(ligado)})
+
+
 __all__ = [
     "config_dir",
     "config_path",
@@ -109,8 +121,10 @@ __all__ = [
     "load_events",
     "save_events",
     "load_alerts",
+    "load_notify",
     "load_theme",
     "save",
     "save_alerts",
+    "save_notify",
     "save_theme",
 ]

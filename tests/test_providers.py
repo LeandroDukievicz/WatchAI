@@ -27,6 +27,8 @@ def obs(pid, kind="claude", terminal="/dev/pts/1", cwd="/home/eu/proj", **kw):
         cwd=cwd,
         tool_children=0,
         ancestors=(),
+        window_pid=None,
+        window_app="",
     )
     padroes.update(kw)
     return ProcObs(pid=pid, kind=kind, terminal=terminal, **padroes)
@@ -462,3 +464,91 @@ def test_o_stream_sobrevive_ao_fechamento_do_app(tmp_path, monkeypatch):
         assert outro.store.events[0].session_id == -1  # sem se confundir com sessão nova
 
     asyncio.run(main())
+
+
+# ---- ir para a janela da sessão --------------------------------------------
+
+
+class FocoFalso:
+    """Guarda o pedido em vez de mexer em janela nenhuma."""
+
+    def __init__(self) -> None:
+        self.pedidos: list[dict] = []
+        self.method = "falso"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    async def focus(self, **kwargs) -> str:
+        self.pedidos.append(kwargs)
+        return "janela em evidência"
+
+
+def test_g_leva_para_a_janela_da_sessao_selecionada():
+    import asyncio
+
+    from watchai.app import WatchAIApp
+    from watchai.notify import Notifier
+
+    async def main():
+        foco = FocoFalso()
+        fonte = Fonte(snap(
+            obs(10, "claude", "/dev/pts/1", window_pid=4242, window_app="gnome-terminal-server"),
+            obs(20, "codex", "/dev/pts/2", cwd="/home/eu/outro", window_pid=4242,
+                window_app="gnome-terminal-server"),
+        ))
+        app = WatchAIApp(mock=False, source=fonte, theme_key="watchai",
+                         notifier=Notifier(None), focuser=foco)
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            app.provider.apply(fonte.snapshot(), datetime.now())
+            app.version += 1
+            await pilot.pause()
+            await pilot.pause()
+            app.screen.selected = 1  # segundo card
+            await pilot.press("g")
+            await app.workers.wait_for_complete()
+            assert len(foco.pedidos) == 1
+            pedido = foco.pedidos[0]
+            assert pedido["pid"] == 4242
+            assert pedido["tty"] == "/dev/pts/2"  # a tty da sessão escolhida
+            assert pedido["app"] == "gnome-terminal-server"
+
+    asyncio.run(main())
+
+
+def test_sem_mecanismo_e_sem_tty_o_foco_avisa_que_nao_deu():
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    async def main():
+        focuser = Focuser(None)  # nenhuma ferramenta de janela nesta máquina
+        assert focuser.available is False
+        assert await focuser.focus(pid=1, app="", tty="") == "não consegui chegar nessa janela"
+
+    asyncio.run(main())
+
+
+def test_com_varias_janelas_no_mesmo_processo_o_titulo_desempata(monkeypatch):
+    """gnome-terminal e konsole hospedam todas as abas num processo só: sem o
+    título, o `G` levaria para a janela errada."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    saida = (
+        "0x03000001  0 4242  maquina  ~/outro — bash\n"
+        "0x03000002  0 4242  maquina  watchai — claude\n"
+        "0x03000003  0 9999  maquina  navegador\n"
+    )
+
+    async def falso(comando, timeout=5.0):
+        return 0, saida
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    focuser = Focuser("wmctrl")
+    assert asyncio.run(focuser._janela_wmctrl(4242, "watchai")) == "0x03000002"
+    assert asyncio.run(focuser._janela_wmctrl(4242, "inexistente")) == "0x03000001"
+    assert asyncio.run(focuser._janela_wmctrl(1, "watchai")) is None

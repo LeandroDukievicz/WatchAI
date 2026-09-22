@@ -3,6 +3,23 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+- **`G` — ir para a janela da sessão**: põe na frente o terminal onde o agente
+  roda (`System Events` no macOS, `AppActivate` no Windows, `wmctrl`/`xdotool`
+  no X11, `org.freedesktop.Application.Activate` no Wayland) e toca o **sino na
+  tty** para marcar a aba certa. O rodapé diz o que conseguiu fazer, sem fingir
+  sucesso onde o sistema não deixou.
+- **`N` liga/desliga a notificação do sistema**, com interruptor próprio no
+  rodapé e escolha salva — separado do bip (`B`).
+
+### Mudado
+- **Semáforo idêntico ao ícone do app**: carcaça de contorno cyan e interior
+  escuro, como em `assets/watchai.svg`. A lâmpada acesa mantém o halo.
+- **Modo estreito** (abaixo de 60 colunas): ficam o nome, o projeto e o
+  semáforo; o resto do texto sai. Antes era o semáforo que saía.
+
 ## [1.1.0] — 2026-09-22
 
 ### Adicionado (avisos e detecção fina)

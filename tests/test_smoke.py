@@ -211,15 +211,26 @@ def test_stream_nunca_e_empurrado_para_fora_da_tela():
     run(main())
 
 
-def test_semaforo_some_no_modo_compacto():
+def test_no_estreito_sobram_nome_projeto_e_semaforo():
+    """Estreitando, o semáforo é a última coisa a sair — é ele que dá o estado
+    sem texto nenhum. Quem sai é a linha de estado e o resto do corpo."""
+
     async def main():
         app = WatchAIApp(seed=1, mock=True)
         async with app.run_test(size=(50, 28)) as pilot:
             await pilot.pause()
-            assert not any(t.display for t in app.screen.query(TrafficLight))
+            assert all(t.display for t in app.screen.query(TrafficLight))
+            assert not any(
+                luz.display for luz in app.screen.query(".card-light")
+            )  # a linha "◐ WORKING" sai
+            card = next(iter(app.screen.query(SessionCard)))
+            texto = "\n".join(s.text for s in app.screen._compositor.render_strips())
+            assert card.session.short in texto and card.session.project in texto
+
             await pilot.resize_terminal(150, 36)
             await pilot.pause()
             assert all(t.display for t in app.screen.query(TrafficLight))
+            assert all(luz.display for luz in app.screen.query(".card-light"))
 
     run(main())
 

@@ -66,6 +66,21 @@ Atualizado em 2026-09-22.
       `~/.gemini/tmp/<projeto>/logs.json` registra só as mensagens do usuário,
       sem resposta, sem ferramenta e sem fim de turno
 
+### M6 — chegar na janela (pós-1.1.0)
+
+- [x] **Semáforo idêntico ao ícone** (`assets/watchai.svg`): carcaça de contorno
+      cyan, interior escuro, lâmpada acesa com halo
+- [x] **`G` leva você até a janela** da sessão selecionada — `System Events` no
+      macOS, `AppActivate` no Windows, `wmctrl`/`xdotool` no X11 (título
+      desempata quando o servidor de terminal hospeda várias janelas) e
+      `org.freedesktop.Application.Activate` no Wayland
+- [x] **Sino na tty da sessão**: marca a aba certa e faz a janela piscar na
+      dock — é o que resolve o que o Wayland não deixa resolver
+- [x] **`N` liga/desliga a notificação** sem mexer no bip, com interruptor
+      próprio no rodapé e escolha salva
+- [x] **Modo estreito**: sobram nome, projeto e semáforo — o resto do texto sai,
+      porque ler três lâmpadas não precisa de texto
+
 ### M5 — permanência e distribuição
 
 - [x] **Histórico do EVENT STREAM entre execuções** (`~/.config/watchai/events.json`)
@@ -97,6 +112,10 @@ Atualizado em 2026-09-22.
 
 - [ ] **Publicar no PyPI** (`pipx install watchai`), para não depender de clonar
       o repositório. Falta conta, token e um `python -m build` no CI.
+
+- [ ] **Focar a aba exata no Wayland.** Hoje o `Activate` levanta a janela do
+      terminal e o sino marca a aba; escolher a aba programaticamente depende de
+      cada emulador expor isso (o GNOME Terminal não expõe).
 
 - [ ] **Ordenar os cards por atenção** (decidir antes de fazer). Hoje a ordem é
       a de descoberta. Quem pede você primeiro subir ao topo ajuda com muitas

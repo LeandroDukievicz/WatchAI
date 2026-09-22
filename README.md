@@ -164,7 +164,7 @@ A tela tem quatro regiões fixas:
  ╭─ EVENT STREAM ───────────────────────────────────────────────╮
  │ 21:25:19 ◆ OPENCODE INPUT    waiting for confirmation        │   ④ event stream
  ╰──────────────────────────────────────────────────────────────╯
-  ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ T THEMES │ V VIEW │ R REFRESH …    ⑤ keybar
+  ↑↓ NAV │ ENTER OPEN │ G GO │ TAB PANEL │ T THEMES │ V VIEW │ R … ⑤ keybar
 ```
 
 ## ① Cabeçalho — resumo global
@@ -284,13 +284,14 @@ rodou enquanto você estava fora é justamente o que você não viu.
 ## ⑤ Keybar
 
 ```
- ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ T THEMES │ V VIEW │ R REFRESH │ B BIP │ ? HELP │ Q QUIT
+ ↑↓ NAV │ ENTER OPEN │ G GO │ TAB PANEL │ T THEMES │ V VIEW │ R REFRESH │ B BIP │ N NOTIF │ ? HELP │ Q QUIT
 ```
 
 Rodapé de atalhos que se adapta à largura: quando não cabe, descarta os itens
-menos importantes primeiro (`B`, depois `R`, `T`, `TAB`…) e, em último caso, mostra só
-as teclas sem descrição. O item do bip reflete o estado: `B BIP` ligado,
-`B MUDO` (apagado) desligado.
+menos importantes primeiro (`N`, depois `B`, `R`, `T`, `TAB`…) e, em último caso,
+mostra só as teclas sem descrição. A ordem de leitura não muda — só some item.
+Os dois interruptores refletem o estado: `B BIP` / `B MUDO` para o som e
+`N NOTIF` / `N MUDO` para a notificação, apagados quando desligados.
 
 ## Detalhes da sessão (`ENTER`)
 
@@ -331,6 +332,28 @@ fazendo —, o diretório, quando a aba abriu e os **últimos 4 eventos só dela
   primeira), e a seleção do dashboard acompanha.
 - Sessão OFFLINE mostra `—` nos campos que perderam sentido.
 
+## Ir para a janela da sessão (`G`)
+
+O card diz que o CLAUDE terminou; `G` põe na frente a janela do terminal em que
+ele roda. É o fim natural do fluxo: ver, decidir, voltar. Funciona com o card
+selecionado no dashboard ou com os detalhes abertos.
+
+| Sistema | Como |
+|---|---|
+| **macOS** | `System Events` ativa o processo pelo PID |
+| **Windows** | `AppActivate` do WScript.Shell, também pelo PID |
+| **Linux/X11** | `wmctrl` ou `xdotool`; com várias janelas no mesmo processo (um servidor de terminal hospeda todas as abas), o título da sessão desempata |
+| **Linux/Wayland** | o compositor **proíbe** um app levantar a janela de outro — é proteção contra roubo de foco. Resta pedir ao próprio terminal por D-Bus (`org.freedesktop.Application.Activate`), o que funciona com GNOME Terminal, Ptyxis, Console, Konsole e afins |
+
+**E o sino.** Em qualquer Unix, o WatchAI também toca o bell **na tty da
+sessão** — o terminal marca aquela aba como "precisa de atenção" e a janela
+pisca na dock. No Wayland é o que resolve o que o `Activate` não resolve: ele
+levanta a janela, o sino aponta a aba certa.
+
+O rodapé confirma o que conseguiu fazer ("janela à frente e aba sinalizada",
+"sino tocado em pts/4", "não consegui chegar nessa janela") — sem fingir sucesso
+onde o sistema não deixou.
+
 ## Ajuda (`?`)
 
 Modal com a lista de teclas. Fecha com `ESC` ou `?`.
@@ -348,16 +371,18 @@ ler qualquer texto. É também a identidade do produto.
 ╰─────╯
 ```
 
-**A lâmpada acesa brilha.** Além da cor cheia e do negrito, as três células dela
-recebem um fundo tingido da própria cor, e a carcaça inteira troca o cinza por um
-tom da cor acesa. É esse halo que faz o semáforo ser lido antes do texto, de
+É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](assets/watchai.svg))
+desenhado em texto: carcaça de contorno cyan, interior escuro e três lâmpadas.
+
+**A lâmpada acesa brilha**: cor cheia, negrito e um fundo tingido da própria cor
+nas três células. É esse halo que faz o semáforo ser lido antes do texto, de
 longe e de canto de olho.
 
 Como num semáforo de verdade, as lâmpadas apagadas não somem: ficam num tom bem
 escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. INPUT é o
 único que pisca (1 s aceso, 1 s apagado) — é o estado que depende de você.
-Abaixo de 60 colunas o semáforo sai (não cabe) e quem dá o estado é a barra
-lateral colorida.
+Estreitando a janela, o semáforo é a **última** coisa a sair — é ele que dá o
+estado sem texto nenhum (ver [Responsividade](#responsividade)).
 
 ## Os avisos (bip e notificação)
 
@@ -374,15 +399,17 @@ mas **só quando o WatchAI não está em foco**: se você já está olhando para
 o pop-up é ruído. `notify-send` no Linux, `osascript` no macOS e toast por
 PowerShell no Windows (este último, não verificado em máquina real).
 
-`B` liga e desliga os dois de uma vez, e a escolha **fica salva** para as
-próximas execuções.
+**Cada um tem o seu interruptor**: `B` para o bip, `N` para a notificação — tem
+quem queira o som sem o pop-up, e o contrário. As duas escolhas **ficam salvas**
+para as próximas execuções.
 
 O som sai pelo **servidor de som** (PipeWire/PulseAudio), não pelo bell do
 terminal (`\a`). Essa escolha é o ponto todo: bell vira flash visual em vários
 emuladores, costuma vir desligado e não ajuda com a aba em segundo plano. Um
 stream de áudio normal toca independente de foco.
 
-- `B` liga/desliga; o rodapé mostra `B BIP` ou `B MUDO`. Religar confirma com um bip.
+- `B` liga/desliga o som (`B BIP` / `B MUDO` no rodapé); religar confirma com um
+  bip. `N` liga/desliga a notificação (`N NOTIF` / `N MUDO`).
 - Uma rajada do **mesmo** aviso vira um bip só (janela de 1 s), sem enfileirar
   áudio. Mas READY seguido de ERROR são duas notícias diferentes: as duas tocam.
 - Não avisa na abertura pelas sessões que já estavam lá — só pelo que muda
@@ -474,10 +501,12 @@ branco suave e cinza.
 | `ENTER` | abre os detalhes da sessão selecionada |
 | `ESC` | volta / fecha o modal |
 | `TAB` | alterna o painel **SESSIONS ⇄ EVENTS** |
+| `G` | põe na frente a janela do terminal onde a sessão roda |
 | `T` | abre o seletor de temas (preview ao vivo; `ENTER` salva, `ESC` desfaz) |
 | `V` | alterna **CARDS ⇄ LIST** |
 | `R` | refresh — varre os processos na hora (no `--mock`, avança a simulação) |
-| `B` | liga/desliga o bip de READY |
+| `B` | liga/desliga o bip |
+| `N` | liga/desliga a notificação do sistema |
 | `?` | ajuda |
 | `Q` / `Ctrl+C` | sai |
 
@@ -502,7 +531,12 @@ Por largura:
 | ≥ 130 | 3 cards por linha |
 | 90–129 | 2 cards por linha |
 | 60–89 | 1 card por linha |
-| < 60 | compacto: sem caixa, barra lateral na cor do estado, 4 linhas por sessão (sem semáforo) |
+| < 60 | compacto: sem caixa, barra lateral na cor do estado — sobram **o nome, o projeto e o semáforo** |
+
+No modo compacto o resto do texto sai (estado, atividade, tempo) e ficam as três
+informações que se leem de relance: **que sessão é, em que projeto, e como está**.
+O estado quem dá é o semáforo — ler três lâmpadas não precisa de texto. Tudo
+continua no modal de detalhes (`ENTER`).
 
 Por altura: a área de sessões encolhe até o conteúdo e o EVENT STREAM ocupa tudo
 que sobra — quanto mais alto o terminal, mais histórico, e nunca um vão morto no
@@ -537,6 +571,7 @@ WatchAI/
 │   ├── format.py                # ellipsize, HH:MM:SS, mm:ss
 │   ├── sound.py                 # bip: um timbre por estado, player do sistema
 │   ├── notify.py                # notificação do sistema (libnotify/osascript/toast)
+│   ├── focus.py                 # `G`: levanta a janela da sessão (e toca o sino)
 │   ├── config.py                # preferências salvas (~/.config/watchai/config.json)
 │   ├── models/                  # Status, Agent, Session (= terminal), SessionStore
 │   ├── providers/               # ← a detecção real
@@ -584,7 +619,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-50 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
+53 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).

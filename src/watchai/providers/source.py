@@ -23,6 +23,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from ..focus import EMULADORES
 from .agents import identify
 
 # Um filho criado logo depois do agente é infraestrutura dele (servidor MCP,
@@ -56,6 +57,8 @@ class ProcObs:
     cwd: str | None = None
     tool_children: int = 0  # descendentes que são ferramenta rodando agora
     tool_label: str = ""  # a ferramenta mais recente ("npm test", "rg foo")
+    window_pid: int | None = None  # processo que **tem a janela** (o emulador)
+    window_app: str = ""  # nome dele: "gnome-terminal-server", "ptyxis"…
     ancestors: tuple[int, ...] = field(default=())  # para desduplicar por árvore
 
 
@@ -195,10 +198,13 @@ class PsutilSource:
                 cwd = None  # macOS pode negar; o transcript tem o cwd de reserva
 
             linha = ancestrais(pid)
-            shell_pid = next(
-                (a for a in linha if (tabela[a].get("name") or "").lower().removesuffix(".exe") in SHELLS),
-                None,
-            )
+            def nome_de(pid_: int) -> str:
+                return (tabela[pid_].get("name") or "").lower().removesuffix(".exe")
+
+            shell_pid = next((a for a in linha if nome_de(a) in SHELLS), None)
+            # Quem desenha a janela é o emulador, alguns níveis acima do shell:
+            # é o PID que os gerenciadores de janela conhecem.
+            janela_pid = next((a for a in linha if nome_de(a) in EMULADORES), None)
             nascimento = info.get("create_time") or 0.0
             terminal = tty or (
                 f"pid:{shell_pid}:{int(tabela[shell_pid].get('create_time') or 0)}"
@@ -265,6 +271,8 @@ class PsutilSource:
                     cwd=cwd,
                     tool_children=ferramentas,
                     tool_label=rotulo,
+                    window_pid=janela_pid or shell_pid,
+                    window_app=nome_de(janela_pid) if janela_pid else "",
                     ancestors=tuple(linha),
                 )
             )

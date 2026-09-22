@@ -18,11 +18,12 @@ from textual.binding import Binding
 from textual.reactive import reactive
 
 from . import config, sound
+from .focus import Focuser
 from .mock import MockSimulator, build_store
 from .models import PRIORIDADE, SessionStore, Status
 from .notify import Notifier
 from .providers import LiveProvider
-from .screens import Dashboard, HelpScreen, ThemeScreen
+from .screens import Dashboard, DetailsScreen, HelpScreen, ThemeScreen
 from .sound import Alert
 from .theme import BY_KEY, DEFAULT, PALETTES, colors, use
 
@@ -64,6 +65,8 @@ class WatchAIApp(App):
         Binding("r", "refresh", "Refresh"),
         Binding("b", "toggle_sound", "Bip"),
         Binding("t", "themes", "Themes"),
+        Binding("n", "toggle_notify", "Notify"),
+        Binding("g", "goto", "Go to window"),
     ]
 
     # `tick` anima; `version` sobe a cada mudança de dados. Os widgets
@@ -71,6 +74,7 @@ class WatchAIApp(App):
     tick: reactive[int] = reactive(0)
     version: reactive[int] = reactive(0)
     sound_on: reactive[bool] = reactive(True)
+    notify_on: reactive[bool] = reactive(True)
 
     def __init__(
         self,
@@ -80,12 +84,14 @@ class WatchAIApp(App):
         mock: bool = False,
         source=None,
         notifier: Notifier | None = None,
+        focuser: Focuser | None = None,
     ) -> None:
         super().__init__()
         # A paleta precisa valer já no primeiro parse do TCSS, antes do on_mount.
         saved = theme_key if theme_key is not None else config.load_theme()
         self.palette_key = use(saved or DEFAULT.key).key
         self.set_reactive(WatchAIApp.sound_on, config.load_alerts())
+        self.set_reactive(WatchAIApp.notify_on, config.load_notify())
         if mock:
             self.store = build_store()
             self.simulator = MockSimulator(self.store, seed=seed)
@@ -101,6 +107,7 @@ class WatchAIApp(App):
         self._last_scan = 0.0
         self.alert = alert or Alert()
         self.notifier = notifier if notifier is not None else Notifier()
+        self.focuser = focuser if focuser is not None else Focuser()
         # O terminal avisa quando ganha e perde foco. Começamos assumindo que
         # não está em foco: notificar à toa incomoda menos que ficar mudo.
         self._focused = False
@@ -225,7 +232,7 @@ class WatchAIApp(App):
 
     def notify_session(self, session) -> None:
         """Notificação do sistema — só quando você NÃO está olhando o WatchAI."""
-        if self._focused or not self.notifier.available:
+        if not self.notify_on or self._focused or not self.notifier.available:
             return
         title = f"{session.status.label} · {session.short}"
         body = session.activity or ""
@@ -252,9 +259,44 @@ class WatchAIApp(App):
         else:
             self.bell()  # sem player no sistema: resta o bell do terminal
 
+    # -- ir para a janela da sessão ----------------------------------------------
+    def selected_session(self):
+        """A sessão em foco agora — no dashboard ou dentro dos detalhes."""
+        tela = self.screen
+        if isinstance(tela, DetailsScreen):
+            return self.store.get(tela.session_id)
+        indice = getattr(tela, "selected", None)
+        if indice is None:
+            return None
+        sessions = self.store.sessions
+        return sessions[indice] if 0 <= indice < len(sessions) else None
+
+    def action_goto(self) -> None:
+        """`G` põe na frente a janela do terminal onde a sessão roda."""
+        session = self.selected_session()
+        if session is None:
+            return
+        self.run_worker(self._goto(session), group="goto", exclusive=True)
+
+    async def _goto(self, session) -> None:
+        resultado = await self.focuser.focus(
+            pid=session.window_pid,
+            app=session.window_app,
+            tty=session.tty,
+            title=session.project or session.name,
+        )
+        self.notify(f"{session.short}: {resultado}", timeout=4)
+
+    def action_toggle_notify(self) -> None:
+        """`N` liga e desliga a notificação do sistema, sem mexer no bip."""
+        self.notify_on = not self.notify_on
+        config.save_notify(self.notify_on)
+        estado = "ligadas" if self.notify_on else "desligadas"
+        self.notify(f"notificações {estado}", timeout=3)
+
     def action_toggle_sound(self) -> None:
-        """`B` liga e desliga os avisos — bip e notificação juntos — e a escolha
-        vale para as próximas execuções."""
+        """`B` liga e desliga o bip, e a escolha vale para as próximas
+        execuções. A notificação tem interruptor próprio (`N`)."""
         self.sound_on = not self.sound_on
         config.save_alerts(self.sound_on)
         if self.sound_on:

@@ -123,6 +123,9 @@ class Session:
     agents: list["Agent"] = field(default_factory=list)
     key: str = ""  # identidade estável: tty, ou shell no Windows
     terminal: str = ""  # rótulo curto: "pts/10", "pwsh #4312"
+    tty: str = ""  # caminho do terminal, quando existe: "/dev/pts/10"
+    window_pid: int | None = None  # processo dono da janela (o emulador)
+    window_app: str = ""  # nome dele, para achar o app no D-Bus
     closed_at: datetime | None = None  # quando o terminal sumiu
 
     @property

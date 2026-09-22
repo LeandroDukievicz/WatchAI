@@ -15,18 +15,22 @@ from textual.widget import Widget
 from ..theme import colors
 
 SOUND_KEY = "B"  # alterna o bip: a descrição vira MUDO quando está desligado
+NOTIFY_KEY = "N"  # alterna a notificação do sistema: vira MUDO quando desligada
 
-# (tecla, descrição, prioridade — maior = descarta por último)
+# (tecla, descrição, prioridade). A ORDEM da lista é a de leitura na barra; a
+# prioridade só decide quem sai primeiro quando não cabe — maior fica por último.
 KEYS = [
-    ("↑↓", "NAV", 9),
-    ("ENTER", "OPEN", 8),
-    ("TAB", "PANEL", 4),
-    ("T", "THEMES", 3),
-    ("V", "VIEW", 7),
-    ("R", "REFRESH", 2),
-    ("B", "BIP", 1),
-    ("?", "HELP", 6),
-    ("Q", "QUIT", 5),
+    ("↑↓", "NAV", 11),
+    ("ENTER", "OPEN", 10),
+    ("G", "GO", 9),
+    ("TAB", "PANEL", 5),
+    ("T", "THEMES", 4),
+    ("V", "VIEW", 8),
+    ("R", "REFRESH", 3),
+    ("B", "BIP", 2),
+    ("N", "NOTIF", 1),
+    ("?", "HELP", 7),
+    ("Q", "QUIT", 6),
 ]
 
 
@@ -35,26 +39,38 @@ class KeyBar(Widget):
 
     def on_mount(self) -> None:
         self.watch(self.app, "sound_on", lambda _: self.refresh())
+        self.watch(self.app, "notify_on", lambda _: self.refresh())
 
     @property
     def sound_on(self) -> bool:
         return getattr(self.app, "sound_on", True)
 
+    @property
+    def notify_on(self) -> bool:
+        return getattr(self.app, "notify_on", True)
+
+    def _desligado(self, key: str) -> bool:
+        """Interruptores apagam a própria tecla quando estão desligados."""
+        return (key == SOUND_KEY and not self.sound_on) or (
+            key == NOTIFY_KEY and not self.notify_on
+        )
+
     def _keys(self) -> list[tuple[str, str, int]]:
-        """KEYS com a tecla do bip descrevendo o estado atual."""
-        label = "BIP" if self.sound_on else "MUDO"
+        """KEYS com os dois interruptores descrevendo o estado atual."""
+        rotulos = {
+            SOUND_KEY: "BIP" if self.sound_on else "MUDO",
+            NOTIFY_KEY: "NOTIF" if self.notify_on else "MUDO",
+        }
         return [
-            (key, label if key == SOUND_KEY else desc, priority)
-            for key, desc, priority in KEYS
+            (key, rotulos.get(key, desc), priority) for key, desc, priority in KEYS
         ]
 
     def _build(self, keys, with_desc: bool) -> Text:
-        muted = not self.sound_on
         out = Text(no_wrap=True, overflow="ellipsis")
         for i, (key, desc, _) in enumerate(keys):
             if i:
                 out.append(" │ " if with_desc else "  ", Style(color=colors().line_hi))
-            off = muted and key == SOUND_KEY
+            off = self._desligado(key)
             out.append(key, Style(color=colors().ghost if off else colors().cyan, bold=not off))
             if with_desc:
                 out.append(f" {desc}", Style(color=colors().ghost if off else colors().muted))

@@ -113,7 +113,9 @@ SessionCard {
 TrafficLight {
     margin-left: 2;
 }
-SessionCard.-compact TrafficLight {
+/* Estreitando, o semáforo é a última coisa a sair: é ele que dá o estado sem
+   texto. Quem sai é o resto — sobram nome, projeto e as três lâmpadas. */
+SessionCard.-compact .card-light {
     display: none;
 }
 
@@ -136,9 +138,16 @@ CardBody {
 SessionCard.-compact CardBody {
     margin: 0 0 0 2;
 }
-SessionCard.-compact .card-light {
-    margin-left: 2;
+/* O texto tem 2 linhas e o semáforo tem 5: centraliza para não ficar um vão
+   embaixo do nome. */
+SessionCard.-compact .card-main {
+    height: 5;
+    align-vertical: middle;
 }
+SessionCard.-compact TrafficLight {
+    margin-left: 1;
+}
+
 
 /* Bordas por estado: só READY / INPUT / ERROR acendem forte. WORKING e
    WAITING ficam num tom apagado; OFFLINE quase some. */
