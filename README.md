@@ -555,7 +555,8 @@ CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 
 ## Roadmap
 
-O que ainda não existe, em ordem de utilidade:
+O plano completo, com checkpoints, está em [MILESTONE.md](MILESTONE.md). O
+resumo do que ainda não existe, em ordem de utilidade:
 
 1. **Diário do Gemini, do OpenCode e do Aider** — hoje eles vivem só da camada de
    processos (WORKING/READY). O formato de cada um é a única coisa que falta;
