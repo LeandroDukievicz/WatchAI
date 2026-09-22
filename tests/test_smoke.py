@@ -175,7 +175,8 @@ def test_semaforo_so_acompanha_o_tick_quando_pisca():
 
 
 def test_layout_sem_vao_morto():
-    """EVENT STREAM encosta nos cards, keybar na última linha, card de 48 colunas."""
+    """EVENT STREAM encosta nos cards, keybar na última linha, cards dividindo
+    a largura inteira em três colunas."""
 
     async def main():
         app = WatchAIApp(seed=1, mock=True)
@@ -186,10 +187,15 @@ def test_layout_sem_vao_morto():
             events = dash.query_one("#events").region
             assert events.y == area.y + area.height
             assert dash.query_one("#keybar").region.y == 35
-            card = next(iter(dash.query(SessionCard)))
-            assert card.region.width == 48
-            assert card.region.height == 10  # a altura vem do semáforo (8 linhas)
-            assert card.query_one(TrafficLight).region.width == 8
+            cards = list(dash.query(SessionCard))
+            card = cards[0]
+            # Três colunas ocupando a área toda: o último card termina a menos
+            # de três colunas da borda (o que sobra é a barra de rolagem, que
+            # aparece quando os cards não cabem na altura).
+            ultimo = cards[2].region
+            assert area.width - (ultimo.x + ultimo.width) <= 3
+            assert card.region.height == 13  # a altura vem do semáforo (11 linhas)
+            assert card.query_one(TrafficLight).region.width == 10
 
     run(main())
 

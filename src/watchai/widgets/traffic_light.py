@@ -3,18 +3,20 @@
 É a leitura "de longe": antes de ler qualquer texto, a lâmpada acesa já diz se
 a sessão está rodando, pronta ou com problema.
 
-    ╭──────╮
-    │ ▗██▖ │   vermelha · ERROR
-    │ ▝██▘ │
-    │ ▗██▖ │   amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
-    │ ▝██▘ │
-    │ ▗██▖ │   verde    · READY
-    │ ▝██▘ │
-    ╰──────╯
+    ╭────────╮
+    │ ▗▟██▙▖ │   vermelha · ERROR
+    │ ██████ │
+    │ ▝▜██▛▘ │
+    │ ▗▟██▙▖ │   amarela  · WORKING, WAITING, STARTING e INPUT
+    │ ██████ │
+    │ ▝▜██▛▘ │
+    │ ▗▟██▙▖ │   verde    · READY
+    │ ██████ │
+    │ ▝▜██▛▘ │
+    ╰────────╯
 
-Cada lâmpada ocupa **duas linhas cheias**, com as quatro pontas cortadas por
-quadrantes: o que sobra é um círculo — o mais redondo que uma grade de
-caracteres permite — em vez de um ponto. Em terminais estreitos entra a versão pequena (`●`, cinco linhas), que é
+Cada lâmpada é um **octógono regular** de 6 células por 3 linhas, com os quatro
+cantos cortados em diagonal por quadrantes. Em terminais estreitos entra a versão pequena (`●`, cinco linhas), que é
 o que cabe.
 
 É o mesmo semáforo do ícone do app (`assets/watchai.svg`), desenhado em texto:
@@ -41,8 +43,8 @@ from textual.widget import Widget
 from ..models import Status
 from ..theme import blend, colors, fade
 
-WIDTH = 8
-HEIGHT = 8
+WIDTH = 10
+HEIGHT = 11
 
 # Versão pequena, para quando não há largura nem altura (modo compacto).
 SMALL_WIDTH = 7
@@ -62,13 +64,31 @@ SMALL_HEIGHT = 5
 # quadrado — e aí o corte de um quadrante vale 25% nos dois eixos. Com 5 de
 # largura o corte valeria 10% na horizontal contra 25% na vertical, e o que
 # aparecia era um retângulo de cantos lascados.
-LAMP_RIM_TOP = ("▗", "▖")  # as pontas cortadas: é aqui que mora a borda do neon
-LAMP_RIM_BOTTOM = ("▝", "▘")
-LAMP_CORE = "██"
+# A bola: um octógono regular de 6 células por 3 linhas. Em sub-células (cada
+# caractere vale 2x2), o desenho é este:
+#
+#     ...######...
+#     .##########.
+#     ############
+#     ############
+#     .##########.
+#     ...######...
+#
+# 12 sub-colunas por 6 sub-linhas — e como a célula do terminal é ~2x mais alta
+# que larga, isso dá 6w x 6w: um quadrado com os quatro cantos cortados em
+# diagonal de verdade. Com 2 linhas só cabia **um** degrau por canto, que o olho
+# lê como entalhe, não como lado do octógono.
+#
+# Cada linha é (ponta esquerda, miolo, ponta direita).
+LAMP_ROWS = (
+    ("▗", "▟██▙", "▖"),
+    ("", "██████", ""),
+    ("▝", "▜██▛", "▘"),
+)
 LAMP_SMALL = " ● "
 
-CAP_TOP = "╭──────╮"
-CAP_BOTTOM = "╰──────╯"
+CAP_TOP = "╭────────╮"
+CAP_BOTTOM = "╰────────╯"
 SMALL_CAP_TOP = "╭─────╮"
 SMALL_CAP_BOTTOM = "╰─────╯"
 WALL = "│"
@@ -85,12 +105,14 @@ DIM_OFFLINE = 0.45
 HOUSING_OFFLINE = 0.25
 
 # As camadas do neon, do centro para fora: miolo na cor cheia, ponta cortada
-# (RIM), o meio-bloco que encosta na bola (HUG) e o tingido de fundo que sobra
-# na célula (GLOW).
-RIM = 0.62
-HUG = 0.45
-GLOW = 0.16
-GLOW_LIGHT = 0.26  # no branco, um tingido fraco não aparece
+# num tom intermediário (RIM) e o fundo tingido da célula ao lado (GLOW).
+RIM = 0.62  # a ponta cortada, em tom intermediário: a borda difusa do neon
+# O brilho mora **no fundo das células de canto da própria bola**: ali metade da
+# célula está vazia (é o corte do octógono), e tingir esse vazio faz o halo
+# seguir a forma. Nas células ao lado sobra um tingido bem mais fraco.
+GLOW = 0.26
+GLOW_LIGHT = 0.34  # no branco, um tingido fraco não aparece
+GLOW_PAD = 0.38  # quanto do brilho sobra na célula seguinte
 
 RED_LAMP, AMBER_LAMP, GREEN_LAMP = 0, 1, 2
 LAMPS = 3
@@ -161,9 +183,11 @@ class TrafficLight(Widget):
         paleta = colors()
         color = lamp_colors()[index]
         if index == lit:
+            brilho = blend(color, paleta.bg, GLOW if paleta.dark else GLOW_LIGHT)
             return (
                 Style(color=color, bold=True),
-                Style(color=blend(color, paleta.bg, RIM)),
+                # A ponta cortada: traço em tom médio sobre o vazio tingido.
+                Style(color=blend(color, paleta.bg, RIM), bgcolor=brilho),
             )
         forca = DIM_OFFLINE if self.status is Status.OFFLINE else DIM
         apagada = Style(color=paleta.off(color, forca))
@@ -175,11 +199,8 @@ class TrafficLight(Widget):
             return Style()
         paleta = colors()
         cor = lamp_colors()[index]
-        brilho = GLOW if paleta.dark else GLOW_LIGHT
-        return Style(
-            color=blend(cor, paleta.bg, HUG),
-            bgcolor=blend(cor, paleta.bg, brilho),
-        )
+        brilho = (GLOW if paleta.dark else GLOW_LIGHT) * GLOW_PAD
+        return Style(bgcolor=blend(cor, paleta.bg, brilho))
 
     def _housing_style(self) -> Style:
         """A carcaça é cyan, como no ícone; OFFLINE a apaga."""
@@ -197,31 +218,24 @@ class TrafficLight(Widget):
         housing = self._housing_style()
         parede = self._wall_style()
         pequeno = self.small
-        topo = SMALL_CAP_TOP if pequeno else CAP_TOP
-        base = SMALL_CAP_BOTTOM if pequeno else CAP_BOTTOM
-        linhas = (LAMP_SMALL,) if pequeno else (LAMP_RIM_TOP, LAMP_RIM_BOTTOM)
 
         out = Text(no_wrap=True)
-        out.append(topo, housing)
+        out.append(SMALL_CAP_TOP if pequeno else CAP_TOP, housing)
         for index in range(LAMPS):
             miolo, ponta = self._lamp_styles(index, lit)
             halo = self._pad_style(index, lit)
-            for pontas in linhas:
+            linhas = (("", LAMP_SMALL, ""),) if pequeno else LAMP_ROWS
+            for esq, centro, dir_ in linhas:
                 out.append("\n")
-                aceso = index == lit
-                esquerda, direita = (PAD, PAD) if pequeno else pontas
                 out.append(WALL, parede)
-                out.append(esquerda if aceso and not pequeno else PAD, halo)
-                if pequeno:
-                    out.append(LAMP_SMALL, miolo)
-                else:
-                    out.append(esquerda, ponta)
-                    out.append(LAMP_CORE, miolo)
-                    out.append(direita, ponta)
-                out.append(direita if aceso and not pequeno else PAD, halo)
+                out.append(PAD, halo)
+                out.append(esq, ponta)
+                out.append(centro, miolo)
+                out.append(dir_, ponta)
+                out.append(PAD, halo)
                 out.append(WALL, parede)
         out.append("\n")
-        out.append(base, housing)
+        out.append(SMALL_CAP_BOTTOM if pequeno else CAP_BOTTOM, housing)
         return out
 
 

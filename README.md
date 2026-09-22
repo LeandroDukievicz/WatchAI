@@ -384,39 +384,50 @@ Cada card carrega um semáforo de 3 lâmpadas — é a leitura "de longe", antes
 ler qualquer texto. É também a identidade do produto.
 
 ```
-╭──────╮
-│ ▗██▖ │  vermelha · ERROR
-│ ▝██▘ │
-│ ▗██▖ │  amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
-│ ▝██▘ │
-│ ▗██▖ │  verde    · READY
-│ ▝██▘ │
-╰──────╯
+╭────────╮
+│ ▗▟██▙▖ │  vermelha · ERROR
+│ ██████ │
+│ ▝▜██▛▘ │
+│ ▗▟██▙▖ │  amarela  · WORKING, WAITING, STARTING e INPUT
+│ ██████ │
+│ ▝▜██▛▘ │
+│ ▗▟██▙▖ │  verde    · READY
+│ ██████ │
+│ ▝▜██▛▘ │
+╰────────╯
 ```
 
-Cada lâmpada ocupa **duas linhas cheias com as quatro pontas cortadas por
-quadrantes** — um círculo, o mais redondo que uma grade de caracteres permite.
-Em terminais estreitos entra a versão pequena (`●`).
+Cada lâmpada é um **octógono regular** de 6 células por 3 linhas, com os quatro
+cantos cortados em diagonal. Em sub-células (cada caractere vale 2×2):
 
-A largura não é arbitrária: a célula do terminal é ~2× mais alta que larga,
-então **4 de largura por 2 de altura** dá um quadrado, e aí o corte de um
-quadrante vale 25% nos dois eixos. Com 5 de largura o corte valia 10% na
-horizontal contra 25% na vertical — e o que aparecia era um retângulo de cantos
-lascados.
+```
+...######...
+.##########.
+############
+############
+.##########.
+...######...
+```
+
+12 sub-colunas por 6 sub-linhas — e como a célula do terminal é ~2× mais alta
+que larga, isso dá **6w × 6w**: um quadrado com cantos cortados de verdade. Com
+2 linhas cabia só **um** degrau por canto, que o olho lê como entalhe, não como
+lado do octógono. Em terminais estreitos entra a versão pequena (`●`).
 
 É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](assets/watchai.svg))
 desenhado em texto: carcaça de contorno cyan, **sem fundo próprio** — o card
 aparece através dela — e três lâmpadas.
 
-**A lâmpada acesa é neon**, em quatro camadas do centro para fora: miolo na cor
+**A lâmpada acesa é neon**, em três camadas do centro para fora: miolo na cor
 cheia e em negrito; as pontas cortadas num tom intermediário (a borda difusa);
-o quadrante ao lado da bola num tom mais fraco (o brilho que encosta); e o
-fundo da célula apenas tingido (o brilho que escapa).
+e o **fundo tingido dentro das próprias células de canto** — ali metade da
+célula está vazia, que é o corte do octógono, e tingir esse vazio faz o halo
+seguir a forma.
 
-O halo usa **o mesmo quadrante da ponta da bola naquela linha**, e não um
-meio-bloco inteiro: assim ele acompanha a silhueta. Na linha de cima a bola só
-existe na metade de baixo — o halo também. Um bloco inteiro ali viraria uma
-barra separada da bola por um vão, que é justamente o canto cortado dela.
+Tentei antes desenhar o halo com quadrantes ao lado da bola: o efeito foi o
+contrário do pretendido, porque eles engrossavam a silhueta justamente onde o
+octógono já é mais largo, e a forma virava uma cruz. Fundo não tem forma, então
+ele brilha sem deformar.
 
 Como num semáforo de verdade, as lâmpadas apagadas não somem: ficam num tom bem
 escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. INPUT é o
