@@ -37,9 +37,10 @@ O WatchAI coloca todas numa tela só e responde de longe, sem leitura:
 
 ## Instalação
 
-Requisitos: **Python 3.10+** e um terminal com Unicode. A única dependência
-além do Textual é o [`psutil`](https://github.com/giampaolo/psutil), que é quem
-lê a tabela de processos igual nos três sistemas.
+Requisitos: **Python 3.10+**, [pipx](https://pipx.pypa.io/stable/installation/),
+Git e um terminal com Unicode. A única dependência além do Textual é o
+[`psutil`](https://github.com/giampaolo/psutil), que lê a tabela de processos
+igual nos três sistemas.
 
 **O jeito mais curto, igual nos três sistemas:**
 
@@ -49,31 +50,45 @@ watchai
 ```
 
 O `pipx` põe o WatchAI num ambiente isolado e o comando no PATH — sem mexer no
-Python do sistema. Funciona em **Linux, macOS e Windows**, e o CI verifica isso
-a cada commit: instala por `pipx` e roda o comando nos três.
+Python do sistema. Se o comando não aparecer logo após instalar, rode
+`pipx ensurepath` e abra um terminal novo. Funciona em **Linux, macOS e
+Windows**, e o CI verifica isso a cada commit: instala o pacote por `pipx` e
+roda o comando nos três.
+
+Enquanto o pacote ainda não está no PyPI, o comando acima instala a versão mais
+recente diretamente deste repositório. Para atualizar ou remover:
+
+```bash
+pipx upgrade watchai
+pipx uninstall watchai
+```
 
 **Para mexer no código:**
 
 ```bash
-git clone git@github.com:LeandroDukievicz/WatchAI.git
+git clone https://github.com/LeandroDukievicz/WatchAI.git
 cd WatchAI
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-**No Linux, em um comando:** `./scripts/install-linux.sh --desktop` cria o venv,
-instala as dependências, põe o comando `watchai` no PATH e o lançador no menu
-(com `--desktop`, também na área de trabalho). Tudo em `~/.local`, nada de
-`sudo`. Desfaz com `--uninstall`. No macOS e no Windows, o caminho é o
-`pip install -e .` acima — o comando `watchai` sai dele.
+**Atalho no desktop Linux (opcional):** depois de clonar o repositório,
+`./scripts/install-linux.sh --desktop` cria o venv, instala as dependências, põe
+o comando `watchai` no PATH e cria o lançador no menu; com `--desktop`, também
+na área de trabalho. Tudo fica em `~/.local`, sem `sudo`. Desfaz com
+`./scripts/install-linux.sh --uninstall`. Esse script é uma alternativa para
+integração com o desktop; a instalação comum nos três sistemas é a do `pipx`.
 
 ## Uso
 
 ```bash
-python main.py                 # ou:  watchai  ·  python -m watchai
-python main.py --mock          # dados simulados, sem olhar seus processos
-python main.py --theme vampire # tema só desta execução
+watchai                 # detecção real
+watchai --mock          # dados simulados, sem olhar seus processos
+watchai --theme vampire # tema só desta execução
 ```
+
+Dentro de um clone para desenvolvimento, `python main.py` e
+`python -m watchai` são equivalentes ao comando instalado.
 
 Truecolor (`COLORTERM=truecolor`) dá as cores exatas; sem ele o Textual aproxima
 para 256/16 cores. Nada depende de ligatures — só símbolos Unicode simples
@@ -678,7 +693,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-57 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
+60 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).

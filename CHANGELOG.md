@@ -55,6 +55,17 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   já é larga e transformava o octógono numa cruz.
 
 ### Corrigido
+- **O app morria ao abrir ou fechar um agente** com outro já na tela.
+  Reconstruir a lista de cards a cada mudança parecia inofensivo, mas o
+  `remove()` do Textual é **assíncrono**: remontar na mesma volta recriava
+  `card-1` com o antigo ainda no DOM, e o `DuplicateIds` derrubava tudo. Agora
+  a reconciliação tira só quem saiu (aguardando a remoção) e põe só quem
+  entrou — quem permanece nem é tocado, então também não pisca nem perde o
+  scroll.
+- Detalhes abertos de uma sessão que sai do store agora **fecham sozinhos**, em
+  vez de estourar `IndexError` ao procurar a sessão que não existe mais.
+- Uma varredura que levanta exceção não derruba mais o app: ele segue com o que
+  já sabia e registra o erro.
 - Matar um processo de notificação que já havia morrido sozinho levantava
   `ProcessLookupError` e chegava como **falha de worker** — o CI do Windows
   quebrou por isso. E a suíte passou a silenciar o notificador do sistema, como

@@ -16,7 +16,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Static
 
 from ..format import DASH, ellipsize, fmt_clock, fmt_hms, fmt_timer
-from ..models import Session
+from ..models import Session, Status
 from ..theme import colors
 from ..widgets import StatusLight, render_status
 from ..widgets.session_card import timer_style, timer_text
@@ -43,16 +43,21 @@ class DetailsScreen(ModalScreen[None]):
         self.session_id = session_id
 
     @property
-    def session(self) -> Session:
-        store = self.app.store
-        return store.get(self.session_id) or store.sessions[0]
+    def session(self) -> Session | None:
+        """A sessão aberta, ou None se ela sumiu da tela por baixo do modal —
+        um terminal fechado sai do store depois do prazo, inclusive com os
+        detalhes dele abertos."""
+        return self.app.store.get(self.session_id)
 
     def compose(self):
         with Vertical(id="details"):
             yield Static("", id="d-name")
             with Horizontal(id="d-status-row", classes="d-row"):
                 yield Static("STATUS".ljust(KEY_W), classes="d-key")
-                yield StatusLight(self.session.status, id="d-light")
+                sessao = self.session
+                yield StatusLight(
+                    sessao.status if sessao else Status.OFFLINE, id="d-light"
+                )
             yield Static("", id="d-fields")
             yield Static("AGENTS", classes="d-section", id="d-agents-title")
             yield Static("", id="d-agents")
@@ -74,6 +79,11 @@ class DetailsScreen(ModalScreen[None]):
     # -- conteúdo ---------------------------------------------------------------
     def sync(self) -> None:
         s = self.session
+        if s is None:
+            # A sessão saiu do store enquanto o modal estava aberto: não há o
+            # que mostrar, e insistir era o caminho para um IndexError.
+            self.dismiss(None)
+            return
         now = datetime.now()
         dead = not s.online
         seconds = max(0, int(s.in_status(now).total_seconds()))
@@ -160,6 +170,9 @@ class DetailsScreen(ModalScreen[None]):
 
     def action_step(self, delta: int) -> None:
         sessions = self.app.store.sessions
+        if not sessions:
+            self.dismiss(None)
+            return
         idx = next((i for i, s in enumerate(sessions) if s.id == self.session_id), 0)
         self.session_id = sessions[(idx + delta) % len(sessions)].id
         # mantém a seleção do dashboard alinhada com o que está aberto

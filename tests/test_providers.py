@@ -600,3 +600,119 @@ def test_sem_a_extensao_cai_no_activate_do_terminal(monkeypatch):
         focuser.focus(pid=4242, app="gnome-terminal-server", tty="", title="x")
     )
     assert resultado == "terminal chamado para a frente"
+
+
+def test_abrir_e_fechar_agente_nao_derruba_a_tela():
+    """O caminho real: varredura em thread + reconciliação dos widgets.
+
+    Reconstruir a lista inteira a cada mudança parecia inofensivo, mas
+    `remove()` é assíncrono no Textual: remontar na mesma volta recriava
+    `card-1` com o antigo ainda no DOM, e o `DuplicateIds` **matava o app** —
+    exatamente ao abrir um agente novo com outro já na tela.
+    """
+    import asyncio
+
+    from watchai.app import WatchAIApp
+    from watchai.models import REMOCAO_FECHADO
+    from watchai.notify import Notifier
+    from watchai.widgets import SessionCard, SessionRow
+
+    async def main():
+        fonte = Fonte(snap(obs(10, "claude", "/dev/pts/1")))
+        app = WatchAIApp(mock=False, source=fonte, theme_key="watchai", notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert len(app.screen.query(SessionCard)) == 1
+
+            # um agente novo abre noutro terminal, com o primeiro na tela
+            fonte.s = snap(
+                obs(10, "claude", "/dev/pts/1"),
+                obs(20, "codex", "/dev/pts/2", cwd="/home/eu/outro"),
+            )
+            app._last_scan = 0
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.pause()
+            assert app.is_running
+            assert len(app.screen.query(SessionCard)) == 2
+            assert len(app.screen.query(SessionRow)) == 2
+
+            # e agora o primeiro fecha e vence o prazo de permanência
+            fonte.s = snap(obs(20, "codex", "/dev/pts/2", cwd="/home/eu/outro"))
+            agora = datetime.now()
+            app.provider.apply(fonte.snapshot(), agora)
+            app.provider.apply(fonte.snapshot(), agora + REMOCAO_FECHADO + timedelta(seconds=1))
+            app.version += 1
+            await pilot.pause()
+            await pilot.pause()
+            assert app.is_running
+            cards = app.screen.query(SessionCard)
+            assert len(cards) == 1
+            assert next(iter(cards)).session.terminal == "pts/2"  # sobrou o certo
+
+    asyncio.run(main())
+
+
+def test_detalhes_abertos_de_uma_sessao_que_some_fecham_sozinhos():
+    """O terminal pode fechar e vencer o prazo com os detalhes dele na tela."""
+    import asyncio
+
+    from watchai.app import WatchAIApp
+    from watchai.models import REMOCAO_FECHADO
+    from watchai.notify import Notifier
+    from watchai.screens import DetailsScreen
+
+    async def main():
+        fonte = Fonte(snap(obs(10, "claude", "/dev/pts/1")))
+        app = WatchAIApp(mock=False, source=fonte, theme_key="watchai", notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, DetailsScreen)
+
+            fonte.s = Snapshot()
+            agora = datetime.now()
+            app.provider.apply(fonte.snapshot(), agora)
+            app.provider.apply(fonte.snapshot(), agora + REMOCAO_FECHADO + timedelta(seconds=1))
+            app.version += 1
+            await pilot.pause()
+            await pilot.pause()
+            assert app.is_running
+            assert not isinstance(app.screen, DetailsScreen)  # fechou sozinho
+
+    asyncio.run(main())
+
+
+def test_varredura_que_explode_nao_mata_o_app():
+    """Detecção é a parte que lida com o sistema — ela pode tropeçar. O monitor
+    não pode morrer junto."""
+    import asyncio
+
+    from watchai.app import WatchAIApp
+    from watchai.notify import Notifier
+
+    async def main():
+        app = WatchAIApp(mock=False, source=Fonte(snap(obs(10))), theme_key="watchai",
+                         notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+
+            def explode(*args, **kwargs):
+                raise RuntimeError("provider quebrou")
+
+            app.provider.apply = explode
+            app._last_scan = 0
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert app.is_running
+
+    asyncio.run(main())

@@ -6,6 +6,8 @@ painel (TAB) e de visão (V).
 
 from __future__ import annotations
 
+import asyncio
+
 from textual.binding import Binding
 from textual.containers import Grid, Vertical, VerticalScroll
 from textual.widgets import Static
@@ -65,6 +67,9 @@ class Dashboard(Screen):
         yield KeyBar(id="keybar")
 
     def on_mount(self) -> None:
+        # Duas varreduras seguidas não podem acertar os widgets ao mesmo tempo:
+        # a segunda veria o DOM da primeira pela metade.
+        self._reconcile_lock = asyncio.Lock()
         # Com detecção real as sessões nascem e morrem enquanto o app roda: os
         # widgets precisam acompanhar o store, não só o estado deles.
         self.watch(self.app, "version", lambda _: self.reconcile())
@@ -75,19 +80,43 @@ class Dashboard(Screen):
 
     # -- sessões que entram e saem -------------------------------------------
     def reconcile(self) -> None:
-        sessions = self.app.store.sessions
-        ids = [s.id for s in sessions]
+        """Agenda o acerto dos widgets com o store."""
+        ids = [s.id for s in self.app.store.sessions]
         if ids == self._ids:
             return
         self._ids = ids
+        self.run_worker(self._reconcile(), group="reconcile")
 
-        for widget in list(self.query(SessionCard)) + list(self.query(SessionRow)):
-            widget.remove()
-        if sessions:
-            self.query_one("#cards", Grid).mount_all([SessionCard(s) for s in sessions])
-            self.query_one("#rows", Vertical).mount_all([SessionRow(s) for s in sessions])
-        self.selected = max(0, min(self.selected, len(sessions) - 1))
-        self.call_after_refresh(self._after_reconcile)
+    async def _reconcile(self) -> None:
+        """Tira só quem saiu e põe só quem entrou.
+
+        Reconstruir tudo parecia mais simples, mas `remove()` no Textual é
+        **assíncrono**: o widget só deixa o DOM depois. Remontar na mesma volta
+        recriava `card-3` com o `card-3` antigo ainda lá, e o
+        `DuplicateIds` matava o app — exatamente quando um agente abria ou
+        fechava com outros na tela. Aqui a remoção é aguardada, e quem
+        permanece nem é tocado (nada de piscar nem perder o scroll).
+        """
+        async with self._reconcile_lock:
+            sessions = list(self.app.store.sessions)
+            vivos = {s.id for s in sessions}
+            cards = {c.session.id: c for c in self.query(SessionCard)}
+            rows = {r.session.id: r for r in self.query(SessionRow)}
+
+            for widget in [w for i, w in cards.items() if i not in vivos] + [
+                w for i, w in rows.items() if i not in vivos
+            ]:
+                await widget.remove()
+
+            novos_cards = [SessionCard(s) for s in sessions if s.id not in cards]
+            novos_rows = [SessionRow(s) for s in sessions if s.id not in rows]
+            if novos_cards:
+                await self.query_one("#cards", Grid).mount_all(novos_cards)
+            if novos_rows:
+                await self.query_one("#rows", Vertical).mount_all(novos_rows)
+
+            self.selected = max(0, min(self.selected, len(sessions) - 1))
+            self._after_reconcile()
 
     def _after_reconcile(self) -> None:
         for card in self.query(SessionCard):
@@ -191,7 +220,9 @@ class Dashboard(Screen):
         if self.panel != "sessions":
             return
         sessions = self.app.store.sessions
-        if sessions:
+        # A seleção pode estar velha por um instante: entre a varredura mexer no
+        # store e os widgets acertarem, uma tecla cabe no meio.
+        if 0 <= self.selected < len(sessions):
             self.app.push_screen(DetailsScreen(sessions[self.selected].id))
 
     def action_move(self, direction: str) -> None:

@@ -183,7 +183,14 @@ class WatchAIApp(App):
         self._scanning = False
         if snapshot is None:
             return
-        if self.provider.apply(snapshot, datetime.now()):
+        try:
+            mudou = self.provider.apply(snapshot, datetime.now())
+        except Exception:
+            # Um monitor que morre porque a detecção tropeçou é pior que um
+            # monitor com a tela parada por um ciclo. Segue com o que já sabia.
+            self.log.error("falha ao aplicar a varredura", exc_info=True)
+            return
+        if mudou:
             self.version += 1
 
     def on_unmount(self) -> None:
