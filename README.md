@@ -71,7 +71,7 @@ A tela tem quatro regiões fixas:
  ╭─ EVENT STREAM ───────────────────────────────────────────────╮
  │ 21:25:19 ◆ OPENCODE INPUT    waiting for confirmation        │   ④ event stream
  ╰──────────────────────────────────────────────────────────────╯
-  ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ V VIEW │ R REFRESH │ B BIP …     ⑤ keybar
+  ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ T THEMES │ V VIEW │ R REFRESH …    ⑤ keybar
 ```
 
 ## ① Cabeçalho — resumo global
@@ -184,11 +184,11 @@ O histórico de todas as sessões junto, **mais novo em cima** (guarda os últim
 ## ⑤ Keybar
 
 ```
- ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ V VIEW │ R REFRESH │ B BIP │ ? HELP │ Q QUIT
+ ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ T THEMES │ V VIEW │ R REFRESH │ B BIP │ ? HELP │ Q QUIT
 ```
 
 Rodapé de atalhos que se adapta à largura: quando não cabe, descarta os itens
-menos importantes primeiro (`B`, depois `R`, `TAB`…) e, em último caso, mostra só
+menos importantes primeiro (`B`, depois `R`, `T`, `TAB`…) e, em último caso, mostra só
 as teclas sem descrição. O item do bip reflete o estado: `B BIP` ligado,
 `B MUDO` (apagado) desligado.
 
@@ -267,6 +267,52 @@ stream de áudio normal toca independente de foco.
 - Para avisar também em INPUT ou ERROR, inclua os estados em `ALERT_STATUSES`
   ([`src/watchai/app.py`](src/watchai/app.py)).
 
+## Temas (`T`)
+
+Oito paletas, trocáveis com o app rodando:
+
+```
+╭─ THEMES ─────────────────────────────────╮
+│                                          │
+│   ▶ WatchAI     ◐ ● ◆ ◇ ▲ ○ ◌  •         │
+│     Light       ◐ ● ◆ ◇ ▲ ○ ◌            │
+│     Dark        ◐ ● ◆ ◇ ▲ ○ ◌            │
+│     Night Owl   ◐ ● ◆ ◇ ▲ ○ ◌            │
+│     Vampire     ◐ ● ◆ ◇ ▲ ○ ◌            │
+│     Cyberpunk   ◐ ● ◆ ◇ ▲ ○ ◌            │
+│     Steampunk   ◐ ● ◆ ◇ ▲ ○ ◌            │
+│     Grey        ◐ ● ◆ ◇ ▲ ○ ◌            │
+│                                          │
+│   ↑↓ preview   ENTER apply   ESC cancel  │
+│                                          │
+╰──────────────────────────────────────────╯
+```
+
+| Tema | O que é |
+|---|---|
+| **WatchAI** | o original: fundo quase preto e neon cyan/magenta (padrão) |
+| **Light** | fundo claro — as tintas de estado viram pastel em vez de sumir |
+| **Dark** | escuro neutro, sem neon |
+| **Night Owl** | azul-petróleo com verdes suaves |
+| **Vampire** | Dracula (o roxo `#BD93F9` entra como acento secundário) |
+| **Cyberpunk** | preto arroxeado, cyan e magenta saturados |
+| **Steampunk** | sépia e latão, com verdete no lugar do cyan |
+| **Grey** | sem matiz nenhum: os estados se separam só por brilho |
+
+![Light, Vampire, Cyberpunk e Steampunk](docs/themes.png)
+
+- **Mover a seleção aplica o tema na hora** — o dashboard inteiro atrás do modal
+  troca de cor, então dá para comparar antes de decidir. `ENTER` confirma,
+  `ESC` desfaz e volta para o tema em que você estava.
+- Cada linha mostra os símbolos dos estados **nas cores daquela paleta**; o `•`
+  marca o tema em que você estava ao abrir.
+- A escolha **fica salva** em `$XDG_CONFIG_HOME/watchai/config.json` (ou
+  `~/.config/watchai/config.json`) e volta na próxima execução. Arquivo
+  corrompido, disco cheio ou tema desconhecido caem no padrão, sem derrubar a TUI.
+- O tema **não muda símbolo nem label** — só cor. O **Grey** é a prova: mesmo sem
+  matiz nenhum, `◐ WORKING` e `▲ ERROR` continuam distinguíveis, que é a garantia
+  de quem não enxerga cor.
+
 ## Linguagem visual dos estados
 
 Cor **e** símbolo **e** label — dá para ler sem depender só de cor.
@@ -285,6 +331,9 @@ Todas as animações são discretas e guiadas pelo mesmo relógio de 0,5 s: o gi
 WORKING, o pulso lento de READY e INPUT (~4,5 s por ciclo) e o `◌ ○` alternando do
 STARTING. ERROR e OFFLINE são estáticos de propósito.
 
+As cores da tabela são as do tema **WatchAI**; os outros temas remapeiam a cor de
+cada estado, nunca o símbolo nem o label.
+
 Regra de ouro da paleta: neon só em status, título, seleção e teclas. O resto é
 branco suave e cinza.
 
@@ -297,6 +346,7 @@ branco suave e cinza.
 | `ENTER` | abre os detalhes da sessão selecionada |
 | `ESC` | volta / fecha o modal |
 | `TAB` | alterna o painel **SESSIONS ⇄ EVENTS** |
+| `T` | abre o seletor de temas (preview ao vivo; `ENTER` salva, `ESC` desfaz) |
 | `V` | alterna **CARDS ⇄ LIST** |
 | `R` | refresh — no protótipo, avança a simulação na hora |
 | `B` | liga/desliga o bip de READY |
@@ -350,10 +400,11 @@ WatchAI/
 ├── pyproject.toml               # pacote, deps e config do pytest
 ├── src/watchai/
 │   ├── app.py                   # App: tema, tick (0,5 s), bindings, bip de READY
-│   ├── theme.py                 # paleta + Theme (variáveis $aw-* para o TCSS)
+│   ├── theme.py                 # as 8 paletas + paleta ativa ($aw-* para o TCSS)
 │   ├── layout.py                # breakpoints (LARGE/MEDIUM/SMALL/TINY) + teto da área
 │   ├── format.py                # ellipsize, HH:MM:SS, mm:ss
 │   ├── sound.py                 # bip (descobre o player do sistema)
+│   ├── config.py                # preferências salvas (~/.config/watchai/config.json)
 │   ├── models/                  # Status (cor/símbolo/label), Session, SessionStore
 │   ├── mock/sessions.py         # 6 sessões + MockSimulator
 │   ├── widgets/
@@ -365,7 +416,7 @@ WatchAI/
 │   │   ├── header.py            # cabeçalho + resumo global
 │   │   ├── keybar.py            # rodapé de atalhos (responsivo)
 │   │   └── panel_title.py       # "▸ SESSIONS 06 ─── CARDS │ LIST"
-│   ├── screens/                 # dashboard.py · details.py · help.py
+│   ├── screens/                 # dashboard.py · details.py · help.py · themes.py
 │   └── styles/app.tcss          # todo o CSS
 ├── tests/                       # suíte headless (conftest silencia o áudio)
 └── docs/                        # marca e screenshot
@@ -377,8 +428,9 @@ Três regras que o código segue:
    atenção. Nenhum widget hardcoda cor ou símbolo de estado — todos consultam o enum,
    e todo desenho de estado passa por `status_light.render_status()`.
 2. **As cores moram no tema.** `theme.py` é a fonte única: o TCSS recebe as mesmas
-   cores como variáveis `$aw-*` e os widgets que desenham com Rich importam as
-   constantes de lá.
+   cores como variáveis `$aw-*` e quem desenha com Rich resolve a cor **na hora de
+   renderizar** (`colors().cyan`), nunca no import — é isso que deixa trocar de
+   tema com o app rodando.
 3. **A UI só lê do store.** Os widgets reagem a dois reativos do app — `tick`
    (animação) e `version` (dados mudaram) — e nunca mexem no modelo.
 
@@ -389,11 +441,14 @@ pip install -e ".[dev]"
 pytest
 ```
 
-17 testes headless (sem terminal real e **sem tocar áudio** — `tests/conftest.py`
-neutraliza o player para toda a suíte). Cobrem breakpoints e navegação, troca de
+24 testes headless (sem terminal real, **sem tocar áudio** e sem ler nem escrever
+a sua config — `tests/conftest.py` neutraliza o player e aponta o `XDG_CONFIG_HOME`
+para um diretório temporário). Cobrem breakpoints e navegação, troca de
 visão/painel/modais, mapeamento do semáforo e o piscar do INPUT, as regras do bip
-(dispara, silencia, debounce, máquina sem player), o layout sem vão morto e a
-garantia de que o EVENT STREAM nunca é empurrado para fora da tela.
+(dispara, silencia, debounce, máquina sem player), o layout sem vão morto, a
+garantia de que o EVENT STREAM nunca é empurrado para fora da tela e os temas
+(preview, cancelamento, persistência, e a checagem de que toda paleta fornece
+cada variável `$aw-*` que o TCSS usa — uma faltando derruba a tela inteira).
 
 CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 

@@ -19,7 +19,7 @@ from textual.widgets import Static
 
 from ..format import DASH, fmt_timer
 from ..models import Session, Status
-from ..theme import CYAN, GHOST, TEXT, TEXT_2
+from ..theme import colors
 from .session_card import SessionCard, timer_style
 from .status_light import StatusLight
 
@@ -74,14 +74,14 @@ class SessionRow(Horizontal):
             self.set_class(status is s.status, status.css)
         self.set_class(self.selected, "-selected")
 
-        self._marker.update(Text("▶" if self.selected else " ", Style(color=CYAN, bold=True)))
-        name_color = CYAN if self.selected else (GHOST if dead else TEXT)
+        self._marker.update(Text("▶" if self.selected else " ", Style(color=colors().cyan, bold=True)))
+        name_color = colors().cyan if self.selected else (colors().ghost if dead else colors().text)
         self._name.update(Text(s.short, Style(color=name_color, bold=True)))
-        self._project.update(Text(DASH if dead else s.project, Style(color=GHOST if dead else TEXT_2)))
+        self._project.update(Text(DASH if dead else s.project, Style(color=colors().ghost if dead else colors().text2)))
         self._time.update(
             Text(
                 DASH if dead else fmt_timer(s.in_status(now)),
-                Style.parse(GHOST if dead else timer_style(s.status, seconds)),
+                Style.parse(colors().ghost if dead else timer_style(s.status, seconds)),
                 justify="right",
             )
         )

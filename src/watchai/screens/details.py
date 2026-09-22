@@ -17,17 +17,17 @@ from textual.widgets import Static
 
 from ..format import DASH, ellipsize, fmt_clock, fmt_hms
 from ..models import Session
-from ..theme import CYAN, GHOST, GRAY, MUTED, TEXT, TEXT_2
+from ..theme import colors
 from ..widgets import StatusLight, render_status
 from ..widgets.session_card import timer_style, timer_text
 
 KEY_W = 11
 
 
-def _field(label: str, value: str, value_style: str = TEXT) -> Text:
+def _field(label: str, value: str, value_style: str = "") -> Text:
     row = Text(no_wrap=True, overflow="ellipsis")
-    row.append(label.ljust(KEY_W), Style(color=MUTED))
-    row.append(value, Style.parse(value_style))
+    row.append(label.ljust(KEY_W), Style(color=colors().muted))
+    row.append(value, Style.parse(value_style or colors().text))
     return row
 
 
@@ -77,7 +77,7 @@ class DetailsScreen(ModalScreen[None]):
         seconds = max(0, int(s.in_status(now).total_seconds()))
 
         self.query_one("#d-name", Static).update(
-            Text(s.name, Style(color=GHOST if dead else TEXT, bold=True))
+            Text(s.name, Style(color=colors().ghost if dead else colors().text, bold=True))
         )
         light = self.query_one("#d-light", StatusLight)
         light.status = s.status
@@ -91,9 +91,9 @@ class DetailsScreen(ModalScreen[None]):
             _field("SESSION", s.number),
             _field("PID", DASH if dead else str(s.pid)),
             _field("PROJECT", DASH if dead else s.project),
-            _field("DIRECTORY", DASH if dead else s.directory, TEXT_2),
+            _field("DIRECTORY", DASH if dead else s.directory, colors().text2),
             _field("STARTED", DASH if dead else fmt_clock(s.started_at)),
-            _field("ELAPSED", DASH if dead else fmt_hms(s.elapsed(now)), MUTED),
+            _field("ELAPSED", DASH if dead else fmt_hms(s.elapsed(now)), colors().muted),
         ]
         for i, row in enumerate(rows):
             if i:
@@ -102,7 +102,7 @@ class DetailsScreen(ModalScreen[None]):
         self.query_one("#d-fields", Static).update(fields)
 
         self.query_one("#d-activity", Static).update(
-            Text(s.activity, Style(color=GHOST if dead else TEXT))
+            Text(s.activity, Style(color=colors().ghost if dead else colors().text))
         )
 
         events = self.app.store.events_for(s.id, 4)
@@ -111,22 +111,22 @@ class DetailsScreen(ModalScreen[None]):
         for i, ev in enumerate(events):
             if i:
                 ev_text.append("\n")
-            ev_text.append(fmt_clock(ev.at), Style(color=GRAY))
+            ev_text.append(fmt_clock(ev.at), Style(color=colors().gray))
             ev_text.append(" ")
             ev_text.append_text(render_status(ev.status, 0, label=False))
             ev_text.append(" ")
             ev_text.append(
                 ellipsize(ev.message, width - 11),
-                Style(color=TEXT if i == 0 else MUTED),
+                Style(color=colors().text if i == 0 else colors().muted),
             )
         self.query_one("#d-events", Static).update(ev_text)
 
         hint = Text(no_wrap=True)
-        hint.append("ESC", Style(color=CYAN, bold=True))
-        hint.append(" back", Style(color=MUTED))
+        hint.append("ESC", Style(color=colors().cyan, bold=True))
+        hint.append(" back", Style(color=colors().muted))
         hint.append("   ")
-        hint.append("←→", Style(color=CYAN, bold=True))
-        hint.append(" prev/next session", Style(color=MUTED))
+        hint.append("←→", Style(color=colors().cyan, bold=True))
+        hint.append(" prev/next session", Style(color=colors().muted))
         self.query_one("#d-hint", Static).update(hint)
 
     # -- ações ------------------------------------------------------------------

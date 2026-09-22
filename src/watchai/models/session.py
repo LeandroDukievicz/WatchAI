@@ -11,24 +11,32 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 
-from ..theme import CYAN_2, GHOST, GREEN, MAGENTA, RED, YELLOW, CYAN
+from ..theme import colors
 
 
 class Status(Enum):
-    #          label       cor      símbolo  atenção
-    READY = ("READY", GREEN, "●", True)  # terminou; pronta p/ nova instrução
-    WORKING = ("WORKING", CYAN, "◐", False)  # executando (símbolo animado)
-    WAITING = ("WAITING", YELLOW, "◇", False)  # esperando processo externo
-    INPUT = ("INPUT", MAGENTA, "◆", True)  # esperando ação do usuário
-    ERROR = ("ERROR", RED, "▲", True)  # problema detectado
-    OFFLINE = ("OFFLINE", GHOST, "○", False)  # sessão encerrada
-    STARTING = ("STARTING", CYAN_2, "◌", False)  # acabou de iniciar
+    """Cada estado guarda a *vaga* de cor na paleta, não a cor em si — é o que
+    permite trocar de tema sem tocar em widget nenhum."""
 
-    def __init__(self, label: str, color: str, symbol: str, attention: bool) -> None:
+    #          label       vaga na paleta  símbolo  atenção
+    READY = ("READY", "green", "●", True)  # terminou; pronta p/ nova instrução
+    WORKING = ("WORKING", "cyan", "◐", False)  # executando (símbolo animado)
+    WAITING = ("WAITING", "yellow", "◇", False)  # esperando processo externo
+    INPUT = ("INPUT", "magenta", "◆", True)  # esperando ação do usuário
+    ERROR = ("ERROR", "red", "▲", True)  # problema detectado
+    OFFLINE = ("OFFLINE", "ghost", "○", False)  # sessão encerrada
+    STARTING = ("STARTING", "cyan2", "◌", False)  # acabou de iniciar
+
+    def __init__(self, label: str, slot: str, symbol: str, attention: bool) -> None:
         self.label = label
-        self.color = color
+        self.slot = slot
         self.symbol = symbol
         self.attention = attention
+
+    @property
+    def color(self) -> str:
+        """A cor deste estado na paleta ativa, resolvida agora."""
+        return getattr(colors(), self.slot)
 
     @property
     def css(self) -> str:

@@ -18,7 +18,7 @@ from textual.widget import Widget
 
 from ..format import fmt_clock
 from ..models import SUMMARY_ORDER, Status
-from ..theme import CYAN, GHOST, LINE_HI, MUTED, TEXT
+from ..theme import colors
 
 
 class AppHeader(Widget):
@@ -34,10 +34,10 @@ class AppHeader(Widget):
 
     def _title(self) -> Text:
         title = Text(no_wrap=True)
-        title.append("◆ ", Style(color=CYAN))
-        title.append("WatchAI", Style(color=CYAN, bold=True))
+        title.append("◆ ", Style(color=colors().cyan))
+        title.append("WatchAI", Style(color=colors().cyan, bold=True))
         if self.size.width >= 48:
-            title.append("  SESSION MONITOR", Style(color=MUTED))
+            title.append("  SESSION MONITOR", Style(color=colors().muted))
         return title
 
     def _chips(self, full: bool) -> Text:
@@ -52,10 +52,10 @@ class AppHeader(Widget):
                 out.append("  " if full else " ")
             first = False
             lit = n > 0
-            color = status.color if lit else GHOST
+            color = status.color if lit else colors().ghost
             out.append(status.symbol, Style(color=color))
             if full:
-                out.append(f" {status.label} ", Style(color=MUTED if lit else GHOST))
+                out.append(f" {status.label} ", Style(color=colors().muted if lit else colors().ghost))
             else:
                 out.append(" ")
             out.append(f"{n:02d}" if full else str(n), Style(color=color, bold=lit and status.attention))
@@ -67,9 +67,9 @@ class AppHeader(Widget):
         clock = fmt_clock(datetime.now())
 
         active = Text(no_wrap=True)
-        active.append("ACTIVE ", Style(color=MUTED))
-        active.append(f"{store.active:02d}", Style(color=TEXT, bold=True))
-        sep = Text(" │ ", Style(color=LINE_HI))
+        active.append("ACTIVE ", Style(color=colors().muted))
+        active.append(f"{store.active:02d}", Style(color=colors().text, bold=True))
+        sep = Text(" │ ", Style(color=colors().line_hi))
 
         for full in (True, False):
             left = Text(no_wrap=True)
@@ -85,5 +85,5 @@ class AppHeader(Widget):
         if left.cell_len + gap + len(clock) > width:
             return left  # sem espaço para o relógio
         left.append(" " * gap)
-        left.append(clock, Style(color=MUTED))
+        left.append(clock, Style(color=colors().muted))
         return left

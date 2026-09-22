@@ -6,14 +6,19 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timedelta
+from pathlib import Path
 
+import watchai
+from watchai import config
 from watchai.app import WatchAIApp
 from watchai.format import ellipsize
 from watchai.layout import Layout, layout_for
 from watchai.models import Status
 from watchai.sound import Alert
-from watchai.screens import DetailsScreen, HelpScreen
+from watchai.screens import DetailsScreen, HelpScreen, ThemeScreen
+from watchai.theme import DEFAULT, PALETTES, use
 from watchai.widgets import SessionCard, SessionRow, StatusLight, TrafficLight
 from watchai.widgets.traffic_light import AMBER_LAMP, GREEN_LAMP, RED_LAMP
 
@@ -310,3 +315,114 @@ def test_sem_player_no_sistema_nao_quebra(monkeypatch):
     alerta = Alert(command=None)
     assert alerta.available is False
     asyncio.run(alerta.play())  # no-op silencioso
+
+
+# ---- temas -----------------------------------------------------------------
+
+
+def test_toda_paleta_cobre_as_variaveis_do_tcss():
+    """O TCSS é parseado com as variáveis da paleta ativa: uma faltando levanta
+    UnresolvedVariableError e derruba a tela inteira, não só a cor."""
+    tcss = (Path(watchai.__file__).parent / "styles" / "app.tcss").read_text()
+    usadas = set(re.findall(r"\$aw-[a-z0-9-]+", tcss))
+    assert usadas  # se o CSS parar de usar $aw-*, este teste virou mentira
+    for palette in PALETTES:
+        fornecidas = {f"${name}" for name in palette.css_variables()}
+        assert not usadas - fornecidas, palette.key
+
+
+def test_status_resolve_a_cor_na_paleta_ativa():
+    """Nenhum estado carrega cor fixa: todos leem a vaga na paleta do momento."""
+    for palette in PALETTES:
+        use(palette)
+        assert Status.READY.color == palette.green
+        assert Status.WORKING.color == palette.cyan
+        assert Status.INPUT.color == palette.magenta
+        assert Status.OFFLINE.color == palette.ghost
+
+
+def test_tema_desconhecido_cai_no_padrao():
+    assert use("nao-existe-ainda") is DEFAULT
+    assert config.load_theme() is None  # config vazia não inventa tema
+
+
+def test_todos_os_temas_desenham_a_tela_inteira():
+    async def main():
+        for palette in PALETTES:
+            app = WatchAIApp(seed=3, theme_key=palette.key)
+            async with app.run_test(size=(150, 36)) as pilot:
+                await pilot.pause()
+                linhas = [s.text for s in app.screen._compositor.render_strips()]
+                assert len(linhas) == 36, palette.key
+                assert any("SESSIONS" in linha for linha in linhas), palette.key
+                assert any("EVENT STREAM" in linha for linha in linhas), palette.key
+
+    run(main())
+
+
+def test_seletor_faz_preview_ao_vivo_e_esc_desfaz():
+    """Mover a seleção aplica o tema atrás do modal; ESC volta ao que era."""
+
+    async def main():
+        app = WatchAIApp(seed=1, theme_key="watchai")
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            await pilot.press("t")
+            await pilot.pause()
+            assert isinstance(app.screen, ThemeScreen)
+            await pilot.press("down")
+            await pilot.pause()
+            seguinte = PALETTES[1]
+            assert app.palette_key == seguinte.key
+            assert Status.READY.color == seguinte.green  # o dashboard já trocou
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.palette_key == "watchai"
+            assert not isinstance(app.screen, ThemeScreen)
+            assert config.load_theme() is None  # cancelar não grava nada
+
+    run(main())
+
+
+def test_enter_grava_o_tema_para_a_proxima_execucao():
+    async def main():
+        alvo = PALETTES[3]
+        app = WatchAIApp(seed=1, theme_key="watchai")
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            await pilot.press("t")
+            await pilot.pause()
+            for _ in range(3):
+                await pilot.press("down")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert not isinstance(app.screen, ThemeScreen)
+            assert app.palette_key == alvo.key
+            assert config.load_theme() == alvo.key
+
+        # nova execução, sem theme_key: tem que nascer no tema salvo
+        assert WatchAIApp(seed=1).palette_key == alvo.key
+
+    run(main())
+
+
+def test_modal_de_temas_cabe_na_caixa():
+    """O rodapé já estourou as 38 colunas úteis e quebrou para a linha de baixo —
+    uma linha a mais na caixa é o sintoma que este teste vigia."""
+
+    async def main():
+        app = WatchAIApp(seed=1, theme_key="watchai")
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            await pilot.press("t")
+            await pilot.pause()
+            r = app.screen.query_one("#themes").region
+            linhas = [s.text for s in app.screen._compositor.render_strips()]
+            caixa = [linha[r.x : r.x + r.width] for linha in linhas[r.y : r.y + r.height]]
+            # borda (2) + padding (2) + um tema por linha + branco + rodapé
+            assert len(caixa) == len(PALETTES) + 6
+            assert any("ESC cancel" in linha for linha in caixa)
+            for palette in PALETTES:
+                assert any(palette.label in linha for linha in caixa), palette.key
+
+    run(main())

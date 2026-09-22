@@ -3,6 +3,28 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+- **Seletor de temas (`T`)** com 8 paletas — WatchAI (padrão), Light, Dark,
+  Night Owl, Vampire (Dracula), Cyberpunk, Steampunk e Grey (sem matiz). Mover a
+  seleção aplica o tema na hora (preview ao vivo do dashboard inteiro), `ENTER`
+  salva e `ESC` desfaz.
+- Preferências guardadas em `$XDG_CONFIG_HOME/watchai/config.json`: o tema
+  escolhido volta na próxima execução. Arquivo ilegível ou tema desconhecido
+  caem no padrão, sem derrubar a TUI.
+
+### Mudado
+- As cores deixaram de ser constantes de módulo fixadas no import: quem desenha
+  resolve a cor na hora de renderizar (`colors().cyan`), e `Status` guarda a
+  *vaga* na paleta em vez da cor — é o que permite trocar de tema com o app
+  rodando, sem tocar em widget nenhum.
+- `__version__` estava em `0.1.0`, fora de sincronia com o `pyproject.toml`.
+
+### Corrigido
+- Rodapé do modal de temas quebrava para a linha de baixo (40 colunas numa caixa
+  de 38 úteis).
+
 ## [1.0.0] — 2026-09-21
 
 Primeira versão da camada visual. **Todos os dados são mockados** — não há

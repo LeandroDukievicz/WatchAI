@@ -26,7 +26,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 
 from ..models import Status
-from ..theme import GRAY, MUTED, fade
+from ..theme import colors, fade
 
 SPINNER = "◐◓◑◒"
 # Níveis de brilho de um ciclo de pulso lento (1.0 = cor cheia).
@@ -63,7 +63,7 @@ def render_status(status: Status, tick: int = 0, *, label: bool = True) -> Text:
         text.append(
             status.label,
             Style(
-                color=GRAY if status is Status.OFFLINE else status.color,
+                color=colors().gray if status is Status.OFFLINE else status.color,
                 bold=status in _BOLD,
                 dim=status is Status.OFFLINE,
             ),
@@ -88,7 +88,7 @@ class StatusLight(Widget):
         *,
         show_label: bool = True,
         suffix: str = "",
-        suffix_style: str = MUTED,
+        suffix_style: str = "",
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
@@ -107,7 +107,7 @@ class StatusLight(Widget):
         if self.status in (Status.WORKING, Status.READY, Status.INPUT, Status.STARTING):
             self.tick = value
 
-    def set_suffix(self, suffix: str, style: str = MUTED) -> None:
+    def set_suffix(self, suffix: str, style: str = "") -> None:
         if (suffix, style) != (self._suffix, self._suffix_style):
             self._suffix, self._suffix_style = suffix, style
             self.refresh()
@@ -122,7 +122,7 @@ class StatusLight(Widget):
             gap = width - text.cell_len - len(self._suffix)
             if gap >= 2:
                 text.append(" " * gap)
-                text.append(self._suffix, Style.parse(self._suffix_style))
+                text.append(self._suffix, Style.parse(self._suffix_style or colors().muted))
         return text
 
     def get_content_width(self, container, viewport) -> int:  # type: ignore[override]

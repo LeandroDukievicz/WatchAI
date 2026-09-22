@@ -11,7 +11,7 @@ from rich.text import Text
 from textual.reactive import reactive
 from textual.widget import Widget
 
-from ..theme import CYAN, CYAN_2, GHOST, LINE, LINE_HI, MUTED, TEXT
+from ..theme import colors
 
 
 class PanelTitle(Widget):
@@ -27,20 +27,20 @@ class PanelTitle(Widget):
         n = len(self.app.store.sessions)
         focus = self.focused_panel
         out = Text(no_wrap=True, overflow="ellipsis")
-        out.append("▸ " if focus else "  ", Style(color=CYAN, bold=True))
-        out.append("SESSIONS", Style(color=CYAN if focus else MUTED, bold=focus))
-        out.append(f" {n:02d}", Style(color=TEXT if focus else GHOST))
+        out.append("▸ " if focus else "  ", Style(color=colors().cyan, bold=True))
+        out.append("SESSIONS", Style(color=colors().cyan if focus else colors().muted, bold=focus))
+        out.append(f" {n:02d}", Style(color=colors().text if focus else colors().ghost))
 
         right = Text(no_wrap=True)
         for i, name in enumerate(("cards", "list")):
             if i:
-                right.append(" │ ", Style(color=LINE_HI))
+                right.append(" │ ", Style(color=colors().line_hi))
             on = self.view == name
-            right.append(name.upper(), Style(color=CYAN if on else GHOST, bold=on))
+            right.append(name.upper(), Style(color=colors().cyan if on else colors().ghost, bold=on))
 
         rule = max(0, self.size.width - out.cell_len - right.cell_len - 2)
         out.append(" ")
-        out.append("─" * rule, Style(color=CYAN_2 if focus else LINE))
+        out.append("─" * rule, Style(color=colors().cyan2 if focus else colors().line))
         out.append(" ")
         out.append_text(right)
         return out

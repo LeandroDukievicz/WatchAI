@@ -222,7 +222,7 @@ Dashboard.-tiny ListHeader .time, Dashboard.-tiny SessionRow .time { width: 6; }
 
 /* ---- Modais ---------------------------------------------------------------- */
 
-DetailsScreen, HelpScreen {
+DetailsScreen, HelpScreen, ThemeScreen {
     align: center middle;
     background: $aw-bg 80%;
 }
@@ -285,5 +285,19 @@ DetailsScreen, HelpScreen {
     border-title-style: bold;
 }
 #help-body {
+    height: auto;
+}
+
+#themes {
+    width: 46;
+    max-width: 96%;
+    height: auto;
+    padding: 1 3;
+    background: $aw-bg;
+    border: round $aw-cyan;
+    border-title-color: $aw-cyan;
+    border-title-style: bold;
+}
+#themes-body {
     height: auto;
 }

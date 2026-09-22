@@ -9,13 +9,14 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from ..theme import CYAN, MUTED, TEXT
+from ..theme import colors
 
 HELP_KEYS = [
     ("↑ ↓", "select session"),
     ("← →", "navigate cards"),
     ("ENTER", "session details"),
     ("TAB", "change panel"),
+    ("T", "theme picker"),
     ("V", "cards / list view"),
     ("R", "refresh (mock: next change)"),
     ("B", "beep on READY (on/off)"),
@@ -39,11 +40,11 @@ class HelpScreen(ModalScreen[None]):
     def _body(self) -> Text:
         out = Text(no_wrap=True, overflow="ellipsis")
         for key, desc in HELP_KEYS:
-            out.append(key.ljust(8), Style(color=CYAN, bold=True))
-            out.append(desc + "\n", Style(color=TEXT))
+            out.append(key.ljust(8), Style(color=colors().cyan, bold=True))
+            out.append(desc + "\n", Style(color=colors().text))
         out.append("\n")
-        out.append("ESC".ljust(8), Style(color=CYAN, bold=True))
-        out.append("close", Style(color=MUTED))
+        out.append("ESC".ljust(8), Style(color=colors().cyan, bold=True))
+        out.append("close", Style(color=colors().muted))
         return out
 
     def action_close(self) -> None:

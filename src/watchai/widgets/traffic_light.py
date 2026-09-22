@@ -24,7 +24,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 
 from ..models import Status
-from ..theme import GREEN, LINE_HI, RED, YELLOW, fade
+from ..theme import colors, fade
 
 WIDTH = 5
 HEIGHT = 5
@@ -41,7 +41,13 @@ DIM_OFFLINE = 0.07
 HOUSING_OFFLINE = 0.25
 
 RED_LAMP, AMBER_LAMP, GREEN_LAMP = 0, 1, 2
-COLORS = (RED, YELLOW, GREEN)
+LAMPS = 3
+
+
+def lamp_colors() -> tuple[str, str, str]:
+    """As três cores do semáforo na paleta ativa, de cima para baixo."""
+    c = colors()
+    return (c.red, c.yellow, c.green)
 
 # Estado -> lâmpada acesa (ausente = nenhuma acesa).
 LIT: dict[Status, int] = {
@@ -88,7 +94,7 @@ class TrafficLight(Widget):
         return lamp
 
     def _lamp_style(self, index: int, lit: int | None) -> Style:
-        color = COLORS[index]
+        color = lamp_colors()[index]
         if index == lit:
             return Style(color=color, bold=True)
         level = DIM_OFFLINE if self.status is Status.OFFLINE else DIM
@@ -97,14 +103,14 @@ class TrafficLight(Widget):
     def render(self) -> Text:
         lit = self.lit_lamp()
         housing = Style(
-            color=fade(LINE_HI, HOUSING_OFFLINE)
+            color=fade(colors().line_hi, HOUSING_OFFLINE)
             if self.status is Status.OFFLINE
-            else LINE_HI
+            else colors().line_hi
         )
 
         out = Text(no_wrap=True)
         out.append(CAP_TOP, housing)
-        for index in range(len(COLORS)):
+        for index in range(LAMPS):
             out.append("\n")
             out.append(WALL_LEFT, housing)
             out.append(LAMP, self._lamp_style(index, lit))

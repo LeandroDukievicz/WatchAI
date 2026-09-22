@@ -15,7 +15,7 @@ from textual.widget import Widget
 
 from ..format import ellipsize, fmt_clock
 from ..models import SessionEvent, Status
-from ..theme import GRAY, MUTED, TEXT
+from ..theme import colors
 from .status_light import render_status
 
 NAME_W = 8  # "OPENCODE"
@@ -70,14 +70,14 @@ class EventStream(Widget):
             if i:
                 out.append("\n")
             newest = i == 0 and self.offset == 0
-            out.append(fmt_clock(ev.at), Style(color=GRAY))
+            out.append(fmt_clock(ev.at), Style(color=colors().gray))
             out.append(" ")
             out.append_text(render_status(ev.status, 0, label=False))
             used = 8 + 1 + 1
             if show_name:
                 out.append(" ")
                 out.append(
-                    ev.short.ljust(NAME_W), Style(color=TEXT, bold=newest)
+                    ev.short.ljust(NAME_W), Style(color=colors().text, bold=newest)
                 )
                 used += 1 + NAME_W
             if show_status:
@@ -91,6 +91,6 @@ class EventStream(Widget):
             used += 1
             out.append(
                 ellipsize(ev.message, max(1, width - used)),
-                Style(color=TEXT if newest else MUTED),
+                Style(color=colors().text if newest else colors().muted),
             )
         return out

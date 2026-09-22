@@ -14,11 +14,12 @@ from textual.app import App
 from textual.binding import Binding
 from textual.reactive import reactive
 
+from . import config
 from .mock import MockSimulator, build_store
 from .models import Status
-from .screens import Dashboard, HelpScreen
+from .screens import Dashboard, HelpScreen, ThemeScreen
 from .sound import Alert
-from .theme import AI_WATCH_THEME
+from .theme import BY_KEY, DEFAULT, PALETTES, colors, use
 
 TICK_SECONDS = 0.5  # cadência das animações discretas e dos contadores
 
@@ -41,6 +42,7 @@ class WatchAIApp(App):
         Binding("question_mark", "help", "Help"),
         Binding("r", "refresh", "Refresh"),
         Binding("b", "toggle_sound", "Bip"),
+        Binding("t", "themes", "Themes"),
     ]
 
     # `tick` anima; `version` sobe a cada mudança de dados. Os widgets
@@ -49,8 +51,16 @@ class WatchAIApp(App):
     version: reactive[int] = reactive(0)
     sound_on: reactive[bool] = reactive(True)
 
-    def __init__(self, seed: int | None = None, alert: Alert | None = None) -> None:
+    def __init__(
+        self,
+        seed: int | None = None,
+        alert: Alert | None = None,
+        theme_key: str | None = None,
+    ) -> None:
         super().__init__()
+        # A paleta precisa valer já no primeiro parse do TCSS, antes do on_mount.
+        saved = theme_key if theme_key is not None else config.load_theme()
+        self.palette_key = use(saved or DEFAULT.key).key
         self.store = build_store()
         self.simulator = MockSimulator(self.store, seed=seed)
         self.alert = alert or Alert()
@@ -61,14 +71,38 @@ class WatchAIApp(App):
         self._last_alert = 0.0
 
     def get_css_variables(self) -> dict[str, str]:
-        # As variáveis $aw-* precisam existir já no primeiro parse do TCSS.
-        return {**super().get_css_variables(), **AI_WATCH_THEME.variables}
+        # No primeiro parse o tema ainda é o do Textual, que não conhece os
+        # $aw-*; injeta os da paleta ativa para o TCSS conseguir ser lido.
+        return {**super().get_css_variables(), **colors().css_variables()}
 
     def on_mount(self) -> None:
-        self.register_theme(AI_WATCH_THEME)
-        self.theme = "watchai"
+        for palette in PALETTES:
+            self.register_theme(palette.as_theme())
+        self.theme = self.palette_key
         self.push_screen(Dashboard())
         self.set_interval(TICK_SECONDS, self._on_tick)
+
+    # -- temas ------------------------------------------------------------------
+    def apply_palette(self, key: str, *, remember: bool = False) -> None:
+        """Troca a paleta agora. `remember=True` grava para as próximas sessões."""
+        palette = BY_KEY.get(key, DEFAULT)
+        self.palette_key = palette.key
+        use(palette)
+        self.theme = palette.key  # reescreve o TCSS com as novas variáveis
+        self._repaint_all()
+        if remember:
+            config.save_theme(palette.key)
+
+    def _repaint_all(self) -> None:
+        """O TCSS se atualiza sozinho; quem desenha com Rich precisa repintar."""
+        for screen in self.screen_stack:
+            screen.refresh(layout=True)
+            for widget in screen.walk_children():
+                widget.refresh()
+
+    def action_themes(self) -> None:
+        if not isinstance(self.screen, ThemeScreen):
+            self.push_screen(ThemeScreen())
 
     def _on_tick(self) -> None:
         if self.simulator.tick(datetime.now()):

@@ -26,7 +26,7 @@ from textual.widget import Widget
 
 from ..format import DASH, ellipsize, fmt_hms
 from ..models import Session, Status
-from ..theme import GHOST, MUTED, TEXT, TEXT_2, fade
+from ..theme import colors, fade
 from .status_light import StatusLight
 from .traffic_light import TrafficLight
 
@@ -40,12 +40,12 @@ def timer_style(status: Status, seconds: int) -> str:
     "terminou há dois minutos e eu ainda não voltei" do briefing.
     """
     if status is Status.OFFLINE:
-        return GHOST
+        return colors().ghost
     if status.attention:
         if seconds >= 60:
             return f"bold {status.color}"
         return fade(status.color, 0.72)
-    return MUTED
+    return colors().muted
 
 
 def timer_text(status: Status, seconds: int) -> str:
@@ -71,7 +71,7 @@ class CardName(Widget):
             text.append(s.short, Style.parse("bold #00E5FF"))
         else:
             text.append(mark)
-            text.append(s.short, Style(color=GHOST if not s.online else TEXT, bold=True))
+            text.append(s.short, Style(color=colors().ghost if not s.online else colors().text, bold=True))
         return text
 
 
@@ -84,7 +84,7 @@ class CardBody(Widget):
 
     def _row(self, label: str, value: str, style: str, width: int) -> Text:
         row = Text(no_wrap=True, overflow="ellipsis")
-        row.append(label.ljust(LABEL_W), Style(color=GHOST if style == GHOST else MUTED))
+        row.append(label.ljust(LABEL_W), Style(color=colors().ghost if style == colors().ghost else colors().muted))
         row.append(ellipsize(value, max(1, width - LABEL_W)), Style.parse(style))
         return row
 
@@ -98,17 +98,17 @@ class CardBody(Widget):
         if card.compact:
             # 3ª e 4ª linha do card compacto: PROJECT e ACTIVITY (sem rótulos)
             lines = [
-                Text(ellipsize(project, width), Style(color=GHOST if dead else TEXT)),
+                Text(ellipsize(project, width), Style(color=colors().ghost if dead else colors().text)),
                 Text(
                     ellipsize(s.activity, width),
-                    Style(color=GHOST if dead else MUTED),
+                    Style(color=colors().ghost if dead else colors().muted),
                 ),
             ]
         else:
             lines = [
-                self._row("project", project, GHOST if dead else TEXT, width),
-                self._row("activity", s.activity, GHOST if dead else TEXT_2, width),
-                self._row("elapsed", elapsed, GHOST if dead else MUTED, width),
+                self._row("project", project, colors().ghost if dead else colors().text, width),
+                self._row("activity", s.activity, colors().ghost if dead else colors().text2, width),
+                self._row("elapsed", elapsed, colors().ghost if dead else colors().muted, width),
             ]
         out = Text(no_wrap=True, overflow="ellipsis")
         for i, line in enumerate(lines):

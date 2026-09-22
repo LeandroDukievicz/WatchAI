@@ -12,7 +12,7 @@ from rich.style import Style
 from rich.text import Text
 from textual.widget import Widget
 
-from ..theme import CYAN, GHOST, LINE_HI, MUTED
+from ..theme import colors
 
 SOUND_KEY = "B"  # alterna o bip: a descrição vira MUDO quando está desligado
 
@@ -21,9 +21,10 @@ KEYS = [
     ("↑↓", "NAV", 9),
     ("ENTER", "OPEN", 8),
     ("TAB", "PANEL", 4),
+    ("T", "THEMES", 3),
     ("V", "VIEW", 7),
-    ("R", "REFRESH", 3),
-    ("B", "BIP", 2),
+    ("R", "REFRESH", 2),
+    ("B", "BIP", 1),
     ("?", "HELP", 6),
     ("Q", "QUIT", 5),
 ]
@@ -52,11 +53,11 @@ class KeyBar(Widget):
         out = Text(no_wrap=True, overflow="ellipsis")
         for i, (key, desc, _) in enumerate(keys):
             if i:
-                out.append(" │ " if with_desc else "  ", Style(color=LINE_HI))
+                out.append(" │ " if with_desc else "  ", Style(color=colors().line_hi))
             off = muted and key == SOUND_KEY
-            out.append(key, Style(color=GHOST if off else CYAN, bold=not off))
+            out.append(key, Style(color=colors().ghost if off else colors().cyan, bold=not off))
             if with_desc:
-                out.append(f" {desc}", Style(color=GHOST if off else MUTED))
+                out.append(f" {desc}", Style(color=colors().ghost if off else colors().muted))
         return out
 
     def render(self) -> Text:
