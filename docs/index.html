@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b111b">
+    <meta name="description" content="Conheça o WatchAI: um painel local que detecta sessões de IA em execução no seu terminal. Veja a interface, baixe o código-fonte e rode localmente.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="WatchAI — suas sessões de IA em uma tela">
+    <meta property="og:description" content="Um painel de terminal para acompanhar sessões locais de IA. Conheça os recursos e saiba como instalar.">
+    <meta property="og:image" content="https://leandrodukievicz.github.io/WatchAI/screenshot.png">
+    <meta property="og:url" content="https://leandrodukievicz.github.io/WatchAI/">
+    <link rel="canonical" href="https://leandrodukievicz.github.io/WatchAI/">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b111b'/%3E%3Crect x='19' y='6' width='26' height='52' rx='13' fill='none' stroke='white' stroke-width='4'/%3E%3Ccircle cx='32' cy='17' r='5' fill='%23ff646d'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23ffd166'/%3E%3Ccircle cx='32' cy='47' r='5' fill='%2325d89b'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="site.css">
+    <title>WatchAI — sessões de IA em uma tela</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#inicio" aria-label="WatchAI — voltar ao início">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>Watch<span>AI</span></span>
+        </a>
+        <nav aria-label="Navegação principal">
+          <a href="#visao-geral">Visão geral</a>
+          <a href="#recursos">Recursos</a>
+          <a href="#instalacao">Como baixar</a>
+        </nav>
+        <a class="header-github" href="https://github.com/LeandroDukievicz/WatchAI" target="_blank" rel="noopener noreferrer">Ver no GitHub <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <main id="conteudo">
+      <section class="hero container" id="inicio" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="pulse-dot" aria-hidden="true"></span> WATCHAI · MONITOR LOCAL DE SESSÕES</span>
+          <h1 id="hero-title">Todas as sessões.<br><span>Uma visão só.</span></h1>
+          <p class="hero-lead">Saiba, sem alternar janelas, qual assistente de IA está trabalhando, qual terminou e qual pode precisar da sua atenção.</p>
+          <p class="hero-detail">O WatchAI detecta sessões locais usando processos e, quando disponíveis, os diários do Claude Code e do Codex. Tudo em um dashboard de terminal com cartões, semáforos e linha do tempo.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#instalacao">Baixar e experimentar <span aria-hidden="true">↓</span></a>
+            <a class="button button-secondary" href="https://github.com/LeandroDukievicz/WatchAI" target="_blank" rel="noopener noreferrer">Explorar o código <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="hero-meta" aria-label="Informações do projeto">
+            <span>⌘&nbsp; Feito para o terminal</span>
+            <span>◇&nbsp; Código aberto · MIT</span>
+            <span>●&nbsp; Local · Python 3.10+</span>
+          </div>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="signal-card signal-card-top"><span class="signal green"></span><span>CODEX</span><strong>READY</strong></div>
+          <div class="signal-card signal-card-bottom"><span class="signal pink"></span><span>OPENCODE</span><strong>INPUT</strong></div>
+          <div class="hero-beacon"><div class="beacon-outer"><div class="beacon-inner"><span class="red"></span><span class="amber"></span><span class="green"></span></div></div></div>
+          <span class="art-caption">A SIGNAL FOR EVERY SESSION</span>
+        </div>
+      </section>
+
+      <section class="preview-section" id="visao-geral" aria-labelledby="preview-title">
+        <div class="container">
+          <div class="section-heading">
+            <div><span class="section-kicker">01 / VISÃO GERAL</span><h2 id="preview-title">O panorama, sem ruído.</h2></div>
+            <p>Uma interface para ler o estado das sessões de longe — no espaço onde o trabalho já acontece: o terminal.</p>
+          </div>
+          <figure class="app-preview">
+            <div class="preview-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>watchai — session monitor</span><span>DETECÇÃO LOCAL</span></div>
+            <img src="screenshot.png" alt="Captura do WatchAI com três terminais locais, estados dos agentes e histórico de eventos" width="1400" height="704" loading="lazy">
+            <figcaption>Captura do modo padrão com sessões locais detectadas.</figcaption>
+          </figure>
+          <div class="truth-note"><span class="truth-icon" aria-hidden="true">i</span><p><strong>Como funciona:</strong> a versão atual do código-fonte detecta processos locais; lê também diários de Claude Code e Codex para refinar o estado. Para outros agentes, a leitura se baseia em processos. Algumas situações, como o estado INPUT, são inferidas e podem não ser exatas. Use <code>watchai --mock</code> para testar com dados simulados.</p></div>
+        </div>
+      </section>
+
+      <section class="features container" id="recursos" aria-labelledby="features-title">
+        <div class="section-heading">
+          <div><span class="section-kicker">02 / RECURSOS</span><h2 id="features-title">Pensado para bater o olho.</h2></div>
+          <p>Os sinais de cada terminal ficam organizados para você encontrar o que precisa de atenção.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card"><span class="feature-icon cyan" aria-hidden="true">▦</span><h3>Uma tela, vários terminais</h3><p>Resumo global e um card por terminal com agentes detectados. Alterne entre cards ou lista.</p></article>
+          <article class="feature-card"><span class="feature-icon green" aria-hidden="true">●</span><h3>Semáforo de atenção</h3><p>Estados como WORKING, READY, INPUT, WAITING e ERROR têm cor e símbolo próprios para uma leitura rápida.</p></article>
+          <article class="feature-card"><span class="feature-icon pink" aria-hidden="true">≡</span><h3>Histórico em contexto</h3><p>O <em>event stream</em> reúne eventos recentes; os detalhes de cada sessão ficam a uma tecla de distância.</p></article>
+          <article class="feature-card"><span class="feature-icon amber" aria-hidden="true">♫</span><h3>Alerta e personalização</h3><p>Bip opcional ao entrar em READY, quatro temas e layout que se adapta à largura do terminal.</p></article>
+        </div>
+        <div class="themes-panel">
+          <div class="themes-copy"><span class="section-kicker">SEU TERMINAL, SEU CLIMA</span><h3>Uma interface.<br>Quatro atmosferas.</h3><p>Light, Vampire, Cyberpunk e Steampunk. Mude o tema com a tecla <kbd>T</kbd> dentro do aplicativo.</p></div>
+          <img src="themes.png" alt="Quatro temas visuais do WatchAI: Light, Vampire, Cyberpunk e Steampunk" width="1472" height="756" loading="lazy">
+        </div>
+      </section>
+
+      <section class="install-section" id="instalacao" aria-labelledby="install-title">
+        <div class="container install-layout">
+          <div class="install-copy"><span class="section-kicker">03 / EXPERIMENTE</span><h2 id="install-title">Baixe. Rode.<br><span>Explore.</span></h2><p>Sem conta, backend ou chave de API. Você precisa de Python 3.10 ou superior e um terminal com suporte a Unicode.</p><div class="download-actions"><a class="button button-primary" href="https://github.com/LeandroDukievicz/WatchAI/archive/refs/heads/main.zip">Baixar código-fonte .ZIP <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/LeandroDukievicz/WatchAI" target="_blank" rel="noopener noreferrer">Ver repositório e documentação <span aria-hidden="true">↗</span></a></div><p class="install-caveat">Com o ZIP, extraia a pasta e comece no passo 02. Os comandos ao lado são para bash/zsh; no PowerShell, use <code>python</code> e ative o ambiente com <code>.venv\Scripts\Activate.ps1</code>. O ZIP não é um executável pronto; instalar dependências pode exigir internet. A release 1.0.0 é anterior à detecção real.</p></div>
+          <div class="terminal" aria-label="Comandos para instalar e executar o WatchAI">
+            <div class="terminal-top"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal</span><span>bash / zsh</span></div>
+            <div class="terminal-body"><p class="step-label">01 <span>CLONE O REPOSITÓRIO</span></p><pre><code>git clone https://github.com/LeandroDukievicz/WatchAI.git
+cd WatchAI</code></pre><p class="step-label">02 <span>CRIE UM AMBIENTE E INSTALE</span></p><pre><code>python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .</code></pre><p class="step-label">03 <span>ABRA O WATCHAI</span></p><pre><code>watchai</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing container" aria-labelledby="closing-title"><span class="section-kicker">FEITO PARA DESENVOLVEDORES</span><h2 id="closing-title">Local por padrão. Aberto para evoluir.</h2><p>O WatchAI já acompanha sessões locais e oferece um modo simulado para explorar a interface. A detecção ainda tem limites conhecidos, documentados no repositório.</p><a class="button button-secondary" href="https://github.com/LeandroDukievicz/WatchAI#os-limites-ditos-na-cara" target="_blank" rel="noopener noreferrer">Conhecer os limites <span aria-hidden="true">↗</span></a></section>
+    </main>
+
+    <footer class="site-footer"><div class="container footer-inner"><span class="brand footer-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>Watch<span>AI</span></span></span><p>Monitor local de sessões · Código aberto sob licença MIT.</p><a href="https://github.com/LeandroDukievicz/WatchAI" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div></footer>
+  </body>
+</html>
