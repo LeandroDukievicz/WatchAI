@@ -6,7 +6,7 @@
 Claude Code, Codex, Gemini, OpenCode, Aider, Copilot — todas numa tela só.
 
 [![tests](https://github.com/LeandroDukievicz/WatchAI/actions/workflows/tests.yml/badge.svg)](https://github.com/LeandroDukievicz/WatchAI/actions/workflows/tests.yml)
-![python](https://img.shields.io/badge/python-3.10%2B-blue)
+![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.14-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 </div>
@@ -54,22 +54,181 @@ para 256/16 cores. Nada depende de ligatures — só símbolos Unicode simples
 (`● ○ ◐ ◓ ◑ ◒ ◆ ◇ ▲ ▸ ▶ ─ │ ╭ ╮ ╰ ╯`). Testado com JetBrains Mono, Fira Code,
 Cascadia, Hack, Meslo e Ubuntu Mono.
 
-### Teclas
+---
 
-| Tecla | Ação |
+# Funcionalidades
+
+A tela tem quatro regiões fixas:
+
+```
+ ╭─ ◆ WatchAI  SESSION MONITOR ─────────────────────────────────╮
+ │ ACTIVE 05 │ ◐ WORKING 01  ● READY 01  …         21:25:46     │   ① cabeçalho
+ ╰──────────────────────────────────────────────────────────────╯
+  ▸ SESSIONS 06 ─────────────────────────── CARDS │ LIST            ② título do painel
+ ╭─ ▶ CLAUDE CODE ──────────────╮  ╭─ CODEX ───────────────────╮
+ │  ◐ WORKING        for 04:12  │  │  ● READY       for 01:42  │    ③ painel SESSIONS
+ ╰──────────────────────── #03 ─╯  ╰───────────────────── #01 ─╯
+ ╭─ EVENT STREAM ───────────────────────────────────────────────╮
+ │ 21:25:19 ◆ OPENCODE INPUT    waiting for confirmation        │   ④ event stream
+ ╰──────────────────────────────────────────────────────────────╯
+  ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ V VIEW │ R REFRESH │ B BIP …     ⑤ keybar
+```
+
+## ① Cabeçalho — resumo global
+
+```
+╭─ ◆ WatchAI  SESSION MONITOR ──────────────────────────────────────────────────╮
+│ ACTIVE 05 │ ◐ WORKING 01  ● READY 01  ◆ INPUT 01  ◇ WAITING 01  ▲ ERROR 01  ○ OFFLINE 01   21:25:46 │
+╰───────────────────────────────────────────────────────────────────────────────╯
+```
+
+- **ACTIVE** — quantas sessões não estão OFFLINE.
+- **Um chip por estado**, em ordem fixa (WORKING, READY, INPUT, WAITING, ERROR,
+  OFFLINE), para a posição não dançar quando os números mudam. Estado com zero
+  fica apagado; com contagem, acende na cor do estado. Os que pedem você
+  (READY, INPUT, ERROR) vêm em negrito.
+- **STARTING só aparece quando existe** — é transitório demais para ocupar espaço fixo.
+- **Relógio** à direita, atualizado a cada 0,5 s.
+- O cabeçalho se adapta à largura: perde o subtítulo `SESSION MONITOR` abaixo de
+  48 colunas, depois troca `◐ WORKING 01` por `◐ 1`, e em último caso abandona o
+  relógio para manter os chips.
+
+## ② Título do painel
+
+```
+ ▸ SESSIONS 06 ─────────────────────────────────────────── CARDS │ LIST
+```
+
+Mostra quantas sessões existem, qual visão está ativa (`CARDS` ou `LIST`, em
+cyan) e — pelo `▸` e pela régua acesa — se o painel de sessões está em foco ou
+se o foco está no EVENT STREAM (`TAB`).
+
+## ③ Painel SESSIONS
+
+### Visão CARDS (padrão)
+
+```
+╭─ ▶ CLAUDE CODE ────────────────────────╮
+│  ◐ WORKING           for 04:12  ╭───╮  │
+│                                 │ ● │  │
+│  project  telegram-downloader   │ ● │  │
+│  activity generating telegram…  │ ● │  │
+│  elapsed  00:12:44              ╰───╯  │
+╰────────────────────────────────── #03 ─╯
+```
+
+| Elemento | O que é |
 |---|---|
-| `↑ ↓` (`k j`) | seleciona sessão (nas colunas do grid, move uma linha) |
-| `← →` (`h l`) | navega entre cards da mesma linha |
-| `ENTER` | detalhes da sessão (dentro: `← →` troca de sessão) |
-| `ESC` | volta / fecha modal |
-| `TAB` | alterna painel **SESSIONS ⇄ EVENTS** (em EVENTS, `↑ ↓` rolam o histórico) |
-| `V` | alterna **CARDS ⇄ LIST** |
-| `R` | refresh — no protótipo, avança a simulação na hora |
-| `B` | liga/desliga o bip de READY |
-| `?` | ajuda |
-| `Q` | sai |
+| Título na borda | Nome da IA. Ganha `▶` e vira cyan quando é o card selecionado |
+| `#03` na borda | Número da sessão |
+| `◐ WORKING` | Estado: símbolo animado + label, sempre na cor do estado |
+| `for 04:12` | Há quanto tempo está **neste** estado (não é o tempo de sessão) |
+| `project` | Projeto em que a sessão trabalha |
+| `activity` | O que está fazendo agora |
+| `elapsed` | Tempo total de sessão (`HH:MM:SS`) |
+| Semáforo | As 3 lâmpadas — ver [seção própria](#o-semáforo) |
 
-Mouse: clique seleciona, duplo clique abre os detalhes.
+- **A moldura carrega o estado**: verde (READY), magenta (INPUT) e vermelho
+  (ERROR) acendem forte e ganham uma tinta de fundo; WORKING e WAITING ficam em
+  tons apagados (é o estado normal, não deve chamar atenção); OFFLINE quase some.
+- **Selecionado** ganha fundo levemente mais claro e título cyan — mas a moldura
+  **mantém a cor do estado**: um READY selecionado continua verde.
+- **`for MM:SS` fica em negrito depois de 1 minuto** em READY, INPUT e ERROR — é
+  o "terminou há dois minutos e você ainda não voltou".
+- **Sessão OFFLINE** mostra `—` em project e elapsed.
+- **Textos longos truncam com `…`**, nunca quebram linha.
+- Se os cards não couberem na altura, o painel rola (`↑ ↓` seguem a seleção).
+
+### Visão LIST (`V`)
+
+```
+   AI         STATUS      PROJECT                                     TIME
+ ─────────────────────────────────────────────────────────────────────────
+ ▶ CLAUDE     ◐ WORKING   telegram-downloader                        04:12
+   CODEX      ● READY     dukie-tech                                 01:42
+   GEMINI     ◇ WAITING   research-agent                             03:11
+   OPENCODE   ◆ INPUT     devleandro                                 00:27
+   AIDER      ▲ ERROR     devsaderiva                                02:51
+   COPILOT    ○ OFFLINE   —                                              —
+```
+
+A mesma informação em uma linha por sessão — é a visão mais densa, para quando
+há muitas sessões. `TIME` é o mesmo contador dos cards (tempo no estado atual) e
+segue a mesma regra de negrito. A linha inteira recebe a tinta do estado, e a
+selecionada ganha `▶` e nome em cyan.
+
+## ④ EVENT STREAM
+
+```
+╭─ EVENT STREAM ─────────────────────────────────────────────────────────╮
+│ 21:25:19 ◆ OPENCODE INPUT    waiting for confirmation                  │
+│ 21:24:26 ◐ OPENCODE WORKING  editing files                             │
+│ 21:24:04 ● CODEX    READY    task completed                            │
+│ 21:23:16 ◐ CODEX    WORKING  applying patch                            │
+│ 21:22:55 ▲ AIDER    ERROR    test suite failed (exit 1)                │
+╰────────────────────────────────────────────────────────────────────────╯
+```
+
+O histórico de todas as sessões junto, **mais novo em cima** (guarda os últimos
+200 eventos). O evento mais recente vem em destaque; os demais, apagados.
+
+- **`TAB` move o foco para cá** — a borda acende em cyan e aparece `↑↓ scroll` no
+  rodapé da caixa. Com o foco aqui, `↑ ↓` rolam o histórico em vez de trocar de
+  sessão. Ao sair (`TAB` de novo) ele volta ao topo, para nunca ficar preso
+  mostrando eventos velhos.
+- **Cresce com o terminal**: ocupa toda a altura que sobra depois dos cards —
+  quanto mais alto o terminal, mais histórico visível.
+- **Encolhe por colunas**: abaixo de 56 colunas esconde a coluna de estado;
+  abaixo de 34, também o nome da sessão, preservando hora e mensagem.
+
+## ⑤ Keybar
+
+```
+ ↑↓ NAV │ ENTER OPEN │ TAB PANEL │ V VIEW │ R REFRESH │ B BIP │ ? HELP │ Q QUIT
+```
+
+Rodapé de atalhos que se adapta à largura: quando não cabe, descarta os itens
+menos importantes primeiro (`B`, depois `R`, `TAB`…) e, em último caso, mostra só
+as teclas sem descrição. O item do bip reflete o estado: `B BIP` ligado,
+`B MUDO` (apagado) desligado.
+
+## Detalhes da sessão (`ENTER`)
+
+```
+╭─ SESSION DETAILS ──────────────────────────────────────────────────────╮
+│  GEMINI                                                                │
+│  STATUS     ◇ WAITING                    for 03:11  ·  since 21:22:46  │
+│  SESSION    #02                                                        │
+│  PID        190114                                                     │
+│  PROJECT    research-agent                                             │
+│  DIRECTORY  ~/research-agent                                           │
+│  STARTED    21:16:37                                                   │
+│  ELAPSED    00:09:20                                                   │
+│                                                                        │
+│  CURRENT ACTIVITY                                                      │
+│  waiting for API response                                              │
+│                                                                        │
+│  EVENTS                                                                │
+│  21:22:46 ◇ waiting for API response                                   │
+│  21:21:17 ◐ reading repository                                         │
+│  21:19:57 ◐ user prompt                                                │
+│                                                                        │
+│  ESC back   ←→ prev/next session                                       │
+╰────────────────────────────────────────────────────────────────────────╯
+```
+
+Modal com tudo sobre uma sessão: além do estado (com o horário em que entrou
+nele), o PID, o diretório, quando começou e os **últimos 4 eventos só dela**.
+
+- O dashboard continua vivo atrás, escurecido — os semáforos e contadores seguem
+  atualizando enquanto o modal está aberto.
+- **`← →` trocam de sessão sem fechar**, circulando (depois da última volta para a
+  primeira), e a seleção do dashboard acompanha.
+- Sessão OFFLINE mostra `—` nos campos que perderam sentido.
+
+## Ajuda (`?`)
+
+Modal com a lista de teclas. Fecha com `ESC` ou `?`.
 
 ## O semáforo
 
@@ -85,8 +244,10 @@ ler qualquer texto. É também a identidade do produto.
 ```
 
 Como num semáforo de verdade, as lâmpadas apagadas não somem: ficam num tom bem
-escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. Abaixo de 60
-colunas o semáforo sai (não cabe) e quem dá o estado é a barra lateral colorida.
+escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. INPUT é o
+único que pisca (1 s aceso, 1 s apagado) — é o estado que depende de você.
+Abaixo de 60 colunas o semáforo sai (não cabe) e quem dá o estado é a barra
+lateral colorida.
 
 ## O bip de READY
 
@@ -120,14 +281,43 @@ Cor **e** símbolo **e** label — dá para ler sem depender só de cor.
 | OFFLINE | `○` (apagado) | cinza escuro | todas apagadas | sessão encerrada | quase some no fundo |
 | STARTING | `◌ ○` | cyan secundário | **amarela** | acabou de iniciar | borda apagada |
 
-O contador `for 01:42` no card = há quanto tempo a sessão está **neste** estado.
-Em READY/INPUT/ERROR ele fica em negrito depois de 1 minuto ("terminou e você
-ainda não voltou").
+Todas as animações são discretas e guiadas pelo mesmo relógio de 0,5 s: o giro do
+WORKING, o pulso lento de READY e INPUT (~4,5 s por ciclo) e o `◌ ○` alternando do
+STARTING. ERROR e OFFLINE são estáticos de propósito.
 
 Regra de ouro da paleta: neon só em status, título, seleção e teclas. O resto é
 branco suave e cinza.
 
+## Navegação
+
+| Tecla | Ação |
+|---|---|
+| `↑ ↓` (`k j`) | seleciona sessão — nas colunas do grid, move uma linha inteira |
+| `← →` (`h l`) | navega entre cards da mesma linha (sem efeito com 1 coluna) |
+| `ENTER` | abre os detalhes da sessão selecionada |
+| `ESC` | volta / fecha o modal |
+| `TAB` | alterna o painel **SESSIONS ⇄ EVENTS** |
+| `V` | alterna **CARDS ⇄ LIST** |
+| `R` | refresh — no protótipo, avança a simulação na hora |
+| `B` | liga/desliga o bip de READY |
+| `?` | ajuda |
+| `Q` / `Ctrl+C` | sai |
+
+Detalhes que o teclado respeita:
+
+- Com o foco no **EVENT STREAM**, `↑ ↓` rolam o histórico e `ENTER` não abre nada —
+  o painel de sessões volta com `TAB`.
+- Descendo na **última linha incompleta** do grid, a seleção cai no último card em
+  vez de não fazer nada.
+- A seleção é sempre trazida para a área visível quando o painel rola.
+- Dentro dos detalhes, `← →` trocam de sessão em vez de navegar no grid.
+
+**Mouse:** clique seleciona (em card ou em linha da LIST), duplo clique abre os
+detalhes.
+
 ## Responsividade
+
+Por largura:
 
 | Largura | Layout |
 |---|---|
@@ -136,12 +326,21 @@ branco suave e cinza.
 | 60–89 | 1 card por linha |
 | < 60 | compacto: sem caixa, barra lateral na cor do estado, 4 linhas por sessão (sem semáforo) |
 
-Textos longos truncam com `…` (nunca quebram). `V` (LIST) é a visão mais densa.
+Por altura: a área de sessões encolhe até o conteúdo e o EVENT STREAM ocupa tudo
+que sobra — quanto mais alto o terminal, mais histórico, e nunca um vão morto no
+meio. Se as sessões não couberem, a área rola em vez de empurrar o stream para
+fora: o stream nunca fica com menos que suas 6 linhas de eventos, e header e
+keybar ficam sempre visíveis. Testado de 20×10 a 300×80.
 
-Na vertical não há vão morto: a área de sessões encolhe até o conteúdo e o EVENT
-STREAM ocupa tudo que sobra — quanto mais alto o terminal, mais histórico. Se as
-sessões não couberem, a área rola em vez de empurrar o stream para fora: o stream
-nunca fica com menos que suas 6 linhas, e header e keybar ficam sempre visíveis.
+## A simulação (só no protótipo)
+
+Para avaliar a interface em movimento, um simulador troca o estado de uma sessão
+aleatória a cada **5–12 s**, seguindo transições plausíveis (de WORKING sai-se
+mais para READY do que para ERROR; de OFFLINE só se volta por STARTING, que se
+resolve em ~4 s). A atividade textual acompanha o estado novo. `R` força o
+próximo passo na hora.
+
+---
 
 ## Arquitetura
 
@@ -191,10 +390,12 @@ pytest
 ```
 
 17 testes headless (sem terminal real e **sem tocar áudio** — `tests/conftest.py`
-neutraliza o player para toda a suíte). Cobrem breakpoints e navegação,
-troca de visão/painel/modais, mapeamento do semáforo e o piscar do INPUT, as
-regras do bip (dispara, silencia, debounce, máquina sem player), o layout sem vão
-morto e a garantia de que o EVENT STREAM nunca é empurrado para fora da tela.
+neutraliza o player para toda a suíte). Cobrem breakpoints e navegação, troca de
+visão/painel/modais, mapeamento do semáforo e o piscar do INPUT, as regras do bip
+(dispara, silencia, debounce, máquina sem player), o layout sem vão morto e a
+garantia de que o EVENT STREAM nunca é empurrado para fora da tela.
+
+CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 
 ## Roadmap
 
