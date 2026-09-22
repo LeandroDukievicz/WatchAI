@@ -6,6 +6,19 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Adicionado
+- **Detecção real das sessões**, sem integrar nada: varredura da tabela de
+  processos (`psutil`, a cada 2 s, em thread) + leitura dos diários que os
+  próprios agentes gravam (`~/.claude/projects/*.jsonl`, `~/.codex/sessions/…`).
+  Sem API, hook, credencial ou configuração do agente.
+- **Um card por terminal**, com os agentes dentro: quantos rodam ali, o estado
+  de cada um e o que cada um está fazendo. O estado do card é o do agente que
+  mais pede você (ERROR › INPUT › READY › WAITING › WORKING).
+- Estado **IDLE**: aba aberta, nenhum agente rodando.
+- Ciclo de vida do terminal fechado: OFFLINE por 5 minutos, aviso
+  `⚠ removing in MM:SS` por mais 2, e some.
+- `--mock` (dados simulados), `--theme` e `--version` na linha de comando.
+- Coluna AGENTS na visão LIST e bloco AGENTS no modal de detalhes.
+- CI também em Windows e macOS, já que a detecção trata os três sistemas.
 - **Seletor de temas (`T`)** com 8 paletas — WatchAI (padrão), Light, Dark,
   Night Owl, Vampire (Dracula), Cyberpunk, Steampunk e Grey (sem matiz). Mover a
   seleção aplica o tema na hora (preview ao vivo do dashboard inteiro), `ENTER`

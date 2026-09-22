@@ -46,7 +46,7 @@ class AppHeader(Widget):
         first = True
         for status in SUMMARY_ORDER:
             n = counts[status]
-            if status is Status.STARTING and n == 0:
+            if status in (Status.STARTING, Status.IDLE) and n == 0:
                 continue  # transitório: só aparece quando existe
             if not first:
                 out.append("  " if full else " ")

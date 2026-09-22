@@ -214,11 +214,21 @@ ListHeader .marker, SessionRow .marker { width: 2; height: 1; }
 ListHeader .name,   SessionRow .name   { width: 11; height: 1; }
 ListHeader .status, SessionRow .status { width: 12; height: 1; }
 ListHeader .project, SessionRow .project { width: 1fr; height: 1; }
+ListHeader .agents, SessionRow .agents { width: 22; height: 1; }
 ListHeader .time,   SessionRow .time   { width: 8; height: 1; text-align: right; }
 
 Dashboard.-tiny ListHeader .name, Dashboard.-tiny SessionRow .name { width: 9; }
 Dashboard.-tiny ListHeader .status, Dashboard.-tiny SessionRow .status { width: 10; }
 Dashboard.-tiny ListHeader .time, Dashboard.-tiny SessionRow .time { width: 6; }
+/* Sem espaço para a coluna de agentes: o estado continua na barra de status. */
+Dashboard.-tiny ListHeader .agents, Dashboard.-tiny SessionRow .agents { display: none; }
+Dashboard.-small ListHeader .agents, Dashboard.-small SessionRow .agents { width: 14; }
+
+#empty {
+    height: auto;
+    padding: 1 0;
+    color: $aw-muted;
+}
 
 /* ---- Modais ---------------------------------------------------------------- */
 

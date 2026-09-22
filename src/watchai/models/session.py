@@ -7,7 +7,7 @@ hardcodar cor/símbolo de estado — sempre consultar o enum.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 
@@ -24,8 +24,9 @@ class Status(Enum):
     WAITING = ("WAITING", "yellow", "◇", False)  # esperando processo externo
     INPUT = ("INPUT", "magenta", "◆", True)  # esperando ação do usuário
     ERROR = ("ERROR", "red", "▲", True)  # problema detectado
-    OFFLINE = ("OFFLINE", "ghost", "○", False)  # sessão encerrada
+    OFFLINE = ("OFFLINE", "ghost", "○", False)  # terminal fechado
     STARTING = ("STARTING", "cyan2", "◌", False)  # acabou de iniciar
+    IDLE = ("IDLE", "gray", "·", False)  # terminal aberto, nenhum agente rodando
 
     def __init__(self, label: str, slot: str, symbol: str, attention: bool) -> None:
         self.label = label
@@ -44,7 +45,13 @@ class Status(Enum):
         return f"-{self.name.lower()}"
 
 
-# Ordem de exibição no resumo global (posições estáveis; STARTING só aparece se > 0)
+# Terminal fechado: o card fica, avisa que vai sair, e sai. Você precisa ver
+# que a sessão terminou mesmo tendo saído da frente do computador.
+AVISO_FECHADO = timedelta(minutes=5)
+REMOCAO_FECHADO = timedelta(minutes=7)
+
+# Ordem de exibição no resumo global (posições estáveis; STARTING e IDLE só
+# aparecem quando existem)
 SUMMARY_ORDER = (
     Status.WORKING,
     Status.READY,
@@ -53,14 +60,59 @@ SUMMARY_ORDER = (
     Status.ERROR,
     Status.OFFLINE,
     Status.STARTING,
+    Status.IDLE,
 )
+
+# Um terminal tem vários agentes: o estado do card é o do agente que mais pede
+# você. ERROR e INPUT na frente porque param o seu trabalho; READY antes de
+# WORKING porque "terminou" é a notícia, "ainda trabalhando" é o normal.
+PRIORIDADE = (
+    Status.ERROR,
+    Status.INPUT,
+    Status.READY,
+    Status.WAITING,
+    Status.WORKING,
+    Status.STARTING,
+    Status.IDLE,
+    Status.OFFLINE,
+)
+
+
+def agregar(estados) -> Status:
+    """O estado que representa um conjunto de agentes."""
+    estados = set(estados)
+    if not estados:
+        return Status.IDLE
+    return next(s for s in PRIORIDADE if s in estados)
+
+
+@dataclass
+class Agent:
+    """Um agente de IA rodando dentro de um terminal."""
+
+    pid: int
+    kind: str  # "claude", "codex", ...
+    label: str  # como aparece no card
+    status: Status
+    activity: str
+    started_at: datetime
+    status_since: datetime
+
+    def in_status(self, now: datetime) -> timedelta:
+        return now - self.status_since
 
 
 @dataclass
 class Session:
+    """Um **terminal**: é o card. Os agentes que rodam nele vivem em `agents`.
+
+    No protótipo (`--mock`) cada card é uma IA sem agentes dentro; na detecção
+    real o card é a aba do terminal e `agents` lista o que está rodando ali.
+    """
+
     id: int
-    name: str  # "CLAUDE CODE"
-    short: str  # "CLAUDE"
+    name: str  # título do card: o projeto, ou a IA no mock
+    short: str  # versão curta, usada no EVENT STREAM
     status: Status
     project: str
     directory: str
@@ -68,10 +120,29 @@ class Session:
     started_at: datetime
     status_since: datetime
     activity: str
+    agents: list["Agent"] = field(default_factory=list)
+    key: str = ""  # identidade estável: tty, ou shell no Windows
+    terminal: str = ""  # rótulo curto: "pts/10", "pwsh #4312"
+    closed_at: datetime | None = None  # quando o terminal sumiu
 
     @property
     def online(self) -> bool:
         return self.status is not Status.OFFLINE
+
+    @property
+    def badge(self) -> str:
+        """O que vai no canto do card: o terminal, ou o número no mock."""
+        return self.terminal or self.number
+
+    def closed_for(self, now: datetime) -> timedelta | None:
+        return None if self.closed_at is None else now - self.closed_at
+
+    def closing_in(self, now: datetime) -> timedelta | None:
+        """Quanto falta para o card sumir — só depois do aviso, senão None."""
+        fechado = self.closed_for(now)
+        if fechado is None or fechado < AVISO_FECHADO:
+            return None
+        return max(timedelta(0), REMOCAO_FECHADO - fechado)
 
     def elapsed(self, now: datetime) -> timedelta:
         return now - self.started_at

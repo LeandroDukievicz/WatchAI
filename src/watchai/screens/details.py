@@ -15,7 +15,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from ..format import DASH, ellipsize, fmt_clock, fmt_hms
+from ..format import DASH, ellipsize, fmt_clock, fmt_hms, fmt_timer
 from ..models import Session
 from ..theme import colors
 from ..widgets import StatusLight, render_status
@@ -54,6 +54,8 @@ class DetailsScreen(ModalScreen[None]):
                 yield Static("STATUS".ljust(KEY_W), classes="d-key")
                 yield StatusLight(self.session.status, id="d-light")
             yield Static("", id="d-fields")
+            yield Static("AGENTS", classes="d-section", id="d-agents-title")
+            yield Static("", id="d-agents")
             yield Static("CURRENT ACTIVITY", classes="d-section")
             yield Static("", id="d-activity")
             yield Static("EVENTS", classes="d-section")
@@ -88,7 +90,7 @@ class DetailsScreen(ModalScreen[None]):
 
         fields = Text(no_wrap=True, overflow="ellipsis")
         rows = [
-            _field("SESSION", s.number),
+            _field("SESSION", s.number + (f"   {s.terminal}" if s.terminal else "")),
             _field("PID", DASH if dead else str(s.pid)),
             _field("PROJECT", DASH if dead else s.project),
             _field("DIRECTORY", DASH if dead else s.directory, colors().text2),
@@ -100,6 +102,29 @@ class DetailsScreen(ModalScreen[None]):
                 fields.append("\n")
             fields.append_text(row)
         self.query_one("#d-fields", Static).update(fields)
+
+        agentes = Text(no_wrap=True, overflow="ellipsis")
+        for i, agent in enumerate(s.agents):
+            if i:
+                agentes.append("\n")
+            agentes.append(agent.label.ljust(KEY_W), Style(color=colors().text))
+            estado = render_status(agent.status, self.app.tick)
+            agentes.append_text(estado)
+            agentes.append(" " * max(1, 11 - estado.cell_len))  # colunas alinhadas
+            agentes.append(
+                f"pid {str(agent.pid).ljust(8)} {fmt_timer(agent.in_status(now)).rjust(6)}  ",
+                Style(color=colors().muted),
+            )
+            agentes.append(ellipsize(agent.activity, 26), Style(color=colors().text2))
+        if not s.agents:
+            agentes.append(
+                DASH + ("  terminal closed" if dead else "  no agent running"),
+                Style(color=colors().ghost),
+            )
+        self.query_one("#d-agents", Static).update(agentes)
+        mostra_agentes = bool(s.key)
+        self.query_one("#d-agents-title").display = mostra_agentes
+        self.query_one("#d-agents").display = mostra_agentes
 
         self.query_one("#d-activity", Static).update(
             Text(s.activity, Style(color=colors().ghost if dead else colors().text))

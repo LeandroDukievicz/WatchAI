@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from textual.binding import Binding
 from textual.containers import Grid, Vertical, VerticalScroll
+from textual.widgets import Static
 from textual.events import Resize
 from textual.reactive import reactive
 from textual.screen import Screen
@@ -44,6 +45,11 @@ class Dashboard(Screen):
     # -- composição ----------------------------------------------------------
     def compose(self):
         sessions = self.app.store.sessions
+        # A lista tem que ser gravada aqui, e não no on_mount: a primeira
+        # varredura roda em thread e pode terminar entre os dois. Anotando no
+        # on_mount, o dashboard registraria como "já desenhado" um conjunto de
+        # sessões que o compose nunca chegou a montar — e a tela ficava vazia.
+        self._ids = [s.id for s in sessions]
         yield AppHeader(id="header")
         yield PanelTitle(id="sessions-title")
         with VerticalScroll(id="sessions-area"):
@@ -54,12 +60,54 @@ class Dashboard(Screen):
                 yield ListHeader(id="list-header")
                 for s in sessions:
                     yield SessionRow(s)
+            yield Static("", id="empty")
         yield EventStream(id="events")
         yield KeyBar(id="keybar")
 
     def on_mount(self) -> None:
+        # Com detecção real as sessões nascem e morrem enquanto o app roda: os
+        # widgets precisam acompanhar o store, não só o estado deles.
+        self.watch(self.app, "version", lambda _: self.reconcile())
+        self.reconcile()  # o store pode ter mudado entre o compose e agora
         self._sync_selection()
         self._apply_view()
+        self._apply_empty()
+
+    # -- sessões que entram e saem -------------------------------------------
+    def reconcile(self) -> None:
+        sessions = self.app.store.sessions
+        ids = [s.id for s in sessions]
+        if ids == self._ids:
+            return
+        self._ids = ids
+
+        for widget in list(self.query(SessionCard)) + list(self.query(SessionRow)):
+            widget.remove()
+        if sessions:
+            self.query_one("#cards", Grid).mount_all([SessionCard(s) for s in sessions])
+            self.query_one("#rows", Vertical).mount_all([SessionRow(s) for s in sessions])
+        self.selected = max(0, min(self.selected, len(sessions) - 1))
+        self.call_after_refresh(self._after_reconcile)
+
+    def _after_reconcile(self) -> None:
+        for card in self.query(SessionCard):
+            card.compact = self.layout_mode.compact
+        self._sync_selection()
+        self._apply_empty()
+        self._reveal_selected()
+
+    def _apply_empty(self) -> None:
+        """Sem nenhuma sessão, a área explica o que fazer em vez de ficar vazia."""
+        vazio = self.query_one("#empty", Static)
+        nenhuma = not self.app.store.sessions
+        vazio.display = nenhuma
+        if nenhuma:
+            vazio.update(
+                "  no AI session detected\n"
+                "  open claude, codex, gemini, opencode or aider in a terminal"
+            )
+        self.query_one("#cards").display = self.view == "cards" and not nenhuma
+        self.query_one("#rows").display = self.view == "list" and not nenhuma
 
     # -- responsividade ------------------------------------------------------
     def on_resize(self, event: Resize) -> None:
@@ -117,8 +165,9 @@ class Dashboard(Screen):
 
     # -- view / panel ---------------------------------------------------------
     def _apply_view(self) -> None:
-        self.query_one("#cards").display = self.view == "cards"
-        self.query_one("#rows").display = self.view == "list"
+        nenhuma = not self.app.store.sessions
+        self.query_one("#cards").display = self.view == "cards" and not nenhuma
+        self.query_one("#rows").display = self.view == "list" and not nenhuma
         self.query_one("#sessions-title", PanelTitle).view = self.view
         self.call_after_refresh(self._reveal_selected)
 

@@ -1,4 +1,25 @@
-from .session import SUMMARY_ORDER, Session, SessionEvent, Status
+from .session import (
+    AVISO_FECHADO,
+    PRIORIDADE,
+    REMOCAO_FECHADO,
+    SUMMARY_ORDER,
+    Agent,
+    Session,
+    SessionEvent,
+    Status,
+    agregar,
+)
 from .store import SessionStore
 
-__all__ = ["SUMMARY_ORDER", "Session", "SessionEvent", "SessionStore", "Status"]
+__all__ = [
+    "AVISO_FECHADO",
+    "PRIORIDADE",
+    "REMOCAO_FECHADO",
+    "SUMMARY_ORDER",
+    "Agent",
+    "Session",
+    "SessionEvent",
+    "SessionStore",
+    "Status",
+    "agregar",
+]

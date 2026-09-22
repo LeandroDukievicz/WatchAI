@@ -50,7 +50,7 @@ def test_every_status_has_color_symbol_label():
 
 def test_responsive_grid_and_navigation():
     async def main():
-        app = WatchAIApp(seed=1)
+        app = WatchAIApp(seed=1, mock=True)
         async with app.run_test(size=(150, 40)) as pilot:
             await pilot.pause()
             dash = app.screen
@@ -80,7 +80,7 @@ def test_responsive_grid_and_navigation():
 
 def test_views_panels_details_help():
     async def main():
-        app = WatchAIApp(seed=1)
+        app = WatchAIApp(seed=1, mock=True)
         async with app.run_test(size=(120, 36)) as pilot:
             await pilot.pause()
             dash = app.screen
@@ -110,7 +110,7 @@ def test_views_panels_details_help():
 
 def test_simulation_never_breaks_the_ui():
     async def main():
-        app = WatchAIApp(seed=7)
+        app = WatchAIApp(seed=7, mock=True)
         async with app.run_test(size=(130, 40)) as pilot:
             await pilot.pause()
             now = datetime.now()
@@ -161,7 +161,7 @@ def test_semaforo_so_acompanha_o_tick_quando_pisca():
     """Quem não pisca não repinta a cada tick."""
 
     async def main():
-        app = WatchAIApp(seed=1)
+        app = WatchAIApp(seed=1, mock=True)
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
             cards = {c.session.short: c for c in app.screen.query(SessionCard)}
@@ -177,7 +177,7 @@ def test_layout_sem_vao_morto():
     """EVENT STREAM encosta nos cards, keybar na última linha, card de 48 colunas."""
 
     async def main():
-        app = WatchAIApp(seed=1)
+        app = WatchAIApp(seed=1, mock=True)
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
             dash = app.screen
@@ -197,7 +197,7 @@ def test_stream_nunca_e_empurrado_para_fora_da_tela():
     """Em 1 coluna os 6 cards não cabem: a área rola, o stream continua inteiro."""
 
     async def main():
-        app = WatchAIApp(seed=1)
+        app = WatchAIApp(seed=1, mock=True)
         async with app.run_test(size=(60, 30)) as pilot:
             await pilot.pause()
             dash = app.screen
@@ -212,7 +212,7 @@ def test_stream_nunca_e_empurrado_para_fora_da_tela():
 
 def test_semaforo_some_no_modo_compacto():
     async def main():
-        app = WatchAIApp(seed=1)
+        app = WatchAIApp(seed=1, mock=True)
         async with app.run_test(size=(50, 28)) as pilot:
             await pilot.pause()
             assert not any(t.display for t in app.screen.query(TrafficLight))
@@ -236,7 +236,7 @@ class AlertaFalso(Alert):
 
 def _app_com_bip(seed: int = 1) -> tuple[WatchAIApp, AlertaFalso]:
     alerta = AlertaFalso()
-    return WatchAIApp(seed=seed, alert=alerta), alerta
+    return WatchAIApp(seed=seed, alert=alerta, mock=True), alerta
 
 
 async def _vira_ready(app, pilot, short: str) -> None:
@@ -349,7 +349,7 @@ def test_tema_desconhecido_cai_no_padrao():
 def test_todos_os_temas_desenham_a_tela_inteira():
     async def main():
         for palette in PALETTES:
-            app = WatchAIApp(seed=3, theme_key=palette.key)
+            app = WatchAIApp(seed=3, mock=True, theme_key=palette.key)
             async with app.run_test(size=(150, 36)) as pilot:
                 await pilot.pause()
                 linhas = [s.text for s in app.screen._compositor.render_strips()]
@@ -364,7 +364,7 @@ def test_seletor_faz_preview_ao_vivo_e_esc_desfaz():
     """Mover a seleção aplica o tema atrás do modal; ESC volta ao que era."""
 
     async def main():
-        app = WatchAIApp(seed=1, theme_key="watchai")
+        app = WatchAIApp(seed=1, mock=True, theme_key="watchai")
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
             await pilot.press("t")
@@ -387,7 +387,7 @@ def test_seletor_faz_preview_ao_vivo_e_esc_desfaz():
 def test_enter_grava_o_tema_para_a_proxima_execucao():
     async def main():
         alvo = PALETTES[3]
-        app = WatchAIApp(seed=1, theme_key="watchai")
+        app = WatchAIApp(seed=1, mock=True, theme_key="watchai")
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
             await pilot.press("t")
@@ -401,7 +401,7 @@ def test_enter_grava_o_tema_para_a_proxima_execucao():
             assert config.load_theme() == alvo.key
 
         # nova execução, sem theme_key: tem que nascer no tema salvo
-        assert WatchAIApp(seed=1).palette_key == alvo.key
+        assert WatchAIApp(seed=1, mock=True).palette_key == alvo.key
 
     run(main())
 
@@ -411,7 +411,7 @@ def test_modal_de_temas_cabe_na_caixa():
     uma linha a mais na caixa é o sintoma que este teste vigia."""
 
     async def main():
-        app = WatchAIApp(seed=1, theme_key="watchai")
+        app = WatchAIApp(seed=1, mock=True, theme_key="watchai")
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
             await pilot.press("t")

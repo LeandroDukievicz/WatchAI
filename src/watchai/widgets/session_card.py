@@ -24,7 +24,7 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
 
-from ..format import DASH, ellipsize, fmt_hms
+from ..format import DASH, ellipsize, fmt_hms, fmt_timer
 from ..models import Session, Status
 from ..theme import colors, fade
 from .status_light import StatusLight
@@ -82,6 +82,32 @@ class CardBody(Widget):
         super().__init__()
         self.card = card
 
+    def _agents(self, width: int) -> Text:
+        """`agents   2  ◐ claude  ● codex` — quantos rodam e o que cada um faz.
+
+        O símbolo vem na cor do estado **daquele** agente: com dois rodando, o
+        card diz num relance qual deles terminou.
+        """
+        s = self.card.session
+        row = Text(no_wrap=True, overflow="ellipsis")
+        row.append("agents".ljust(LABEL_W), Style(color=colors().muted))
+        if not s.agents:
+            row.append(DASH, Style(color=colors().ghost))
+            return row
+        row.append(str(len(s.agents)), Style(color=colors().text, bold=True))
+        for agent in s.agents:
+            row.append("  ")
+            row.append(agent.status.symbol, Style(color=agent.status.color))
+            row.append(" " + agent.label, Style(color=colors().text2))
+        return row
+
+    def _closing(self, falta, width: int) -> Text:
+        """Aviso de que o card do terminal fechado está de saída."""
+        row = Text(no_wrap=True, overflow="ellipsis")
+        row.append("closing".ljust(LABEL_W), Style(color=colors().yellow))
+        row.append(f"⚠ removing in {fmt_timer(falta)}", Style(color=colors().yellow, bold=True))
+        return row
+
     def _row(self, label: str, value: str, style: str, width: int) -> Text:
         row = Text(no_wrap=True, overflow="ellipsis")
         row.append(label.ljust(LABEL_W), Style(color=colors().ghost if style == colors().ghost else colors().muted))
@@ -90,23 +116,48 @@ class CardBody(Widget):
 
     def render(self) -> Text:
         card, s = self.card, self.card.session
+        now = datetime.now()
         width = self.size.width
         dead = not s.online
         project = DASH if dead else s.project
-        elapsed = DASH if dead else fmt_hms(s.elapsed(datetime.now()))
+        elapsed = DASH if dead else fmt_hms(s.elapsed(now))
+        falta = s.closing_in(now)
+        # O card do terminal traz os agentes onde o do mock traz o projeto: ali
+        # o título já é o projeto, e quem está rodando é a notícia.
+        terminal = bool(s.key)
 
         if card.compact:
-            # 3ª e 4ª linha do card compacto: PROJECT e ACTIVITY (sem rótulos)
+            # 3ª e 4ª linha do card compacto: PROJECT/AGENTES e ACTIVITY
+            if terminal and s.agents:
+                topo = Text(no_wrap=True, overflow="ellipsis")
+                for i, agent in enumerate(s.agents):
+                    if i:
+                        topo.append(" ")
+                    topo.append(agent.status.symbol, Style(color=agent.status.color))
+                    topo.append(" " + agent.label, Style(color=colors().text2))
+            else:
+                topo = Text(
+                    ellipsize(project, width),
+                    Style(color=colors().ghost if dead else colors().text),
+                )
             lines = [
-                Text(ellipsize(project, width), Style(color=colors().ghost if dead else colors().text)),
+                topo,
                 Text(
                     ellipsize(s.activity, width),
                     Style(color=colors().ghost if dead else colors().muted),
                 ),
             ]
         else:
+            if falta is not None:
+                primeira = self._closing(falta, width)
+            elif terminal:
+                primeira = self._agents(width)
+            else:
+                primeira = self._row(
+                    "project", project, colors().ghost if dead else colors().text, width
+                )
             lines = [
-                self._row("project", project, colors().ghost if dead else colors().text, width),
+                primeira,
                 self._row("activity", s.activity, colors().ghost if dead else colors().text2, width),
                 self._row("elapsed", elapsed, colors().ghost if dead else colors().muted, width),
             ]
@@ -181,7 +232,7 @@ class SessionCard(Widget):
             self.border_subtitle = None
         else:
             self.border_title = ("▶ " if self.selected else "") + s.name
-            self.border_subtitle = s.number
+            self.border_subtitle = s.badge
 
         self._name.refresh()
         self._body.refresh()

@@ -9,18 +9,21 @@ Claude Code, Codex, Gemini, OpenCode, Aider, Copilot — todas numa tela só.
 ![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.14-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
+[Conheça o projeto e veja como baixar](https://leandrodukievicz.github.io/WatchAI/)
+
 </div>
 
 ![WatchAI em 150×36](docs/screenshot.png)
 
 ---
 
-> ### ⚠️ Versão 1.0.0 — camada visual
+> ### Detecção real, sem integrar nada
 >
-> **Todos os dados são mockados.** Não existe descoberta de processos, PID, PTY,
-> hooks, logs, APIs nem integração com nenhuma IA. Os estados mudam sozinhos a
-> cada 5–12 s apenas para avaliar a interface em movimento. A arquitetura já está
-> pronta para receber dados reais — ver [Roadmap](#roadmap).
+> O WatchAI **descobre sozinho** as sessões abertas na sua máquina: varre a
+> tabela de processos e lê os diários que os próprios agentes já gravam no
+> disco. Não há API, chave, hook, plugin nem configuração do agente — nada sai
+> da sua máquina. Com `--mock` ele volta a rodar com dados simulados, para
+> avaliar a interface sem depender do que está aberto.
 
 ## O problema
 
@@ -34,7 +37,9 @@ O WatchAI coloca todas numa tela só e responde de longe, sem leitura:
 
 ## Instalação
 
-Requisitos: **Python 3.10+** e um terminal com Unicode.
+Requisitos: **Python 3.10+** e um terminal com Unicode. A única dependência
+além do Textual é o [`psutil`](https://github.com/giampaolo/psutil), que é quem
+lê a tabela de processos igual nos três sistemas.
 
 ```bash
 git clone git@github.com:LeandroDukievicz/WatchAI.git
@@ -46,13 +51,76 @@ pip install -e .
 ## Uso
 
 ```bash
-python main.py       # ou:  watchai  ·  python -m watchai
+python main.py                 # ou:  watchai  ·  python -m watchai
+python main.py --mock          # dados simulados, sem olhar seus processos
+python main.py --theme vampire # tema só desta execução
 ```
 
 Truecolor (`COLORTERM=truecolor`) dá as cores exatas; sem ele o Textual aproxima
 para 256/16 cores. Nada depende de ligatures — só símbolos Unicode simples
 (`● ○ ◐ ◓ ◑ ◒ ◆ ◇ ▲ ▸ ▶ ─ │ ╭ ╮ ╰ ╯`). Testado com JetBrains Mono, Fira Code,
 Cascadia, Hack, Meslo e Ubuntu Mono.
+
+---
+
+# Como ele descobre as sessões
+
+**Um card por terminal.** Cada aba do terminal que tem (ou teve) um agente
+rodando vira um card, e os agentes que rodam ali aparecem dentro dele — dois
+agentes na mesma aba são um card com dois agentes, não dois cards.
+
+A detecção tem duas camadas, e é a combinação que faz sentido:
+
+| Camada | De onde vem | O que responde |
+|---|---|---|
+| **Processos** | varredura da tabela de processos (`psutil`), a cada 2 s | quem existe, em que terminal, em que projeto (`cwd`), desde quando — e se está gastando CPU |
+| **Diário** | o `.jsonl` que o próprio agente grava (`~/.claude/projects/…`, `~/.codex/sessions/…`) | **o que** ele está fazendo agora, e se terminou ou se travou esperando você |
+
+Nenhuma das duas sozinha resolve. O processo não distingue **READY** ("terminou,
+é a sua vez") de **INPUT** ("parou esperando você confirmar"): nos dois casos
+ele está dormindo com 0% de CPU. E o diário não sabe se o que ele registrou por
+último ainda está acontecendo. Juntos:
+
+```
+última entrada do diário     +  processo     =  estado
+─────────────────────────────────────────────────────────
+texto do assistente             qualquer        READY     terminou
+resultado de ferramenta         qualquer        WORKING   voltou a pensar
+chamada de ferramenta           gastando CPU    WORKING   a ferramenta roda
+chamada de ferramenta           parado há 8 s   INPUT     esperando VOCÊ
+chamada de ferramenta           parado agora    WAITING   esperando algo externo
+(sem diário legível)            gastando CPU    WORKING
+(sem diário legível)            parado          READY
+```
+
+Agentes sem diário conhecido (Gemini, OpenCode, Aider…) funcionam pela camada de
+processos: aparecem, mostram projeto e tempo, e alternam entre WORKING e READY.
+
+## O que é multiplataforma e o que degrada
+
+| Sinal | Linux | macOS | Windows |
+|---|:--:|:--:|:--:|
+| PID, linha de comando, início, CPU, filhos | ✅ | ✅ | ✅ |
+| `cwd` (o projeto do card) | ✅ | ⚠️ processos seus | ✅ |
+| diário local dos agentes | ✅ | ✅ | ✅ |
+| tty como identidade do terminal | ✅ | ✅ | ❌ não existe |
+
+Sem tty (Windows), a identidade do terminal passa a ser o **shell ancestral** —
+que é o análogo certo, porque cada aba do Windows Terminal abre o seu próprio
+shell. O reconhecimento de agente não depende do nome do processo: no Windows o
+Claude Code é `node.exe`, e o que identifica é o programa executado ou o caminho
+do pacote (`@anthropic-ai/claude-code`).
+
+## Os limites, ditos na cara
+
+- **Só os seus processos.** Sessões de outro usuário (ou dentro de um container)
+  não aparecem.
+- Dois agentes **do mesmo tipo no mesmo diretório** compartilham o diário mais
+  recente; o segundo cai na camada de processos.
+- O contador `for MM:SS` começa a contar **quando o WatchAI viu** o estado, não
+  quando ele começou de verdade — o disco não guarda essa hora.
+- INPUT é inferido, não lido: uma ferramenta lenta que não gasta CPU e não
+  responde em 8 s aparece como INPUT.
 
 ---
 
@@ -108,24 +176,24 @@ se o foco está no EVENT STREAM (`TAB`).
 ### Visão CARDS (padrão)
 
 ```
-╭─ ▶ CLAUDE CODE ────────────────────────╮
-│  ◐ WORKING           for 04:12  ╭───╮  │
+╭─ ▶ DEVS-A-DERIVA ──────────────────────╮
+│  ● READY             for 04:12  ╭───╮  │
 │                                 │ ● │  │
-│  project  telegram-downloader   │ ● │  │
-│  activity generating telegram…  │ ● │  │
-│  elapsed  00:12:44              ╰───╯  │
-╰────────────────────────────────── #03 ─╯
+│  agents   2  ● claude  ◐ codex  │ ● │  │
+│  activity claude: task completed│ ● │  │
+│  elapsed  03:14:19              ╰───╯  │
+╰─────────────────────────────── pts/10 ─╯
 ```
 
 | Elemento | O que é |
 |---|---|
-| Título na borda | Nome da IA. Ganha `▶` e vira cyan quando é o card selecionado |
-| `#03` na borda | Número da sessão |
-| `◐ WORKING` | Estado: símbolo animado + label, sempre na cor do estado |
+| Título na borda | O **projeto** (a pasta em que os agentes trabalham). Ganha `▶` e vira cyan quando é o card selecionado |
+| `pts/10` na borda | O terminal. No Windows, o shell (`pwsh #4312`) |
+| `● READY` | Estado do terminal: o do agente que mais pede você (ERROR › INPUT › READY › WAITING › WORKING) |
 | `for 04:12` | Há quanto tempo está **neste** estado (não é o tempo de sessão) |
-| `project` | Projeto em que a sessão trabalha |
-| `activity` | O que está fazendo agora |
-| `elapsed` | Tempo total de sessão (`HH:MM:SS`) |
+| `agents` | Quantos agentes rodam ali e, em cada um, o símbolo na cor do **seu** estado |
+| `activity` | O que o agente que decidiu o estado está fazendo (com o nome dele, quando há mais de um) |
+| `elapsed` | Há quanto tempo o terminal está aberto |
 | Semáforo | As 3 lâmpadas — ver [seção própria](#o-semáforo) |
 
 - **A moldura carrega o estado**: verde (READY), magenta (INPUT) e vermelho
@@ -135,21 +203,24 @@ se o foco está no EVENT STREAM (`TAB`).
   **mantém a cor do estado**: um READY selecionado continua verde.
 - **`for MM:SS` fica em negrito depois de 1 minuto** em READY, INPUT e ERROR — é
   o "terminou há dois minutos e você ainda não voltou".
-- **Sessão OFFLINE** mostra `—` em project e elapsed.
+- **Terminal sem agente** fica `IDLE`, apagado: a aba continua aberta, não há
+  nada rodando. **Terminal fechado** vira OFFLINE.
+- **Terminal fechado não some na hora.** Fica 5 minutos como OFFLINE, depois
+  troca a linha dos agentes por `⚠ removing in 01:59` e sai aos 7 — você precisa
+  poder ver que a sessão terminou mesmo tendo saído da frente do computador.
 - **Textos longos truncam com `…`**, nunca quebram linha.
 - Se os cards não couberem na altura, o painel rola (`↑ ↓` seguem a seleção).
 
 ### Visão LIST (`V`)
 
 ```
-   AI         STATUS      PROJECT                                     TIME
+   TERMINAL   STATUS      PROJECT                AGENTS              TIME
  ─────────────────────────────────────────────────────────────────────────
- ▶ CLAUDE     ◐ WORKING   telegram-downloader                        04:12
-   CODEX      ● READY     dukie-tech                                 01:42
-   GEMINI     ◇ WAITING   research-agent                             03:11
-   OPENCODE   ◆ INPUT     devleandro                                 00:27
-   AIDER      ▲ ERROR     devsaderiva                                02:51
-   COPILOT    ○ OFFLINE   —                                              —
+ ▶ pts/10     ● READY     devs-a-deriva          ● claude           04:12
+   pts/6      ◐ WORKING   ninou-app              ◐ codex            01:42
+   pts/3      ◆ INPUT     watchai                ◆ claude ● codex   00:27
+   pts/9      · IDLE      —                      —                      —
+   pts/2      ○ OFFLINE   —                      —                      —
 ```
 
 A mesma informação em uma linha por sessão — é a visão mais densa, para quando
@@ -205,6 +276,10 @@ as teclas sem descrição. O item do bip reflete o estado: `B BIP` ligado,
 │  STARTED    21:16:37                                                   │
 │  ELAPSED    00:09:20                                                   │
 │                                                                        │
+│  AGENTS                                                                │
+│  claude     ● READY      pid 1150460   04:12  task completed           │
+│  codex      ◐ WORKING    pid 1166198   00:27  Bash: npm test           │
+│                                                                        │
 │  CURRENT ACTIVITY                                                      │
 │  waiting for API response                                              │
 │                                                                        │
@@ -217,8 +292,9 @@ as teclas sem descrição. O item do bip reflete o estado: `B BIP` ligado,
 ╰────────────────────────────────────────────────────────────────────────╯
 ```
 
-Modal com tudo sobre uma sessão: além do estado (com o horário em que entrou
-nele), o PID, o diretório, quando começou e os **últimos 4 eventos só dela**.
+Modal com tudo sobre um terminal: além do estado (com o horário em que entrou
+nele), **um bloco por agente** — PID, estado, há quanto tempo e o que está
+fazendo —, o diretório, quando a aba abriu e os **últimos 4 eventos só dela**.
 
 - O dashboard continua vivo atrás, escurecido — os semáforos e contadores seguem
   atualizando enquanto o modal está aberto.
@@ -324,8 +400,9 @@ Cor **e** símbolo **e** label — dá para ler sem depender só de cor.
 | WAITING | `◇` | amarelo | **amarela** | esperando processo externo | borda âmbar apagada |
 | INPUT | `◆` (pulso lento) | magenta | **amarela piscando** | esperando ação do usuário | borda magenta + tinta |
 | ERROR | `▲` (estático) | vermelho | **vermelha** | problema detectado | borda vermelha + tinta |
-| OFFLINE | `○` (apagado) | cinza escuro | todas apagadas | sessão encerrada | quase some no fundo |
+| OFFLINE | `○` (apagado) | cinza escuro | todas apagadas | terminal fechado | quase some no fundo |
 | STARTING | `◌ ○` | cyan secundário | **amarela** | acabou de iniciar | borda apagada |
+| IDLE | `·` | cinza | todas apagadas | aba aberta, nenhum agente | apagado |
 
 Todas as animações são discretas e guiadas pelo mesmo relógio de 0,5 s: o giro do
 WORKING, o pulso lento de READY e INPUT (~4,5 s por ciclo) e o `◌ ○` alternando do
@@ -348,7 +425,7 @@ branco suave e cinza.
 | `TAB` | alterna o painel **SESSIONS ⇄ EVENTS** |
 | `T` | abre o seletor de temas (preview ao vivo; `ENTER` salva, `ESC` desfaz) |
 | `V` | alterna **CARDS ⇄ LIST** |
-| `R` | refresh — no protótipo, avança a simulação na hora |
+| `R` | refresh — varre os processos na hora (no `--mock`, avança a simulação) |
 | `B` | liga/desliga o bip de READY |
 | `?` | ajuda |
 | `Q` / `Ctrl+C` | sai |
@@ -382,13 +459,17 @@ meio. Se as sessões não couberem, a área rola em vez de empurrar o stream par
 fora: o stream nunca fica com menos que suas 6 linhas de eventos, e header e
 keybar ficam sempre visíveis. Testado de 20×10 a 300×80.
 
-## A simulação (só no protótipo)
+## O modo simulado (`--mock`)
 
-Para avaliar a interface em movimento, um simulador troca o estado de uma sessão
-aleatória a cada **5–12 s**, seguindo transições plausíveis (de WORKING sai-se
-mais para READY do que para ERROR; de OFFLINE só se volta por STARTING, que se
-resolve em ~4 s). A atividade textual acompanha o estado novo. `R` força o
-próximo passo na hora.
+`python main.py --mock` troca a detecção por seis sessões de mentira: um
+simulador muda o estado de uma delas a cada **5–12 s**, seguindo transições
+plausíveis (de WORKING sai-se mais para READY do que para ERROR; de OFFLINE só
+se volta por STARTING, que se resolve em ~4 s).
+
+Serve para avaliar a interface em movimento sem depender do que está aberto na
+sua máquina — e é sobre ele que roda boa parte da suíte de testes visuais. Aí o
+card volta a ser uma IA, com `project` no lugar de `agents`. Fora do mock, `R`
+força uma varredura na hora.
 
 ---
 
@@ -405,8 +486,13 @@ WatchAI/
 │   ├── format.py                # ellipsize, HH:MM:SS, mm:ss
 │   ├── sound.py                 # bip (descobre o player do sistema)
 │   ├── config.py                # preferências salvas (~/.config/watchai/config.json)
-│   ├── models/                  # Status (cor/símbolo/label), Session, SessionStore
-│   ├── mock/sessions.py         # 6 sessões + MockSimulator
+│   ├── models/                  # Status, Agent, Session (= terminal), SessionStore
+│   ├── providers/               # ← a detecção real
+│   │   ├── agents.py            # quem é agente (e quem só tem o nome parecido)
+│   │   ├── source.py            # psutil: a única parte que conhece o SO
+│   │   ├── transcript.py        # lê os .jsonl que os agentes já gravam
+│   │   └── live.py              # reconcilia processos → terminais e agentes
+│   ├── mock/sessions.py         # 6 sessões + MockSimulator (só no --mock)
 │   ├── widgets/
 │   │   ├── status_light.py      # StatusLight + render_status()  ← fonte única dos estados
 │   │   ├── traffic_light.py     # TrafficLight (semáforo de 3 lâmpadas)
@@ -433,6 +519,11 @@ Três regras que o código segue:
    tema com o app rodando.
 3. **A UI só lê do store.** Os widgets reagem a dois reativos do app — `tick`
    (animação) e `version` (dados mudaram) — e nunca mexem no modelo.
+4. **A varredura não mora na thread da UI.** `provider.read()` (≈50 ms de I/O)
+   roda numa thread; `provider.apply()` mexe no store na thread da UI. Sem essa
+   divisão, a animação engasgaria a cada ciclo.
+5. **Nada de detecção pode derrubar a tela.** Varredura que falha vira leitura
+   vazia, diário ilegível vira `None`, e o app segue com o que sabe.
 
 ## Testes
 
@@ -441,28 +532,41 @@ pip install -e ".[dev]"
 pytest
 ```
 
-24 testes headless (sem terminal real, **sem tocar áudio** e sem ler nem escrever
-a sua config — `tests/conftest.py` neutraliza o player e aponta o `XDG_CONFIG_HOME`
-para um diretório temporário). Cobrem breakpoints e navegação, troca de
-visão/painel/modais, mapeamento do semáforo e o piscar do INPUT, as regras do bip
-(dispara, silencia, debounce, máquina sem player), o layout sem vão morto, a
-garantia de que o EVENT STREAM nunca é empurrado para fora da tela e os temas
-(preview, cancelamento, persistência, e a checagem de que toda paleta fornece
-cada variável `$aw-*` que o TCSS usa — uma faltando derruba a tela inteira).
+39 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
+a sua config e **sem olhar os processos da máquina** — a tabela de processos é
+injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
+computador e no CI).
+
+`tests/test_smoke.py` cobre a camada visual: breakpoints e navegação, troca de
+visão/painel/modais, semáforo e piscar do INPUT, regras do bip, layout sem vão
+morto e os temas (incluindo a checagem de que toda paleta fornece cada variável
+`$aw-*` que o TCSS usa — uma faltando derruba a tela inteira).
+
+`tests/test_providers.py` cobre a detecção: reconhecimento de agente (inclusive
+o `node.exe` do Windows e o falso positivo de um plugin com "claude" no
+caminho), a árvore de três processos do `codex` contando como um agente só, o
+agrupamento por terminal, a prioridade de estado entre agentes, o ciclo
+IDLE → OFFLINE → aviso → remoção, os estados lidos do diário (terminou,
+ferramenta pendente com processo parado = INPUT, com processo ocupado =
+WORKING) e a garantia de que diário corrompido ou varredura que explode não
+derrubam nada.
 
 CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 
 ## Roadmap
 
-A UI só lê de `SessionStore` e reage a `tick` e `version`. Para trocar o mock por
-dados reais:
+O que ainda não existe, em ordem de utilidade:
 
-1. um *provider* que descubra/atualize `Session` e chame `store.transition(...)` /
-   `store.log(...)`;
-2. incrementar `app.version` a cada mudança (é o que também dispara o bip);
-3. remover `MockSimulator` do `WatchAIApp`.
-
-Nenhum widget precisa mudar.
+1. **Diário do Gemini, do OpenCode e do Aider** — hoje eles vivem só da camada de
+   processos (WORKING/READY). O formato de cada um é a única coisa que falta;
+   `providers/transcript.py` já é uma classe por agente.
+2. **Validar Windows e macOS na prática.** O código trata os dois (identidade de
+   terminal pelo shell, agente reconhecido pelo caminho do pacote) e o CI roda a
+   suíte, mas ninguém abriu o app num Windows de verdade ainda.
+3. **Notificação do sistema** além do bip, para quando o WatchAI está numa aba
+   que você não vê.
+4. **Histórico entre execuções** — hoje o EVENT STREAM começa vazio a cada
+   abertura.
 
 ## Licença
 

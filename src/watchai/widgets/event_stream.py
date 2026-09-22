@@ -77,7 +77,7 @@ class EventStream(Widget):
             if show_name:
                 out.append(" ")
                 out.append(
-                    ev.short.ljust(NAME_W), Style(color=colors().text, bold=newest)
+                    ellipsize(ev.short, NAME_W).ljust(NAME_W), Style(color=colors().text, bold=newest)
                 )
                 used += 1 + NAME_W
             if show_status:
