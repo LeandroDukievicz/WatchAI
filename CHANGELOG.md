@@ -30,6 +30,12 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - `.gitignore`: `.env`, `*.log`, `.tox/`, `*.orig`, `*.rej` e o rascunho
   `docs/publicacao-snap.html`.
 
+### Corrigido
+- Matar um processo de notificação que já havia morrido sozinho levantava
+  `ProcessLookupError` e chegava como **falha de worker** — o CI do Windows
+  quebrou por isso. E a suíte passou a silenciar o notificador do sistema, como
+  já silenciava o áudio: rodar os testes não pode disparar toast de verdade.
+
 [Window Calls]: https://extensions.gnome.org/extension/4724/window-calls/
 
 ### Adicionado (antes)

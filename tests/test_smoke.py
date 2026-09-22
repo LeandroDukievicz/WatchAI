@@ -512,3 +512,36 @@ def test_o_interruptor_de_avisos_fica_salvo():
         assert outro.sound_on is False
 
     run(main())
+
+
+def test_notificador_que_morre_no_meio_nao_derruba_o_app():
+    """O processo do toast pode sumir sozinho antes do timeout: matar um
+    processo já morto levanta ProcessLookupError e isso chegava como falha de
+    worker — no CI do Windows, derrubando a suíte."""
+
+    async def main():
+        from watchai.notify import Notifier
+
+        class ProcessoFantasma:
+            async def wait(self):
+                await asyncio.sleep(3600)  # nunca termina: força o timeout
+
+            def kill(self):
+                raise ProcessLookupError
+
+        async def spawn(*args, **kwargs):
+            return ProcessoFantasma()
+
+        import watchai.notify as modulo
+
+        original, espera = modulo.asyncio.create_subprocess_exec, modulo.TIMEOUT
+        modulo.asyncio.create_subprocess_exec = spawn
+        modulo.TIMEOUT = 0.05
+        try:
+            avisos = Notifier("notify-send")
+            await asyncio.wait_for(avisos.send("t", "b", "ready"), timeout=5)
+        finally:
+            modulo.asyncio.create_subprocess_exec = original
+            modulo.TIMEOUT = espera
+
+    run(main())

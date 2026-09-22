@@ -1,4 +1,4 @@
-"""A suíte não faz barulho, não lê e não escreve a config do usuário.
+"""A suíte não faz barulho, não avisa ninguém e não mexe na config do usuário.
 
 A simulação entra em READY dezenas de vezes durante os testes; sem isto, rodar
 `pytest` dispararia áudio de verdade a cada vez. Quem testa o bip injeta um
@@ -13,12 +13,19 @@ from __future__ import annotations
 
 import pytest
 
-from watchai import sound, theme
+from watchai import notify, sound, theme
 
 
 @pytest.fixture(autouse=True)
 def sem_audio(monkeypatch):
     monkeypatch.setattr(sound, "find_player", lambda kind=sound.READY: None)
+
+
+@pytest.fixture(autouse=True)
+def sem_notificacao(monkeypatch):
+    """Sem isto, a simulação dispara notificação do sistema de verdade — e no
+    Windows do CI o processo do toast morria sozinho e derrubava o worker."""
+    monkeypatch.setattr(notify, "find_notifier", lambda: None)
 
 
 @pytest.fixture(autouse=True)

@@ -18,6 +18,7 @@ Nada aqui pode travar a UI nem derrubar o app: comando que não existe vira
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import shutil
 import sys
 
@@ -28,6 +29,9 @@ APP_NAME = "WatchAI"
 URGENCIA = {"error": "critical", "input": "critical", "ready": "normal"}
 
 POWERSHELL = ("powershell", "pwsh")
+
+# Teto de espera pelo notificador. Passou disso, ele que fique para trás.
+TIMEOUT = 5.0
 
 # Toast do Windows sem instalar módulo nenhum: WinRT puro.
 TOAST_PS = """
@@ -121,9 +125,12 @@ class Notifier:
             self.mechanism = None  # sumiu: para de tentar
             return
         try:
-            await asyncio.wait_for(process.wait(), timeout=5)
+            await asyncio.wait_for(process.wait(), timeout=TIMEOUT)
         except asyncio.TimeoutError:
-            process.kill()  # notificador travado não pode segurar o app
+            # Notificador travado não pode segurar o app — e matar um processo
+            # que já morreu sozinho no meio do caminho também não pode quebrar.
+            with contextlib.suppress(ProcessLookupError, OSError):
+                process.kill()
 
 
-__all__ = ["APP_NAME", "Notifier", "find_notifier"]
+__all__ = ["APP_NAME", "Notifier", "TIMEOUT", "find_notifier"]

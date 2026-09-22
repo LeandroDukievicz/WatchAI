@@ -28,6 +28,7 @@ lugar onde a tty seja sua.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import shutil
@@ -133,7 +134,8 @@ async def _rodar(comando: list[str], timeout: float = 5.0) -> tuple[int, str]:
     try:
         saida, _ = await asyncio.wait_for(processo.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
-        processo.kill()
+        with contextlib.suppress(ProcessLookupError, OSError):
+            processo.kill()
         return 124, ""
     return processo.returncode or 0, (saida or b"").decode("utf-8", "replace")
 

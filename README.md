@@ -647,7 +647,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-55 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
+56 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).
