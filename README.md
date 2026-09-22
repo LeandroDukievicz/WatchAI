@@ -48,6 +48,12 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
+**No Linux, em um comando:** `./scripts/install-linux.sh --desktop` cria o venv,
+instala as dependências, põe o comando `watchai` no PATH e o lançador no menu
+(com `--desktop`, também na área de trabalho). Tudo em `~/.local`, nada de
+`sudo`. Desfaz com `--uninstall`. No macOS e no Windows, o caminho é o
+`pip install -e .` acima — o comando `watchai` sai dele.
+
 ## Uso
 
 ```bash
@@ -85,16 +91,35 @@ ele está dormindo com 0% de CPU. E o diário não sabe se o que ele registrou p
 última entrada do diário     +  processo     =  estado
 ─────────────────────────────────────────────────────────
 texto do assistente             qualquer        READY     terminou
+erro de API / limite            qualquer        ERROR     parou e não volta só
 resultado de ferramenta         qualquer        WORKING   voltou a pensar
 chamada de ferramenta           gastando CPU    WORKING   a ferramenta roda
 chamada de ferramenta           parado há 8 s   INPUT     esperando VOCÊ
 chamada de ferramenta           parado agora    WAITING   esperando algo externo
-(sem diário legível)            gastando CPU    WORKING
+(sem diário legível)            gastando CPU    WORKING   mostra qual ferramenta
 (sem diário legível)            parado          READY
 ```
 
-Agentes sem diário conhecido (Gemini, OpenCode, Aider…) funcionam pela camada de
-processos: aparecem, mostram projeto e tempo, e alternam entre WORKING e READY.
+O diário também diz **desde quando**: o `for MM:SS` do card conta a partir da
+hora real da última mudança, não de quando o WatchAI abriu. Fechar e reabrir o
+app não zera os contadores.
+
+**ERROR não é ferramenta que falhou** — teste vermelho é trabalho normal. É a
+sessão que parou e não volta sozinha: limite de uso atingido, token expirado,
+erro de API.
+
+Agentes sem diário conhecido (Gemini, Aider…) funcionam pela camada de
+processos: aparecem, mostram projeto e tempo, alternam entre WORKING e READY — e
+a atividade mostra **a ferramenta que está rodando** (`running npm test`), lida
+do processo filho que o agente abriu.
+
+| Agente | De onde vem o estado |
+|---|---|
+| **Claude Code** | diário completo: ferramenta, fim de turno, erro de API |
+| **Codex** | diário completo: `task_started`, `task_complete`, aprovação, erro |
+| **OpenCode** | leitor escrito a partir do layout do storage, **ainda não validado contra uma sessão real** — cai na camada de processos se o formato não bater |
+| **Gemini CLI** | processos apenas. O `logs.json` dele grava só as **suas** mensagens: não dá para saber o que ele está fazendo |
+| **Aider, Copilot, Cursor…** | processos apenas |
 
 ## O que é multiplataforma e o que degrada
 
@@ -117,8 +142,8 @@ do pacote (`@anthropic-ai/claude-code`).
   não aparecem.
 - Dois agentes **do mesmo tipo no mesmo diretório** compartilham o diário mais
   recente; o segundo cai na camada de processos.
-- O contador `for MM:SS` começa a contar **quando o WatchAI viu** o estado, não
-  quando ele começou de verdade — o disco não guarda essa hora.
+- O contador `for MM:SS` vem do diário quando existe; para agentes sem diário,
+  ele conta a partir do momento em que o WatchAI viu o estado.
 - INPUT é inferido, não lido: uma ferramenta lenta que não gasta CPU e não
   responde em 8 s aparece como INPUT.
 
@@ -243,6 +268,10 @@ selecionada ganha `▶` e nome em cyan.
 O histórico de todas as sessões junto, **mais novo em cima** (guarda os últimos
 200 eventos). O evento mais recente vem em destaque; os demais, apagados.
 
+**O histórico sobrevive ao fechamento**: o stream abre com o que aconteceu na
+execução anterior (guardado em `~/.config/watchai/events.json`), porque o que
+rodou enquanto você estava fora é justamente o que você não viu.
+
 - **`TAB` move o foco para cá** — a borda acende em cyan e aparece `↑↓ scroll` no
   rodapé da caixa. Com o foco aqui, `↑ ↓` rolam o histórico em vez de trocar de
   sessão. Ao sair (`TAB` de novo) ele volta ao topo, para nunca ficar preso
@@ -312,12 +341,17 @@ Cada card carrega um semáforo de 3 lâmpadas — é a leitura "de longe", antes
 ler qualquer texto. É também a identidade do produto.
 
 ```
-╭───╮
-│ ● │  vermelha · ERROR
-│ ● │  amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
-│ ● │  verde    · READY
-╰───╯
+╭─────╮
+│  ●  │  vermelha · ERROR
+│  ●  │  amarela  · WORKING, WAITING, STARTING e INPUT (piscando)
+│  ●  │  verde    · READY
+╰─────╯
 ```
+
+**A lâmpada acesa brilha.** Além da cor cheia e do negrito, as três células dela
+recebem um fundo tingido da própria cor, e a carcaça inteira troca o cinza por um
+tom da cor acesa. É esse halo que faz o semáforo ser lido antes do texto, de
+longe e de canto de olho.
 
 Como num semáforo de verdade, as lâmpadas apagadas não somem: ficam num tom bem
 escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. INPUT é o
@@ -325,10 +359,23 @@ escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. INPUT é o
 Abaixo de 60 colunas o semáforo sai (não cabe) e quem dá o estado é a barra
 lateral colorida.
 
-## O bip de READY
+## Os avisos (bip e notificação)
 
-Quando uma sessão **entra** em READY, o app toca um bip curto — a ideia é você
-saber sem estar olhando.
+Quando uma sessão **entra** em READY, INPUT ou ERROR, o app avisa — a ideia é
+você saber sem estar olhando. São os três estados que param o seu trabalho:
+terminou, travou esperando você, quebrou.
+
+**Um timbre por estado**, porque avisar os três com o mesmo som obrigaria você a
+olhar a tela para saber qual foi. Cada um pega um som do tema do sistema; nada é
+embutido no pacote.
+
+**Notificação do sistema junto do bip**, com o estado, o projeto e o terminal —
+mas **só quando o WatchAI não está em foco**: se você já está olhando para ele,
+o pop-up é ruído. `notify-send` no Linux, `osascript` no macOS e toast por
+PowerShell no Windows (este último, não verificado em máquina real).
+
+`B` liga e desliga os dois de uma vez, e a escolha **fica salva** para as
+próximas execuções.
 
 O som sai pelo **servidor de som** (PipeWire/PulseAudio), não pelo bell do
 terminal (`\a`). Essa escolha é o ponto todo: bell vira flash visual em vários
@@ -336,11 +383,15 @@ emuladores, costuma vir desligado e não ajuda com a aba em segundo plano. Um
 stream de áudio normal toca independente de foco.
 
 - `B` liga/desliga; o rodapé mostra `B BIP` ou `B MUDO`. Religar confirma com um bip.
-- Uma rajada de READY vira um bip só (janela de 1 s), sem enfileirar áudio.
-- Não bipa na abertura por uma sessão que já nasceu READY, nem em outros estados.
+- Uma rajada do **mesmo** aviso vira um bip só (janela de 1 s), sem enfileirar
+  áudio. Mas READY seguido de ERROR são duas notícias diferentes: as duas tocam.
+- Não avisa na abertura pelas sessões que já estavam lá — só pelo que muda
+  depois que você abriu o WatchAI.
+- No máximo 3 notificações por rodada: cinco sessões mudando juntas não viram
+  cinco pop-ups.
 - Ordem de preferência: `pw-play` → `paplay` → `ffplay`, tocando um bip do tema do
   sistema. Sem nenhum deles, tenta `canberra-gtk-play`; em último caso, o bell do terminal.
-- Para avisar também em INPUT ou ERROR, inclua os estados em `ALERT_STATUSES`
+- Para mudar quais estados avisam, é o mapa `ALERT_SOUND`
   ([`src/watchai/app.py`](src/watchai/app.py)).
 
 ## Temas (`T`)
@@ -484,7 +535,8 @@ WatchAI/
 │   ├── theme.py                 # as 8 paletas + paleta ativa ($aw-* para o TCSS)
 │   ├── layout.py                # breakpoints (LARGE/MEDIUM/SMALL/TINY) + teto da área
 │   ├── format.py                # ellipsize, HH:MM:SS, mm:ss
-│   ├── sound.py                 # bip (descobre o player do sistema)
+│   ├── sound.py                 # bip: um timbre por estado, player do sistema
+│   ├── notify.py                # notificação do sistema (libnotify/osascript/toast)
 │   ├── config.py                # preferências salvas (~/.config/watchai/config.json)
 │   ├── models/                  # Status, Agent, Session (= terminal), SessionStore
 │   ├── providers/               # ← a detecção real
@@ -532,7 +584,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-39 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
+50 testes headless (sem terminal real, **sem tocar áudio**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).
@@ -548,26 +600,26 @@ caminho), a árvore de três processos do `codex` contando como um agente só, o
 agrupamento por terminal, a prioridade de estado entre agentes, o ciclo
 IDLE → OFFLINE → aviso → remoção, os estados lidos do diário (terminou,
 ferramenta pendente com processo parado = INPUT, com processo ocupado =
-WORKING) e a garantia de que diário corrompido ou varredura que explode não
-derrubam nada.
+WORKING) a garantia de que diário corrompido ou varredura que explode não derrubam
+nada, o tempo do estado vindo do diário (inclusive carimbo no futuro, que não
+pode virar contador negativo), o erro de API virando ERROR, os avisos com
+timbre por estado, a notificação que só sai com a janela fora de foco e o
+histórico que sobrevive ao fechamento.
 
 CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 
 ## Roadmap
 
 O plano completo, com checkpoints, está em [MILESTONE.md](MILESTONE.md). O
-resumo do que ainda não existe, em ordem de utilidade:
+resumo do que ainda não existe:
 
-1. **Diário do Gemini, do OpenCode e do Aider** — hoje eles vivem só da camada de
-   processos (WORKING/READY). O formato de cada um é a única coisa que falta;
-   `providers/transcript.py` já é uma classe por agente.
-2. **Validar Windows e macOS na prática.** O código trata os dois (identidade de
-   terminal pelo shell, agente reconhecido pelo caminho do pacote) e o CI roda a
-   suíte, mas ninguém abriu o app num Windows de verdade ainda.
-3. **Notificação do sistema** além do bip, para quando o WatchAI está numa aba
-   que você não vê.
-4. **Histórico entre execuções** — hoje o EVENT STREAM começa vazio a cada
-   abertura.
+1. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
+   suíte nos três, mas ninguém abriu o app num Windows ou num Mac de verdade —
+   é código testado, não software verificado.
+2. **Confirmar o leitor do OpenCode** contra uma sessão real.
+3. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
+   verificar o formato.
+4. **Publicar no PyPI**, para instalar com `pipx install watchai` sem clonar.
 
 ## Licença
 

@@ -17,9 +17,10 @@ from textual.app import App
 from textual.binding import Binding
 from textual.reactive import reactive
 
-from . import config
+from . import config, sound
 from .mock import MockSimulator, build_store
-from .models import SessionStore, Status
+from .models import PRIORIDADE, SessionStore, Status
+from .notify import Notifier
 from .providers import LiveProvider
 from .screens import Dashboard, HelpScreen, ThemeScreen
 from .sound import Alert
@@ -31,12 +32,24 @@ TICK_SECONDS = 0.5  # cadência das animações discretas e dos contadores
 # UI ela engasgaria a animação; mais rápido que isso não muda nada na tela.
 SCAN_SECONDS = 2.0
 
-# Estados que merecem bip. READY é "terminou, é a sua vez" — o aviso que vale
-# ouvir de outra janela. Para avisar também em INPUT/ERROR, é só incluí-los aqui.
-ALERT_STATUSES = frozenset({Status.READY})
+# Estados que merecem aviso, e o timbre de cada um. São os três que param o
+# seu trabalho: terminou, travou esperando você, quebrou. Timbres diferentes
+# porque avisar os três com o mesmo som obriga a olhar para saber qual foi.
+ALERT_SOUND = {
+    Status.READY: sound.READY,
+    Status.INPUT: sound.INPUT,
+    Status.ERROR: sound.ERROR,
+}
+ALERT_STATUSES = frozenset(ALERT_SOUND)
 
-# Intervalo mínimo entre dois bips, em segundos.
+# Intervalo mínimo entre dois bips **do mesmo timbre**, em segundos. Uma
+# rajada de READY vira um bip só; mas um READY seguido de um ERROR são duas
+# notícias diferentes e as duas têm que ser ouvidas.
 ALERT_MIN_INTERVAL = 1.0
+
+# Teto de notificações por rodada: cinco sessões mudando juntas não podem virar
+# cinco pop-ups.
+MAX_NOTIFICACOES = 3
 
 
 class WatchAIApp(App):
@@ -66,11 +79,13 @@ class WatchAIApp(App):
         theme_key: str | None = None,
         mock: bool = False,
         source=None,
+        notifier: Notifier | None = None,
     ) -> None:
         super().__init__()
         # A paleta precisa valer já no primeiro parse do TCSS, antes do on_mount.
         saved = theme_key if theme_key is not None else config.load_theme()
         self.palette_key = use(saved or DEFAULT.key).key
+        self.set_reactive(WatchAIApp.sound_on, config.load_alerts())
         if mock:
             self.store = build_store()
             self.simulator = MockSimulator(self.store, seed=seed)
@@ -79,14 +94,21 @@ class WatchAIApp(App):
             self.store = SessionStore()
             self.simulator = None
             self.provider = LiveProvider(self.store, source)
+            # O que aconteceu enquanto o app estava fechado continua valendo:
+            # o stream abre com o histórico da execução anterior.
+            self.store.load_events(config.load_events())
         self._scanning = False
         self._last_scan = 0.0
         self.alert = alert or Alert()
+        self.notifier = notifier if notifier is not None else Notifier()
+        # O terminal avisa quando ganha e perde foco. Começamos assumindo que
+        # não está em foco: notificar à toa incomoda menos que ficar mudo.
+        self._focused = False
         # Estado visto por último, por sessão: é a diferença contra ele que
         # dispara o bip. Começa preenchido para uma sessão que já nasce READY
         # não tocar nada na abertura.
         self._seen: dict[int, Status] = {s.id: s.status for s in self.store.sessions}
-        self._last_alert = 0.0
+        self._last_alert: dict[str, float] = {}
 
     def get_css_variables(self) -> dict[str, str]:
         # No primeiro parse o tema ainda é o do Textual, que não conhece os
@@ -156,6 +178,20 @@ class WatchAIApp(App):
         if self.provider.apply(snapshot, datetime.now()):
             self.version += 1
 
+    def on_unmount(self) -> None:
+        self.save_history()
+
+    def save_history(self) -> None:
+        if self.provider is not None:  # o mock não tem histórico que valha salvar
+            config.save_events(self.store.dump_events())
+
+    # -- foco do terminal --------------------------------------------------------
+    def on_app_focus(self) -> None:
+        self._focused = True
+
+    def on_app_blur(self) -> None:
+        self._focused = False
+
     # -- bip --------------------------------------------------------------------
     def watch_version(self) -> None:
         """Toda mudança de dados passa por aqui — inclusive a integração real,
@@ -163,39 +199,64 @@ class WatchAIApp(App):
         self.check_alerts()
 
     def check_alerts(self) -> bool:
-        """Compara com o estado visto antes e bipa se alguma sessão ficou READY.
+        """Compara com o estado visto antes e avisa o que passou a pedir você.
 
-        Um bip por rodada, mesmo que duas sessões mudem juntas.
+        Um bip por rodada, mesmo que duas sessões mudem juntas: o timbre é o do
+        estado mais urgente da rodada.
         """
-        entered = False
+        disparos = []
         for session in self.store.sessions:
             before = self._seen.get(session.id)
             if session.status is before:
                 continue
             self._seen[session.id] = session.status
+            # `before is None` é sessão recém-descoberta: o inventário da
+            # abertura não avisa nada.
             if session.status in ALERT_STATUSES and before is not None:
-                entered = True
-        if entered and self.sound_on:
-            self.play_alert()
-        return entered
+                disparos.append(session)
+        if not disparos or not self.sound_on:
+            return bool(disparos)
 
-    def play_alert(self, *, force: bool = False) -> None:
+        principal = min(disparos, key=lambda s: PRIORIDADE.index(s.status))
+        self.play_alert(kind=ALERT_SOUND[principal.status])
+        for session in disparos[:MAX_NOTIFICACOES]:
+            self.notify_session(session)
+        return True
+
+    def notify_session(self, session) -> None:
+        """Notificação do sistema — só quando você NÃO está olhando o WatchAI."""
+        if self._focused or not self.notifier.available:
+            return
+        title = f"{session.status.label} · {session.short}"
+        body = session.activity or ""
+        if session.terminal:
+            body = f"{body}  ({session.terminal})" if body else session.terminal
+        self.run_worker(
+            self.notifier.send(title, body, ALERT_SOUND.get(session.status, sound.READY)),
+            group="notify",
+            exclusive=False,
+        )
+
+    def play_alert(self, kind: str = sound.READY, *, force: bool = False) -> None:
         """Dispara o som sem segurar a UI (o processo morre sozinho em ~0,3 s).
 
         Rajadas de READY (segurar o R, por exemplo) viram um bip só: mais que
         isso é barulho e uma pilha de processos de áudio à toa.
         """
         now = monotonic()
-        if not force and now - self._last_alert < ALERT_MIN_INTERVAL:
+        if not force and now - self._last_alert.get(kind, 0.0) < ALERT_MIN_INTERVAL:
             return
-        self._last_alert = now
+        self._last_alert[kind] = now
         if self.alert.available:
-            self.run_worker(self.alert.play(), group="alert", exclusive=False)
+            self.run_worker(self.alert.play(kind), group="alert", exclusive=False)
         else:
             self.bell()  # sem player no sistema: resta o bell do terminal
 
     def action_toggle_sound(self) -> None:
+        """`B` liga e desliga os avisos — bip e notificação juntos — e a escolha
+        vale para as próximas execuções."""
         self.sound_on = not self.sound_on
+        config.save_alerts(self.sound_on)
         if self.sound_on:
             self.play_alert(force=True)  # confirma ligando com o próprio som
 

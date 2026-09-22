@@ -14,7 +14,10 @@ from typing import Any
 
 APP_DIR = "watchai"
 FILE_NAME = "config.json"
+EVENTS_FILE = "events.json"
+MAX_EVENTOS_SALVOS = 200
 THEME_KEY = "theme"
+ALERTS_KEY = "alerts"
 
 
 def config_dir() -> Path:
@@ -58,4 +61,56 @@ def save_theme(key: str) -> bool:
     return save(**{THEME_KEY: key})
 
 
-__all__ = ["config_dir", "config_path", "load", "load_theme", "save", "save_theme"]
+def events_path() -> Path:
+    return config_dir() / EVENTS_FILE
+
+
+def load_events() -> list[dict]:
+    """O histórico da execução anterior. Lista vazia se não houver nada legível."""
+    try:
+        dados = json.loads(events_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(dados, list):
+        return []
+    return [e for e in dados if isinstance(e, dict)][:MAX_EVENTOS_SALVOS]
+
+
+def save_events(eventos: list[dict]) -> bool:
+    """Guarda o histórico para a próxima execução. Falhar aqui não é problema:
+    perder histórico não pode derrubar nada."""
+    try:
+        caminho = events_path()
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        caminho.write_text(
+            json.dumps(eventos[:MAX_EVENTOS_SALVOS], ensure_ascii=False), encoding="utf-8"
+        )
+    except OSError:
+        return False
+    return True
+
+
+def load_alerts(default: bool = True) -> bool:
+    """Se os avisos (bip + notificação) estão ligados. Ligados, se não houver
+    nada salvo — quem instala um monitor quer ser avisado."""
+    value = load().get(ALERTS_KEY)
+    return value if isinstance(value, bool) else default
+
+
+def save_alerts(ligado: bool) -> bool:
+    return save(**{ALERTS_KEY: bool(ligado)})
+
+
+__all__ = [
+    "config_dir",
+    "config_path",
+    "events_path",
+    "load",
+    "load_events",
+    "save_events",
+    "load_alerts",
+    "load_theme",
+    "save",
+    "save_alerts",
+    "save_theme",
+]

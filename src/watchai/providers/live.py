@@ -198,6 +198,18 @@ class LiveProvider:
         sessao.agents.clear()
         self.store.log(sessao, now, "terminal detected")
 
+    @staticmethod
+    def _instante(desde: float | None, agora: float, now: datetime) -> datetime:
+        """Quando o estado começou. O diário sabe a hora de verdade; sem ele,
+        vale agora — que é quando **nós** vimos.
+
+        Carimbo no futuro (relógio torto, fuso mal gravado) vira agora: um
+        contador negativo na tela é pior que um contador otimista.
+        """
+        if desde is None or desde > agora:
+            return now
+        return datetime.fromtimestamp(desde)
+
     def _atualizar(
         self, sessao: Session, grupo: list[ProcObs], agora: float, now: datetime
     ) -> bool:
@@ -205,7 +217,8 @@ class LiveProvider:
         por_pid = {a.pid: a for a in sessao.agents}
         novos = []
         for o in grupo:
-            status, atividade = self._estado(o, agora)
+            status, atividade, desde = self._estado(o, agora)
+            comecou = self._instante(desde, agora, now)
             agente = por_pid.pop(o.pid, None)
             if agente is None:
                 from ..models import Agent
@@ -217,13 +230,13 @@ class LiveProvider:
                     status=status,
                     activity=atividade,
                     started_at=datetime.fromtimestamp(o.created),
-                    status_since=now,
+                    status_since=comecou,
                 )
                 if not self._inventario:
                     self.store.log(sessao, now, f"{o.label} started")
                 mudou = True
             elif agente.status is not status:
-                agente.status, agente.status_since = status, now
+                agente.status, agente.status_since = status, comecou
                 agente.activity = atividade
                 mudou = True
             else:
@@ -275,6 +288,11 @@ class LiveProvider:
         if status is sessao.status and atividade == sessao.activity:
             return False
         self.store.transition(sessao, status, atividade, now)
+        # O contador do card é o do agente que decidiu o estado: se o diário
+        # sabe desde quando, é esse tempo que vale — não o instante em que o
+        # WatchAI abriu.
+        if dono is not None:
+            sessao.status_since = dono.status_since
         return True
 
     # -- estado de um agente ---------------------------------------------------
@@ -289,8 +307,10 @@ class LiveProvider:
         passou = agora - anterior[1]
         return passou > 0 and (o.cpu - anterior[0]) / passou > CPU_OCUPADO
 
-    def _estado(self, o: ProcObs, agora: float) -> tuple[Status, str]:
-        """O estado de um agente: o diário diz o quê, o processo diz se anda.
+    def _estado(self, o: ProcObs, agora: float) -> tuple[Status, str, float | None]:
+        """O estado de um agente, e desde quando.
+
+        O diário diz o quê, o processo diz se anda.
 
         Nenhum dos dois sozinho resolve — o processo não sabe distinguir
         "terminou" de "travou esperando você", e o diário não sabe se o que ele
@@ -298,34 +318,44 @@ class LiveProvider:
         """
         ocupado = self._ocupado(o, agora)
         if agora - o.created < STARTING_SEGUNDOS:
-            return Status.STARTING, ATIVIDADE[Status.STARTING]
+            return Status.STARTING, ATIVIDADE[Status.STARTING], o.created
 
         leitura = self.transcripts.ler(o.kind, o.cwd) if self.transcripts else None
         if leitura is not None:
+            desde = leitura.desde
             if leitura.estado == ERRO:
-                return Status.ERROR, leitura.atividade
+                return Status.ERROR, leitura.atividade, desde
             if leitura.estado == FERRAMENTA:
                 if ocupado:
-                    return Status.WORKING, leitura.atividade
+                    return Status.WORKING, leitura.atividade, desde
                 # Parado com ferramenta pendente: o diário mudo há mais de
                 # ESPERA_HUMANA é pedido de confirmação; recém-escrito é espera
                 # por algo externo.
                 parado = agora - leitura.mtime
                 if parado >= ESPERA_HUMANA:
-                    return Status.INPUT, leitura.atividade
-                return Status.WAITING, leitura.atividade
+                    return Status.INPUT, leitura.atividade, desde
+                return Status.WAITING, leitura.atividade, desde
             if leitura.estado == PENSANDO:
                 if ocupado or leitura.fresca(agora):
-                    return Status.WORKING, leitura.atividade
-                return Status.READY, "task completed"
+                    return Status.WORKING, leitura.atividade, desde
+                return Status.READY, "task completed", desde
             if leitura.estado == FEITO:
                 if ocupado:
-                    return Status.WORKING, ATIVIDADE[Status.WORKING]
-                return Status.READY, leitura.atividade
+                    atividade = (
+                        f"running {o.tool_label}" if o.tool_label else ATIVIDADE[Status.WORKING]
+                    )
+                    return Status.WORKING, atividade, None
+                return Status.READY, leitura.atividade, desde
 
         if ocupado:
-            return Status.WORKING, "running a tool" if o.tool_children else ATIVIDADE[Status.WORKING]
-        return Status.READY, ATIVIDADE[Status.READY]
+            # Sem diário, a ferramenta que está rodando é a melhor resposta
+            # para "o que ele está fazendo" — e funciona com qualquer agente.
+            return (
+                Status.WORKING,
+                f"running {o.tool_label}" if o.tool_label else ATIVIDADE[Status.WORKING],
+                None,
+            )
+        return Status.READY, ATIVIDADE[Status.READY], None
 
     # -- consulta para a UI ----------------------------------------------------
     def expirando(self, sessao: Session, now: datetime) -> bool:

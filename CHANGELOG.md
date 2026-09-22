@@ -3,7 +3,32 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançado]
+## [1.1.0] — 2026-09-22
+
+### Adicionado (avisos e detecção fina)
+- **Aviso em READY, INPUT e ERROR**, com um **timbre por estado** — avisar os
+  três com o mesmo som obrigaria a olhar a tela para saber qual foi.
+- **Notificação do sistema** junto do bip (`notify-send` · `osascript` · toast
+  por PowerShell), **só quando o WatchAI não está em foco**.
+- **Tempo real do estado**: `for MM:SS` conta da hora registrada no diário do
+  agente, não de quando o app abriu. Fechar e reabrir não zera mais os contadores.
+- **ERROR de verdade no Claude Code**: limite de uso e token expirado
+  (`isApiErrorMessage`) — a sessão que parou e não volta sozinha.
+- **Atividade por ferramenta para qualquer agente**: sem diário, mostra o
+  processo filho que está rodando (`running npm test`).
+- Leitor do **OpenCode** (layout `session/{info,message,part}`) — escrito a
+  partir do storage do binário, ainda não validado contra sessão real.
+- **Histórico do EVENT STREAM entre execuções** (`~/.config/watchai/events.json`).
+- `scripts/install-linux.sh`: comando no PATH, lançador no menu, atalho opcional
+  na área de trabalho, `--uninstall`.
+- Interruptor dos avisos (`B`) salvo entre execuções.
+
+### Mudado
+- **Semáforo com mais presença**: a carcaça toma a cor da lâmpada acesa e a
+  lâmpada ganha halo (fundo tingido da própria cor). Largura de 5 → 7 colunas.
+- Debounce dos avisos passou a ser **por timbre**: rajada do mesmo estado vira um
+  bip só, mas READY seguido de ERROR toca os dois.
+
 
 ### Adicionado
 - **Detecção real das sessões**, sem integrar nada: varredura da tabela de
@@ -54,4 +79,5 @@ detecção de processos nem integração com nenhuma IA (ver "Roadmap" no README
 - Simulador que troca os estados sozinho a cada 5–12 s para avaliar a UI em movimento.
 - Suíte de testes headless (17 testes) e CI no GitHub Actions.
 
+[1.1.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.1.0
 [1.0.0]: https://github.com/LeandroDukievicz/WatchAI/tree/v1.0.0

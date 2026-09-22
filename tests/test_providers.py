@@ -307,3 +307,158 @@ def test_varredura_em_thread_alimenta_a_tela():
             assert app.provider.transcripts is not None  # detecção completa por padrão
 
     asyncio.run(main())
+
+
+def test_o_tempo_do_estado_vem_do_diario(tmp_path):
+    """`for MM:SS` tem que contar desde que aconteceu, não desde que o WatchAI
+    abriu — senão todo card zera quando você abre o app."""
+    agora = datetime.now()
+    dez_minutos_atras = agora - timedelta(minutes=10)
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        {
+            "type": "assistant",
+            "timestamp": dez_minutos_atras.astimezone().isoformat(),
+            "message": {"content": [{"type": "text", "text": "pronto"}]},
+        }
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(agora)
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.READY
+    assert abs((agente.status_since - dez_minutos_atras).total_seconds()) < 2
+    assert store.sessions[0].status_since == agente.status_since  # o card acompanha
+
+
+def test_carimbo_no_futuro_nao_vira_contador_negativo(tmp_path):
+    agora = datetime.now()
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        {
+            "type": "assistant",
+            "timestamp": (agora + timedelta(hours=3)).astimezone().isoformat(),
+            "message": {"content": [{"type": "text", "text": "pronto"}]},
+        }
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(agora)
+    assert store.sessions[0].agents[0].status_since <= agora
+
+
+def test_erro_de_api_do_claude_vira_error(tmp_path):
+    """Limite de sessão e token expirado param a sessão e não voltam sozinhos —
+    é exatamente o que o ERROR existe para avisar."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        assistente({"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}),
+        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}},
+        {
+            "type": "assistant",
+            "isApiErrorMessage": True,
+            "timestamp": datetime.now().astimezone().isoformat(),
+            "message": {"content": [{"type": "text", "text": "You've hit your session limit · resets 10:30pm"}]},
+        },
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.ERROR
+    assert "session limit" in agente.activity
+
+
+def escreve_opencode(home: Path, cwd: str, *, completada: bool, ferramenta: dict | None = None):
+    """Monta o storage do OpenCode no layout que o binário declara."""
+    raiz = home / ".local" / "share" / "opencode" / "storage" / "session"
+    (raiz / "info").mkdir(parents=True, exist_ok=True)
+    ses = "ses_abc"
+    (raiz / "info" / f"{ses}.json").write_text(
+        json.dumps({"id": ses, "directory": cwd, "title": "teste"}), encoding="utf-8"
+    )
+    msgs = raiz / "message" / ses
+    msgs.mkdir(parents=True, exist_ok=True)
+    tempo = {"created": 1790000000000}
+    if completada:
+        tempo["completed"] = 1790000001000
+    (msgs / "msg_1.json").write_text(
+        json.dumps({"id": "msg_1", "role": "assistant", "time": tempo}), encoding="utf-8"
+    )
+    if ferramenta:
+        partes = raiz / "part" / ses / "msg_1"
+        partes.mkdir(parents=True, exist_ok=True)
+        (partes / "prt_1.json").write_text(json.dumps(ferramenta), encoding="utf-8")
+
+
+def test_opencode_terminou(tmp_path):
+    escreve_opencode(tmp_path, "/home/eu/proj", completada=True)
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "opencode"))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    assert store.sessions[0].agents[0].status is Status.READY
+
+
+def test_opencode_com_ferramenta_rodando(tmp_path):
+    escreve_opencode(
+        tmp_path,
+        "/home/eu/proj",
+        completada=False,
+        ferramenta={"type": "tool", "tool": "bash", "state": {"status": "running",
+                                                              "input": {"command": "npm test"}}},
+    )
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "opencode", tool_children=1))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.WORKING and agente.activity == "bash: npm test"
+
+
+def test_storage_do_opencode_em_formato_estranho_nao_derruba(tmp_path):
+    raiz = tmp_path / ".local" / "share" / "opencode" / "storage" / "session" / "info"
+    raiz.mkdir(parents=True)
+    (raiz / "ses_x.json").write_text("isto não é json", encoding="utf-8")
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "opencode"))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    assert store.sessions[0].agents[0].status is Status.READY  # caiu no processo
+
+
+def test_agente_sem_diario_mostra_a_ferramenta_que_esta_rodando():
+    """Gemini, Aider e qualquer agente desconhecido: sem diário, o que ele está
+    fazendo é o processo filho que ele abriu."""
+    store = SessionStore()
+    fonte = Fonte(snap(obs(10, "gemini", tool_children=1, tool_label="npm test")))
+    p = provider(store, fonte)
+    p.poll(AGORA)
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.WORKING and agente.activity == "running npm test"
+
+
+def test_o_stream_sobrevive_ao_fechamento_do_app(tmp_path, monkeypatch):
+    """O que aconteceu enquanto o WatchAI estava fechado continua valendo."""
+    import asyncio
+
+    from watchai import config
+    from watchai.app import WatchAIApp
+    from watchai.notify import Notifier
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+
+    async def main():
+        fonte = Fonte(snap(obs(10)))
+        app = WatchAIApp(mock=False, source=fonte, theme_key="watchai", notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            app.provider.apply(fonte.snapshot(), datetime.now())
+            app.version += 1
+            await pilot.pause()
+            assert app.store.events
+            app.save_history()
+
+        salvo = config.load_events()
+        assert salvo and salvo[0]["short"] == "PROJ"
+
+        outro = WatchAIApp(mock=False, source=Fonte(Snapshot()), theme_key="watchai",
+                           notifier=Notifier(None))
+        assert outro.store.events  # abriu já com o histórico
+        assert outro.store.events[0].session_id == -1  # sem se confundir com sessão nova
+
+    asyncio.run(main())

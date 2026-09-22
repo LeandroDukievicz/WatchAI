@@ -12,6 +12,11 @@ from .session import Session, SessionEvent, Status
 
 MAX_EVENTS = 200
 
+# Eventos que vieram do histórico não pertencem a nenhuma sessão desta execução:
+# os números de sessão são refeitos a cada abertura, e deixar o id antigo faria
+# um evento velho aparecer nos detalhes de uma sessão nova e sem relação.
+SESSAO_ANTIGA = -1
+
 
 class SessionStore:
     def __init__(self, sessions: list[Session] | None = None) -> None:
@@ -34,6 +39,40 @@ class SessionStore:
 
     def events_for(self, session_id: int, limit: int = 5) -> list[SessionEvent]:
         return [e for e in self.events if e.session_id == session_id][:limit]
+
+    # -- histórico entre execuções -----------------------------------------
+    def dump_events(self) -> list[dict]:
+        return [
+            {
+                "at": e.at.isoformat(timespec="seconds"),
+                "short": e.short,
+                "status": e.status.name,
+                "message": e.message,
+            }
+            for e in self.events
+        ]
+
+    def load_events(self, dados: list[dict]) -> int:
+        """Devolve o histórico salvo ao stream. Entrada ilegível é descartada
+        em silêncio: histórico é conforto, não pode quebrar a abertura."""
+        recuperados = []
+        for item in dados:
+            try:
+                recuperados.append(
+                    SessionEvent(
+                        at=datetime.fromisoformat(item["at"]),
+                        session_id=SESSAO_ANTIGA,
+                        short=str(item.get("short", "")),
+                        status=Status[item["status"]],
+                        message=str(item.get("message", "")),
+                    )
+                )
+            except (KeyError, ValueError, TypeError):
+                continue
+        self.events.extend(recuperados)
+        self.events.sort(key=lambda e: e.at, reverse=True)
+        del self.events[MAX_EVENTS:]
+        return len(recuperados)
 
     # -- escrita -----------------------------------------------------------
     def log(self, session: Session, at: datetime, message: str | None = None) -> None:

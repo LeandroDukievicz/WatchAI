@@ -1,3 +1,3 @@
 """WatchAI — monitor de sessões de IA no terminal (protótipo visual)."""
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

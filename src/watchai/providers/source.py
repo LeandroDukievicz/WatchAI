@@ -18,6 +18,7 @@ o análogo certo: cada aba do Windows Terminal abre o seu próprio shell.
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -54,6 +55,7 @@ class ProcObs:
     cpu: float  # segundos de CPU acumulados pelo agente + descendentes
     cwd: str | None = None
     tool_children: int = 0  # descendentes que são ferramenta rodando agora
+    tool_label: str = ""  # a ferramenta mais recente ("npm test", "rg foo")
     ancestors: tuple[int, ...] = field(default=())  # para desduplicar por árvore
 
 
@@ -207,16 +209,44 @@ class PsutilSource:
                 tabela[shell_pid].get("create_time") if shell_pid else nascimento
             ) or nascimento
 
+            def rotulo_ferramenta(info_filho: dict) -> str:
+                """O que a ferramenta é, em poucas palavras — é isso que vira a
+                atividade de um agente que não tem diário para ler."""
+                argv = [a for a in (info_filho.get("cmdline") or []) if a]
+                if not argv:
+                    return info_filho.get("name") or ""
+                nome = re.split(r"[\\/]", argv[0])[-1]
+                if nome.removesuffix(".exe") in SHELLS and len(argv) > 2 and argv[1] in ("-c", "/c", "-lc"):
+                    # O shell é só o envelope. E o Claude Code embrulha o
+                    # comando num `eval '...'` depois de carregar o snapshot do
+                    # ambiente: o que interessa é o que vem depois do eval.
+                    texto = argv[2]
+                    if "eval '" in texto:
+                        texto = texto.split("eval '", 1)[1].rstrip("'")
+                else:
+                    texto = " ".join([nome, *argv[1:]])
+                texto = " ".join(texto.split())
+                return texto[:37] + "…" if len(texto) > 38 else texto
+
             filhotes = descendentes(pid)
             cpu = cpu_de(info) + sum(cpu_de(tabela[f]) for f in filhotes if f in tabela)
-            ferramentas = sum(
-                1
+            ferramentas_vivas = [
+                f
                 for f in filhotes
                 if f in tabela
                 and INFRA_SEGUNDOS
                 < (tabela[f].get("create_time") or 0) - nascimento
                 and agora - (tabela[f].get("create_time") or 0) < FERRAMENTA_MAX_SEGUNDOS
-            )
+                # Processo auxiliar do próprio agente (o host de ferramentas do
+                # codex, por exemplo) é infraestrutura, não ferramenta rodando.
+                and identify(tabela[f].get("cmdline")) is None
+            ]
+            ferramentas = len(ferramentas_vivas)
+            rotulo = ""
+            if ferramentas_vivas:
+                # A mais nova é a que está acontecendo agora.
+                recente = max(ferramentas_vivas, key=lambda f: tabela[f].get("create_time") or 0)
+                rotulo = rotulo_ferramenta(tabela[recente])
 
             obs.append(
                 ProcObs(
@@ -234,6 +264,7 @@ class PsutilSource:
                     cpu=cpu,
                     cwd=cwd,
                     tool_children=ferramentas,
+                    tool_label=rotulo,
                     ancestors=tuple(linha),
                 )
             )

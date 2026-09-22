@@ -18,7 +18,7 @@ from watchai import sound, theme
 
 @pytest.fixture(autouse=True)
 def sem_audio(monkeypatch):
-    monkeypatch.setattr(sound, "find_player", lambda: None)
+    monkeypatch.setattr(sound, "find_player", lambda kind=sound.READY: None)
 
 
 @pytest.fixture(autouse=True)

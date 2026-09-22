@@ -3,11 +3,16 @@
 É a leitura "de longe": antes de ler qualquer texto, a lâmpada acesa já diz se
 a sessão está rodando, pronta ou com problema.
 
-    ╭───╮
-    │ ● │   vermelha · ERROR
-    │ ● │   amarela   · WORKING, WAITING, STARTING e INPUT (piscando)
-    │ ● │   verde     · READY
-    ╰───╯
+    ╭─────╮
+    │  ●  │   vermelha · ERROR
+    │  ●  │   amarela   · WORKING, WAITING, STARTING e INPUT (piscando)
+    │  ●  │   verde     · READY
+    ╰─────╯
+
+A lâmpada acesa **brilha**: além de vir na cor cheia e em negrito, as três
+células dela recebem um fundo tingido da própria cor, e a carcaça inteira
+troca o cinza por um tom da cor acesa. É o halo que faz o semáforo ser lido
+antes do texto, do outro lado da sala.
 
 Como num semáforo de verdade, as lâmpadas apagadas não somem: ficam num tom
 bem escuro da própria cor. OFFLINE apaga as três e escurece também a carcaça.
@@ -26,19 +31,25 @@ from textual.widget import Widget
 from ..models import Status
 from ..theme import colors, fade
 
-WIDTH = 5
+WIDTH = 7
 HEIGHT = 5
 
 LAMP = "●"
-CAP_TOP = "╭───╮"
-CAP_BOTTOM = "╰───╯"
+CAP_TOP = "╭─────╮"
+CAP_BOTTOM = "╰─────╯"
 WALL_LEFT = "│ "
 WALL_RIGHT = " │"
+HALO = " {} "  # as três células que formam o brilho da lâmpada
 
 # Brilho das lâmpadas apagadas (0.0 = some no fundo, 1.0 = cor cheia).
 DIM = 0.16
 DIM_OFFLINE = 0.07
 HOUSING_OFFLINE = 0.25
+
+# Fundo tingido atrás da lâmpada acesa, e a cor que a carcaça toma quando há
+# lâmpada acesa: é daqui que vem o destaque.
+GLOW = 0.20
+HOUSING_LIT = 0.55
 
 RED_LAMP, AMBER_LAMP, GREEN_LAMP = 0, 1, 2
 LAMPS = 3
@@ -96,24 +107,29 @@ class TrafficLight(Widget):
     def _lamp_style(self, index: int, lit: int | None) -> Style:
         color = lamp_colors()[index]
         if index == lit:
-            return Style(color=color, bold=True)
+            # Cor cheia, negrito e halo: a lâmpada acesa ocupa as três células.
+            return Style(color=color, bgcolor=fade(color, GLOW), bold=True)
         level = DIM_OFFLINE if self.status is Status.OFFLINE else DIM
         return Style(color=fade(color, level))
 
+    def _housing_style(self, lit: int | None) -> Style:
+        """A carcaça acompanha a lâmpada: cinza parada, tingida quando acende."""
+        if self.status is Status.OFFLINE:
+            return Style(color=fade(colors().line_hi, HOUSING_OFFLINE))
+        if lit is None:
+            return Style(color=colors().line_hi)
+        return Style(color=fade(lamp_colors()[lit], HOUSING_LIT))
+
     def render(self) -> Text:
         lit = self.lit_lamp()
-        housing = Style(
-            color=fade(colors().line_hi, HOUSING_OFFLINE)
-            if self.status is Status.OFFLINE
-            else colors().line_hi
-        )
+        housing = self._housing_style(lit)
 
         out = Text(no_wrap=True)
         out.append(CAP_TOP, housing)
         for index in range(LAMPS):
             out.append("\n")
             out.append(WALL_LEFT, housing)
-            out.append(LAMP, self._lamp_style(index, lit))
+            out.append(HALO.format(LAMP), self._lamp_style(index, lit))
             out.append(WALL_RIGHT, housing)
         out.append("\n")
         out.append(CAP_BOTTOM, housing)

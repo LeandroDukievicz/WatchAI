@@ -16,6 +16,7 @@ from watchai.app import WatchAIApp
 from watchai.format import ellipsize
 from watchai.layout import Layout, layout_for
 from watchai.models import Status
+from watchai.notify import Notifier
 from watchai.sound import Alert
 from watchai.screens import DetailsScreen, HelpScreen, ThemeScreen
 from watchai.theme import DEFAULT, PALETTES, use
@@ -188,7 +189,7 @@ def test_layout_sem_vao_morto():
             card = next(iter(dash.query(SessionCard)))
             assert card.region.width == 48
             assert card.region.height == 7
-            assert card.query_one(TrafficLight).region.width == 5
+            assert card.query_one(TrafficLight).region.width == 7
 
     run(main())
 
@@ -224,19 +225,21 @@ def test_semaforo_some_no_modo_compacto():
 
 
 class AlertaFalso(Alert):
-    """Conta os bips em vez de tocar."""
+    """Conta os bips em vez de tocar, e guarda o timbre de cada um."""
 
     def __init__(self) -> None:
         super().__init__(command=["(falso)"])
         self.bips = 0
+        self.timbres: list[str] = []
 
-    async def play(self) -> None:
+    async def play(self, kind: str = "ready") -> None:
         self.bips += 1
+        self.timbres.append(kind)
 
 
 def _app_com_bip(seed: int = 1) -> tuple[WatchAIApp, AlertaFalso]:
     alerta = AlertaFalso()
-    return WatchAIApp(seed=seed, alert=alerta, mock=True), alerta
+    return WatchAIApp(seed=seed, alert=alerta, mock=True, notifier=Notifier(None)), alerta
 
 
 async def _vira_ready(app, pilot, short: str) -> None:
@@ -260,13 +263,32 @@ def test_bipa_quando_uma_sessao_fica_ready():
     run(main())
 
 
-def test_nao_bipa_em_estado_que_nao_e_ready():
+def test_avisa_nos_tres_estados_que_param_voce_com_timbres_diferentes():
+    """READY, INPUT e ERROR avisam coisas diferentes: mesmo som obrigaria a
+    olhar a tela para saber qual foi."""
+
     async def main():
         app, alerta = _app_com_bip()
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
             claude = next(s for s in app.store.sessions if s.short == "CLAUDE")
-            for status in (Status.WAITING, Status.INPUT, Status.ERROR, Status.OFFLINE):
+            for status in (Status.INPUT, Status.WORKING, Status.ERROR):
+                app.store.transition(claude, status, "seguindo", datetime.now())
+                app.version += 1
+                await pilot.pause()
+                await pilot.pause()
+            assert alerta.timbres == ["input", "error"]  # WORKING no meio não avisa
+
+    run(main())
+
+
+def test_nao_avisa_em_estado_que_nao_pede_voce():
+    async def main():
+        app, alerta = _app_com_bip()
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            claude = next(s for s in app.store.sessions if s.short == "CLAUDE")
+            for status in (Status.WAITING, Status.WORKING, Status.OFFLINE):
                 app.store.transition(claude, status, "seguindo", datetime.now())
                 app.version += 1
                 await pilot.pause()
@@ -424,5 +446,58 @@ def test_modal_de_temas_cabe_na_caixa():
             assert any("ESC cancel" in linha for linha in caixa)
             for palette in PALETTES:
                 assert any(palette.label in linha for linha in caixa), palette.key
+
+    run(main())
+
+
+class NotificadorFalso(Notifier):
+    """Guarda as notificações em vez de chamar o sistema."""
+
+    def __init__(self) -> None:
+        super().__init__("falso")
+        self.enviadas: list[tuple[str, str, str]] = []
+
+    async def send(self, title: str, body: str, kind: str = "ready") -> None:
+        self.enviadas.append((title, body, kind))
+
+
+def test_notifica_so_quando_voce_nao_esta_olhando():
+    """Com o WatchAI em foco a notificação é ruído: você já está vendo."""
+
+    async def main():
+        alerta, avisos = AlertaFalso(), NotificadorFalso()
+        app = WatchAIApp(seed=1, alert=alerta, mock=True, notifier=avisos)
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            app.on_app_focus()
+            await _vira_ready(app, pilot, "CLAUDE")
+            assert alerta.bips == 1 and avisos.enviadas == []  # bipa, não notifica
+
+            app.on_app_blur()
+            await _vira_ready(app, pilot, "GEMINI")
+            await pilot.pause()
+            assert len(avisos.enviadas) == 1
+            titulo, corpo, timbre = avisos.enviadas[0]
+            assert titulo == "READY · GEMINI" and timbre == "ready" and corpo
+
+    run(main())
+
+
+def test_o_interruptor_de_avisos_fica_salvo():
+    async def main():
+        app = WatchAIApp(seed=1, alert=AlertaFalso(), mock=True, notifier=NotificadorFalso())
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            assert app.sound_on is True  # padrão: quem instala um monitor quer aviso
+            await pilot.press("b")
+            await pilot.pause()
+            assert app.sound_on is False
+            from watchai import config
+
+            assert config.load_alerts() is False
+
+        # nova execução lê o que ficou salvo
+        outro = WatchAIApp(seed=1, alert=AlertaFalso(), mock=True, notifier=NotificadorFalso())
+        assert outro.sound_on is False
 
     run(main())

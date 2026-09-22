@@ -15,7 +15,7 @@ Atualizado em 2026-09-22.
 - [x] Semáforo de 3 lâmpadas por card (a identidade do produto)
 - [x] Visões CARDS e LIST, modal de detalhes, ajuda
 - [x] Layout responsivo de 20×10 a 300×80, sem vão morto
-- [x] Bip pelo servidor de som ao entrar em READY (toca com a aba em segundo plano)
+- [x] Bip pelo servidor de som (toca com a aba em segundo plano)
 - [x] Suíte headless + CI
 
 ### M1 — temas
@@ -37,103 +37,72 @@ Atualizado em 2026-09-22.
 - [x] `--mock`, `--theme`, `--version`
 - [x] CI em Ubuntu (3.10–3.14), Windows e macOS
 
----
+### M3 — o aviso chega em você (1.1.0)
 
-## M3 — o aviso chega em você
+- [x] **Semáforo com mais presença**: carcaça tingida da cor acesa e halo atrás
+      da lâmpada (fundo da própria cor), largura de 5 → 7 colunas
+- [x] **Aviso em READY, INPUT e ERROR**, com **um timbre por estado** — avisar
+      os três com o mesmo som obrigaria a olhar a tela para saber qual foi
+- [x] **Notificação do sistema** (`notify-send` · `osascript` · toast por
+      PowerShell), **só quando o WatchAI não está em foco**: se você já está
+      olhando, o pop-up é ruído
+- [x] Debounce **por timbre**: rajada do mesmo aviso vira um bip só, mas
+      READY seguido de ERROR toca os dois
+- [x] `B` liga/desliga os dois e a escolha fica salva entre execuções
+- [x] **Tempo real do estado**: `for MM:SS` conta da hora que o diário registrou,
+      não de quando o app abriu (carimbo no futuro é aparado, para não virar
+      contador negativo)
+- [x] **ERROR de verdade no Claude Code**: `isApiErrorMessage` pega limite de
+      uso e token expirado — a sessão que parou e não volta sozinha
 
-O produto responde "quem terminou e quem precisa de você". Hoje ele **mostra**,
-mas só **avisa** em READY — e o INPUT, que é literalmente "parou esperando
-você", passa em silêncio.
+### M4 — mais agentes
 
-- [ ] **Bip em INPUT e ERROR**, não só em READY
-      `app.py:ALERT_STATUSES` já é um `frozenset` — a mudança é de uma linha,
-      mas precisa de som diferente por estado (senão não dá para distinguir sem
-      olhar) e de teste para não bipar em rajada.
+- [x] **Atividade por ferramenta para qualquer agente**: sem diário, o que ele
+      está fazendo é o processo filho que ele abriu (`running npm test`),
+      ignorando processos auxiliares do próprio agente
+- [x] **OpenCode**: leitor escrito a partir do layout do storage
+      (`session/{info,message,part}`) — ⚠️ **não validado contra sessão real**
+- [x] ~~**Gemini CLI**~~ — **não dá com o que ele grava hoje**: o
+      `~/.gemini/tmp/<projeto>/logs.json` registra só as mensagens do usuário,
+      sem resposta, sem ferramenta e sem fim de turno
 
-- [ ] **Notificação do sistema** para quando o WatchAI está numa aba que você não vê
-      `notify-send` (Linux) · `osascript -e 'display notification'` (macOS) ·
-      toast por PowerShell (Windows). Mesmo desenho do `sound.py`: descobrir o
-      que existe na máquina, degradar em silêncio, nunca travar a UI.
-      Ligar/desligar junto com o bip (`B`) ou em tecla própria.
+### M5 — permanência e distribuição
 
-- [ ] **Tempo real do estado** — hoje `for MM:SS` conta desde que o WatchAI
-      **viu**, não desde que aconteceu; abrir o app zera todos os contadores.
-      As entradas do diário têm `timestamp`: dá para recuperar a hora verdadeira
-      da última mudança. Mexe em `providers/transcript.py` (devolver o instante
-      junto do estado) e em `live.py` (usar como `status_since`).
-      Limite honesto: só para agentes com diário; os outros continuam contando
-      da descoberta.
-
-- [ ] **ERROR de verdade no Claude Code** — hoje só o Codex sinaliza erro.
-      Verificado nos transcripts desta máquina: entradas com
-      `isApiErrorMessage: true` trazem exatamente os casos que interessam —
-      `"You've hit your session limit · resets 10:30pm"` e
-      `"API Error: 401 OAuth access token has expired"`. É o estado que mais
-      merece aviso: a sessão parou e não volta sozinha.
-
-- [ ] **Ordenar os cards por atenção** (opcional, decidir antes de fazer)
-      Hoje a ordem é a de descoberta. Quem pede você primeiro subir para o topo
-      ajuda com muitas sessões — mas card que dança de lugar sozinho atrapalha a
-      memória visual. Talvez só como tecla de ordenação, não como padrão.
-
----
-
-## M4 — mais agentes com estado fino
-
-Gemini, OpenCode e Aider hoje vivem só da camada de processos: aparecem, mostram
-projeto e tempo, e alternam entre WORKING e READY. Falta o "o que está fazendo".
-
-- [ ] **OpenCode** — `opencode 1.17.9` está instalado aqui, mas
-      `~/.local/share/opencode/storage/` só tem `migration/` e `session_diff/`:
-      esta instalação não gravou sessão nenhuma desde agosto. **Bloqueado até
-      abrir uma sessão real** e mapear o que a versão atual escreve (pode ser o
-      `opencode.db`, SQLite — legível com a stdlib).
-
-- [ ] **Aider** — grava `.aider.chat.history.md` na pasta do projeto. Não está
-      instalado aqui, então o formato não foi verificado. **Precisa de uma
-      sessão real** antes de escrever o leitor.
-
-- [x] ~~**Gemini CLI**~~ — **não dá com o que ele grava hoje.** O
-      `~/.gemini/tmp/<projeto>/logs.json` registra **só as mensagens do
-      usuário** (todas com `type: "user"`), sem resposta, sem ferramenta e sem
-      fim de turno. Dá para saber quando você falou com ele pela última vez, não
-      o que ele está fazendo. Fica na camada de processos até o formato mudar.
-
-Cada leitor novo é uma classe em `providers/transcript.py` com dois métodos
-(`arquivo(cwd)` e `ler(caminho)`) e uma linha no `Transcripts.__init__` — o
-resto do sistema não muda.
+- [x] **Histórico do EVENT STREAM entre execuções** (`~/.config/watchai/events.json`)
+- [x] **Instalador no repositório**: `scripts/install-linux.sh` (comando no PATH,
+      lançador no menu, atalho opcional na área de trabalho, `--uninstall`)
+- [x] Ícone versionado em `assets/watchai.svg`
+- [x] Landing page atualizada (`docs/index.html`)
+- [x] Metadados do pacote (descrição, URLs) e versão 1.1.0
 
 ---
 
-## M5 — permanência e distribuição
+## O que ainda falta
 
-- [ ] **Histórico do EVENT STREAM entre execuções** — hoje ele começa vazio a
-      cada abertura, então o que aconteceu enquanto o app estava fechado se
-      perde. Guardar os últimos ~200 eventos junto da config
-      (`config.py` já resolve caminho e escrita tolerante a falha).
+- [ ] **Validar Windows e macOS na prática.** O código trata os dois (identidade
+      de terminal pelo shell quando não há tty, agente reconhecido pelo caminho
+      do pacote) e o CI roda a suíte nos três, mas ninguém abriu o app num
+      Windows ou num Mac ainda. Até lá, é código testado, não software
+      verificado. O toast do Windows, em especial, falha em silêncio.
 
-- [ ] **Instalador no repositório** — o comando `watchai` e o atalho de área de
-      trabalho existem **só nesta máquina** (`~/.local/bin/watchai`,
-      `~/.local/share/applications/watchai.desktop`, ícone SVG em
-      `~/.local/share/icons/hicolor/scalable/apps/`). Nada disso está
-      versionado: quem clonar o repo não tem. Falta um `scripts/install-linux.sh`
-      (e o `.desktop` de exemplo) no projeto.
+- [ ] **Confirmar o leitor do OpenCode** contra uma sessão real. O layout veio
+      do binário; os nomes dos campos (`directory`, `time.completed`,
+      `state.status`) são a melhor leitura disponível, não verificação. Abrir
+      uma sessão no OpenCode e conferir `~/.local/share/opencode/storage/`
+      resolve em minutos.
 
-- [ ] **Publicar** — `pipx install watchai` / PyPI, para não depender de clonar
-      o repositório e criar venv na mão.
+- [ ] **Diário do Aider** — grava `.aider.chat.history.md` na pasta do projeto.
+      Não está instalado aqui, então o formato não foi verificado.
 
-- [ ] **Validar Windows e macOS de verdade** — o código trata os dois
-      (identidade de terminal pelo shell quando não há tty, agente reconhecido
-      pelo caminho do pacote) e o CI roda a suíte nos três, mas **ninguém abriu
-      o app num Windows ou num Mac ainda**. Até lá, é código testado, não
-      software verificado.
+- [ ] **Publicar no PyPI** (`pipx install watchai`), para não depender de clonar
+      o repositório. Falta conta, token e um `python -m build` no CI.
 
-- [ ] **Release 1.1.0** — o CHANGELOG está em `[Não lançado]` com temas +
-      detecção real. Falta decidir a versão, marcar a tag e publicar.
+- [ ] **Ordenar os cards por atenção** (decidir antes de fazer). Hoje a ordem é
+      a de descoberta. Quem pede você primeiro subir ao topo ajuda com muitas
+      sessões — mas card que dança de lugar sozinho atrapalha a memória visual.
+      Talvez como tecla de ordenação, não como padrão.
 
-- [ ] **Atualizar a landing page** (`docs/index.html`) — ela ainda descreve o
-      WatchAI como "protótipo visual" com dados mockados, o que deixou de ser
-      verdade.
+- [ ] **Release 1.1.0** — tag e publicação no GitHub.
 
 ---
 
@@ -150,10 +119,13 @@ resto do sistema não muda.
 
 ## Limites conhecidos (não são bugs)
 
-- `for MM:SS` conta da descoberta, não do acontecimento — item de M3.
+- Para agentes **sem diário**, o `for MM:SS` conta da descoberta, não do
+  acontecimento — o disco não guarda essa hora.
 - Dois agentes **do mesmo tipo no mesmo diretório** compartilham o diário mais
   recente; o segundo cai na camada de processos.
 - INPUT é inferido: ferramenta pendente + processo parado há 8 s. Uma ferramenta
   lenta que não gasta CPU aparece como INPUT.
 - `cwd` pode ser negado no macOS para processos que não são seus — o card cai
   para o rótulo do terminal.
+- O aviso não dispara pelas sessões que já estavam abertas quando o WatchAI
+  subiu: só pelo que muda depois.
