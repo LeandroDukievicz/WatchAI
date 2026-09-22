@@ -43,6 +43,13 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   proporção do terminal é um quadrado. Antes o corte valia 10% na horizontal
   contra 25% na vertical, e o resultado era um retângulo de cantos lascados.
 
+- **Semáforo sem fundo próprio**: a carcaça ficou transparente e o card aparece
+  através dela, em vez do retângulo escuro que havia atrás das lâmpadas.
+- **Lâmpada acesa em neon**, com quatro camadas de queda: miolo cheio, ponta
+  cortada em tom intermediário, quadrante de brilho encostado na bola e fundo
+  da célula tingido. O halo segue a **silhueta** da bola (mesmo quadrante da
+  ponta naquela linha), senão vira uma barra separada por um vão.
+
 ### Corrigido
 - Matar um processo de notificação que já havia morrido sozinho levantava
   `ProcessLookupError` e chegava como **falha de worker** — o CI do Windows

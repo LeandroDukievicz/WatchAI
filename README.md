@@ -405,12 +405,18 @@ horizontal contra 25% na vertical — e o que aparecia era um retângulo de cant
 lascados.
 
 É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](assets/watchai.svg))
-desenhado em texto: carcaça de contorno cyan, interior escuro e três lâmpadas.
+desenhado em texto: carcaça de contorno cyan, **sem fundo próprio** — o card
+aparece através dela — e três lâmpadas.
 
-**A lâmpada acesa brilha**: cor cheia, negrito e um halo tingido da própria cor
-nas células ao lado da bola — ao lado, e não atrás, senão o fundo preencheria os
-cantos cortados e a bola viraria um retângulo. É esse halo que faz o semáforo
-ser lido antes do texto, de longe e de canto de olho.
+**A lâmpada acesa é neon**, em quatro camadas do centro para fora: miolo na cor
+cheia e em negrito; as pontas cortadas num tom intermediário (a borda difusa);
+o quadrante ao lado da bola num tom mais fraco (o brilho que encosta); e o
+fundo da célula apenas tingido (o brilho que escapa).
+
+O halo usa **o mesmo quadrante da ponta da bola naquela linha**, e não um
+meio-bloco inteiro: assim ele acompanha a silhueta. Na linha de cima a bola só
+existe na metade de baixo — o halo também. Um bloco inteiro ali viraria uma
+barra separada da bola por um vão, que é justamente o canto cortado dela.
 
 Como num semáforo de verdade, as lâmpadas apagadas não somem: ficam num tom bem
 escuro da própria cor. OFFLINE apaga as três e escurece a carcaça. INPUT é o
