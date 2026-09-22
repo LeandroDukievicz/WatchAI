@@ -716,3 +716,81 @@ def test_varredura_que_explode_nao_mata_o_app():
             assert app.is_running
 
     asyncio.run(main())
+
+
+# ---- o registro de agentes (vale em qualquer máquina, não só na minha) ------
+
+
+def test_reconhece_todos_os_agentes_do_registro():
+    """Cada entrada do registro tem que casar pelo próprio nome de programa —
+    um erro de digitação na tabela viraria um agente invisível para todo mundo
+    que usa aquele CLI."""
+    from watchai.providers.agents import KINDS
+
+    for kind in KINDS:
+        for programa in kind.programas:
+            assert identify([programa]).key == kind.key, programa
+            # e nas convenções de Windows e de shim do npm
+            assert identify([f"{programa}.exe"]).key == kind.key, programa
+            assert identify([f"C:\\Users\\eu\\AppData\\{programa}.cmd"]).key == kind.key
+        for pacote in kind.pacotes:
+            assert identify(["node", f"/home/eu/node_modules/{pacote}/cli.js"]).key == kind.key
+
+
+def test_cobre_os_agentes_que_o_usuario_citou():
+    for programa, chave in (
+        ("antigravity", "antigravity"),
+        ("opencode", "opencode"),
+        ("grok", "grok"),
+        ("deepseek", "deepseek"),
+        ("copilot", "copilot"),
+    ):
+        assert identify([programa]).key == chave
+    # `gh copilot` é subcomando: o agente não é o programa executado
+    assert identify(["gh", "copilot", "suggest"]).key == "copilot"
+    # e por runtime, como o npm instala
+    assert identify(["npx", "@vibe-kit/grok-cli"]).key == "grok"
+
+
+def test_nome_de_modelo_nao_e_agente():
+    """`ollama run deepseek-r1` roda um modelo, não uma sessão de agente — e
+    um editor com um arquivo de mesmo nome também não."""
+    assert identify(["ollama", "run", "deepseek-r1"]) is None
+    assert identify(["nvim", "grok.md"]) is None
+    assert identify(["bash", "-c", "echo antigravity"]) is None
+
+
+def test_usuario_acrescenta_o_proprio_agente(tmp_path, monkeypatch):
+    """Ninguém deveria esperar uma release para ver a própria sessão na tela."""
+    import json
+
+    from watchai import config
+    from watchai.providers import agents
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    destino = tmp_path / "watchai"
+    destino.mkdir()
+    (destino / "config.json").write_text(
+        json.dumps({"agents": {"meu-agente": ["zzagente"], "claude": ["claude-dev"]}}),
+        encoding="utf-8",
+    )
+    assert identify(["zzagente"]) is None  # antes de registrar, desconhecido
+    try:
+        agents.registrar(config.load_agents())
+        assert identify(["zzagente"]).key == "meu-agente"
+        assert identify(["claude-dev"]).key == "claude"  # apelido de um conhecido
+    finally:  # o registro é global ao processo: não pode vazar para outro teste
+        agents.POR_PROGRAMA.pop("zzagente", None)
+        agents.POR_PROGRAMA.pop("claude-dev", None)
+        agents.POR_CHAVE.pop("meu-agente", None)
+
+
+def test_agente_sem_terminal_ainda_vira_card():
+    """Agente rodando dentro de uma IDE não tem tty: a sessão passa a ser
+    identificada pelo próprio processo, em vez de virar um card sem nome."""
+    from watchai.providers.source import rotulo_terminal
+
+    assert rotulo_terminal("/dev/pts/3", None, None) == "pts/3"
+    assert rotulo_terminal(None, "pwsh", 4312) == "pwsh #4312"
+    assert rotulo_terminal(None, None, None, "antigravity", 99) == "antigravity #99"
+    assert rotulo_terminal(None, None, None) == "?"

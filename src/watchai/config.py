@@ -19,6 +19,7 @@ MAX_EVENTOS_SALVOS = 200
 THEME_KEY = "theme"
 ALERTS_KEY = "alerts"
 NOTIFY_KEY = "notify"
+AGENTS_KEY = "agents"
 
 
 def config_dir() -> Path:
@@ -102,6 +103,32 @@ def save_alerts(ligado: bool) -> bool:
     return save(**{ALERTS_KEY: bool(ligado)})
 
 
+def load_agents() -> dict[str, list[str]]:
+    """Agentes que **você** acrescenta, além dos que o WatchAI já conhece:
+
+        {"agents": {"meu-agente": ["meuprog", "outro-nome"]}}
+
+    O ecossistema ganha CLI nova toda semana; ninguém deveria esperar uma
+    release para ver a própria sessão na tela. Entrada malformada é ignorada
+    em silêncio — config quebrada não pode impedir o app de abrir.
+    """
+    bruto = load().get(AGENTS_KEY)
+    if not isinstance(bruto, dict):
+        return {}
+    saida: dict[str, list[str]] = {}
+    for chave, programas in bruto.items():
+        if not isinstance(chave, str):
+            continue
+        if isinstance(programas, str):
+            programas = [programas]
+        if not isinstance(programas, list):
+            continue
+        nomes = [p for p in programas if isinstance(p, str) and p.strip()]
+        if nomes:
+            saida[chave] = nomes
+    return saida
+
+
 def load_notify(default: bool = False) -> bool:
     """Se a notificação do sistema está ligada — interruptor próprio, separado
     do bip.
@@ -124,6 +151,7 @@ __all__ = [
     "load",
     "load_events",
     "save_events",
+    "load_agents",
     "load_alerts",
     "load_notify",
     "load_theme",

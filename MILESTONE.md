@@ -55,6 +55,19 @@ Atualizado em 2026-09-22.
 - [x] **ERROR de verdade no Claude Code**: `isApiErrorMessage` pega limite de
       uso e token expirado — a sessão que parou e não volta sozinha
 
+### M8 — detecção para todo mundo, não só para esta máquina
+
+- [x] **17 agentes conhecidos** no registro (Claude Code, Codex, Gemini,
+      Antigravity, OpenCode, Aider, Copilot, Grok, DeepSeek, Qwen, Cursor,
+      Crush, Goose, Amp, OpenHands, Plandex, Continue), com `gh copilot` como
+      subcomando
+- [x] **Agentes definidos pelo usuário** na config — o ecossistema muda toda
+      semana e ninguém espera release para ver a própria sessão
+- [x] Agente **sem terminal** (dentro de uma IDE) vira card identificado pelo
+      processo, em vez de card sem nome
+- [x] Teste que percorre o registro inteiro: erro de digitação na tabela viraria
+      um agente invisível para quem usa aquele CLI
+
 ### M4 — mais agentes
 
 - [x] **Atividade por ferramenta para qualquer agente**: sem diário, o que ele
@@ -121,8 +134,12 @@ Atualizado em 2026-09-22.
       uma sessão no OpenCode e conferir `~/.local/share/opencode/storage/`
       resolve em minutos.
 
-- [ ] **Diário do Aider** — grava `.aider.chat.history.md` na pasta do projeto.
-      Não está instalado aqui, então o formato não foi verificado.
+- [ ] **Diários dos demais agentes.** Hoje só Claude Code, Codex e OpenCode têm
+      leitor; o resto vive da camada de processos. Cada leitor novo é uma classe
+      em `providers/transcript.py` com dois métodos. Os formatos precisam ser
+      verificados contra uma sessão real de cada um — e nenhum deles está
+      instalado nesta máquina, o que torna isto trabalho de quem usa (ou de um
+      PR da comunidade).
 
 - [ ] **Publicar no PyPI** (`pipx install watchai`). O workflow já existe e
       empacota; falta **você** criar o projeto no PyPI, apontar o *trusted

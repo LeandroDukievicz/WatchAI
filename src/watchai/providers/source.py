@@ -90,11 +90,24 @@ class ProcessSource(Protocol):
         ...
 
 
-def rotulo_terminal(tty: str | None, shell_nome: str | None, shell_pid: int | None) -> str:
+def rotulo_terminal(
+    tty: str | None,
+    shell_nome: str | None,
+    shell_pid: int | None,
+    agente: str = "",
+    pid: int | None = None,
+) -> str:
+    """Como o card chama o "terminal" da sessão.
+
+    Nem todo agente roda numa tty: dentro de uma IDE não há terminal nenhum, e
+    aí o que identifica a sessão é o próprio processo.
+    """
     if tty:
         return tty.replace("/dev/", "")  # "/dev/pts/10" -> "pts/10"
     if shell_nome and shell_pid:
         return f"{shell_nome} #{shell_pid}"
+    if agente and pid:
+        return f"{agente} #{pid}"
     return "?"
 
 
@@ -264,6 +277,8 @@ class PsutilSource:
                         tty,
                         (tabela[shell_pid].get("name") if shell_pid else None),
                         shell_pid,
+                        kind.label,
+                        pid,
                     ),
                     terminal_started=inicio_terminal,
                     created=nascimento,

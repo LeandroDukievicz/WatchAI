@@ -22,7 +22,7 @@ from .focus import Focuser
 from .mock import MockSimulator, build_store
 from .models import PRIORIDADE, SessionStore, Status
 from .notify import Notifier
-from .providers import LiveProvider
+from .providers import LiveProvider, agents
 from .screens import Dashboard, DetailsScreen, HelpScreen, ThemeScreen
 from .sound import Alert
 from .theme import BY_KEY, DEFAULT, PALETTES, colors, use
@@ -98,6 +98,9 @@ class WatchAIApp(App):
             self.simulator = MockSimulator(self.store, seed=seed)
             self.provider = None
         else:
+            # Agentes que o usuário acrescentou na config valem desde a
+            # primeira varredura.
+            agents.registrar(config.load_agents())
             self.store = SessionStore()
             self.simulator = None
             self.provider = LiveProvider(self.store, source)

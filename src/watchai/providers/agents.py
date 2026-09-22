@@ -32,21 +32,83 @@ class AgentKind:
     pacotes: tuple[str, ...] = field(default=())  # trechos de caminho que valem
 
 
+# O registro de agentes conhecidos. Vale para quem instalar o WatchAI em
+# qualquer lugar, não só para quem já tem os mesmos CLIs que você — por isso ele
+# é amplo e conservador ao mesmo tempo:
+#
+# * **programa** é casamento exato pelo nome do executável (`argv[0]`, ou
+#   `argv[1]` quando quem executa é um runtime). É o critério confiável.
+# * **pacote** é um trecho de caminho, usado só quando o nome do processo não
+#   diz nada — o caso do Windows, onde tudo vira `node.exe`. Tem que ser
+#   específico (`@openai/codex`), nunca uma palavra solta: "deepseek" no caminho
+#   pegaria um `ollama run deepseek-r1`, que não é sessão de agente nenhuma.
+#
+# Falta algum? Não espere uma release: acrescente no seu
+# `~/.config/watchai/config.json` (veja `config.load_agents`) — e, se for um
+# agente conhecido, mande um PR para esta tabela.
 KINDS: tuple[AgentKind, ...] = (
     AgentKind("claude", "claude", ("claude",), ("@anthropic-ai/claude-code",)),
     AgentKind("codex", "codex", ("codex",), ("@openai/codex",)),
     AgentKind("gemini", "gemini", ("gemini",), ("@google/gemini-cli",)),
+    AgentKind(
+        "antigravity",
+        "antigravity",
+        ("antigravity", "antigravity-cli"),
+        ("antigravity-cli",),
+    ),
     AgentKind("opencode", "opencode", ("opencode",), ("opencode-ai",)),
     AgentKind("aider", "aider", ("aider",), ("aider_chat", "aider-chat")),
     AgentKind("copilot", "copilot", ("copilot", "github-copilot-cli"), ("@github/copilot",)),
+    AgentKind("grok", "grok", ("grok", "grok-cli"), ("@vibe-kit/grok-cli",)),
+    AgentKind("deepseek", "deepseek", ("deepseek", "deepseek-cli"), ()),
+    AgentKind("qwen", "qwen", ("qwen", "qwen-code"), ("@qwen-code/qwen-code",)),
     AgentKind("cursor", "cursor", ("cursor-agent",), ()),
     AgentKind("crush", "crush", ("crush",), ("charmbracelet/crush",)),
     AgentKind("goose", "goose", ("goose",), ("block/goose",)),
     AgentKind("amp", "amp", ("amp",), ("@sourcegraph/amp",)),
+    AgentKind("openhands", "openhands", ("openhands",), ("openhands-ai",)),
+    AgentKind("plandex", "plandex", ("plandex",), ()),
+    AgentKind("continue", "continue", ("continue",), ("@continuedev/cli",)),
 )
 
-POR_PROGRAMA = {prog: k for k in KINDS for prog in k.programas}
-POR_CHAVE = {k.key: k for k in KINDS}
+# Invocações em duas palavras: o agente é um subcomando de outro programa.
+SUBCOMANDOS = {("gh", "copilot"): "copilot"}
+
+POR_CHAVE: dict[str, AgentKind] = {k.key: k for k in KINDS}
+POR_PROGRAMA: dict[str, AgentKind] = {prog: k for k in KINDS for prog in k.programas}
+
+
+def registrar(extras: dict[str, list[str]] | None) -> list[str]:
+    """Acrescenta agentes definidos pelo usuário: `{"meu-agente": ["meuprog"]}`.
+
+    O ecossistema ganha CLI nova toda semana e ninguém deveria esperar uma
+    release para ver a própria sessão na tela. Nome já conhecido é reforçado
+    (mais um apelido para o mesmo agente); nome novo cria um tipo.
+
+    Devolve as chaves que passaram a valer, para quem quiser conferir.
+    """
+    if not extras:
+        return []
+    aceitos = []
+    for chave, programas in extras.items():
+        chave = str(chave).strip().lower()
+        if not chave:
+            continue
+        nomes = tuple(
+            _basename(str(p)) for p in (programas or ()) if str(p).strip()
+        ) or (chave,)
+        base = POR_CHAVE.get(chave)
+        kind = AgentKind(
+            chave,
+            base.label if base else chave,
+            tuple(dict.fromkeys((*(base.programas if base else ()), *nomes))),
+            base.pacotes if base else (),
+        )
+        POR_CHAVE[chave] = kind
+        for nome in kind.programas:
+            POR_PROGRAMA[nome] = kind
+        aceitos.append(chave)
+    return aceitos
 
 
 def _basename(arg: str) -> str:
@@ -80,6 +142,12 @@ def identify(cmdline: list[str] | None) -> AgentKind | None:
     if programa in POR_PROGRAMA:
         return POR_PROGRAMA[programa]
 
+    # Subcomando: `gh copilot`, onde o agente não é o programa executado.
+    if len(argv) > 1:
+        chave = SUBCOMANDOS.get((programa, _basename(argv[1])))
+        if chave:
+            return POR_CHAVE[chave]
+
     if programa in RUNTIMES:
         for arg in argv[1:]:
             if arg.startswith("-"):
@@ -100,4 +168,4 @@ def identify(cmdline: list[str] | None) -> AgentKind | None:
     return None
 
 
-__all__ = ["AgentKind", "KINDS", "POR_CHAVE", "identify"]
+__all__ = ["AgentKind", "KINDS", "POR_CHAVE", "SUBCOMANDOS", "identify", "registrar"]

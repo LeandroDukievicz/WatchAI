@@ -136,18 +136,56 @@ app não zera os contadores.
 sessão que parou e não volta sozinha: limite de uso atingido, token expirado,
 erro de API.
 
-Agentes sem diário conhecido (Gemini, Aider…) funcionam pela camada de
-processos: aparecem, mostram projeto e tempo, alternam entre WORKING e READY — e
-a atividade mostra **a ferramenta que está rodando** (`running npm test`), lida
-do processo filho que o agente abriu.
+Agentes sem diário conhecido funcionam pela camada de processos: aparecem,
+mostram projeto e tempo, alternam entre WORKING e READY — e a atividade mostra
+**a ferramenta que está rodando** (`running npm test`), lida do processo filho
+que o agente abriu.
 
-| Agente | De onde vem o estado |
-|---|---|
-| **Claude Code** | diário completo: ferramenta, fim de turno, erro de API |
-| **Codex** | diário completo: `task_started`, `task_complete`, aprovação, erro |
-| **OpenCode** | leitor escrito a partir do layout do storage, **ainda não validado contra uma sessão real** — cai na camada de processos se o formato não bater |
-| **Gemini CLI** | processos apenas. O `logs.json` dele grava só as **suas** mensagens: não dá para saber o que ele está fazendo |
-| **Aider, Copilot, Cursor…** | processos apenas |
+### Quem ele reconhece
+
+| Agente | Comando | De onde vem o estado |
+|---|---|---|
+| **Claude Code** | `claude` | diário completo: ferramenta, fim de turno, erro de API |
+| **Codex** | `codex` | diário completo: `task_started`, `task_complete`, aprovação, erro |
+| **OpenCode** | `opencode` | leitor escrito a partir do layout do storage, **ainda não validado contra uma sessão real** — cai nos processos se o formato não bater |
+| **Gemini CLI** | `gemini` | processos. O `logs.json` dele grava só as **suas** mensagens |
+| **Antigravity** | `antigravity` | processos |
+| **GitHub Copilot** | `copilot`, `gh copilot` | processos |
+| **Grok** | `grok` | processos |
+| **DeepSeek** | `deepseek` | processos |
+| **Qwen Code** | `qwen` | processos |
+| **Aider** | `aider` | processos |
+| **Cursor** | `cursor-agent` | processos |
+| **OpenHands** | `openhands` | processos |
+| **Crush · Goose · Amp · Plandex · Continue** | `crush`, `goose`, `amp`, `plandex`, `continue` | processos |
+
+Quem cai em "processos" aparece, mostra projeto, tempo e a ferramenta que está
+rodando, e alterna entre WORKING e READY — falta só o "o que ele está pensando",
+que exige um diário legível.
+
+O reconhecimento é pelo **programa executado** (`argv[0]`, ou `argv[1]` quando
+quem executa é um runtime como `node`, `npx`, `uvx` ou `python -m`), com o
+caminho do pacote como segunda chance — é o que salva o Windows, onde tudo vira
+`node.exe`. Nome solto no meio de um comando não conta: `ollama run deepseek-r1`
+roda um modelo, não uma sessão, e `nvim grok.md` é um editor.
+
+### Falta o seu? Acrescente sem esperar release
+
+O ecossistema ganha CLI nova toda semana. No `~/.config/watchai/config.json`:
+
+```json
+{
+  "agents": {
+    "meu-agente": ["meuprog", "outro-nome"],
+    "claude": ["claude-dev"]
+  }
+}
+```
+
+Chave nova cria um tipo; chave já conhecida vira apelido do mesmo agente. Vale
+desde a primeira varredura da próxima abertura. E se for um agente conhecido,
+mande um PR para a tabela — ela está em
+[`providers/agents.py`](src/watchai/providers/agents.py).
 
 ## O que é multiplataforma e o que degrada
 
@@ -168,6 +206,8 @@ do pacote (`@anthropic-ai/claude-code`).
 
 - **Só os seus processos.** Sessões de outro usuário (ou dentro de um container)
   não aparecem.
+- Agente **sem terminal** (rodando dentro de uma IDE) vira um card identificado
+  pelo próprio processo — `antigravity #4312` — em vez de por uma tty.
 - Dois agentes **do mesmo tipo no mesmo diretório** compartilham o diário mais
   recente; o segundo cai na camada de processos.
 - O contador `for MM:SS` vem do diário quando existe; para agentes sem diário,
@@ -693,7 +733,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-60 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
+65 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).

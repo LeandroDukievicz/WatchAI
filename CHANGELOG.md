@@ -54,6 +54,17 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   Desenhar o halo com quadrantes ao lado da bola engrossava a silhueta onde ela
   já é larga e transformava o octógono numa cruz.
 
+- **Registro de agentes ampliado para uso geral**, não para o que está
+  instalado numa máquina só: Antigravity, Grok, DeepSeek, Qwen Code, OpenHands,
+  Plandex e Continue entraram, e o `gh copilot` passou a ser reconhecido como
+  subcomando. São 17 agentes conhecidos.
+- **Agentes definidos pelo usuário** em `~/.config/watchai/config.json`
+  (`{"agents": {"meu-agente": ["meuprog"]}}`): chave nova cria um tipo, chave
+  conhecida vira apelido. O ecossistema ganha CLI nova toda semana e ninguém
+  deveria esperar uma release para ver a própria sessão na tela.
+- Agente **sem terminal** (dentro de uma IDE) agora vira um card identificado
+  pelo próprio processo (`antigravity #4312`) em vez de um card sem nome.
+
 ### Corrigido
 - **O app morria ao abrir ou fechar um agente** com outro já na tela.
   Reconstruir a lista de cards a cada mudança parecia inofensivo, mas o
