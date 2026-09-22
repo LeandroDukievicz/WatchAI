@@ -74,6 +74,7 @@ Atualizado em 2026-09-22.
 - [x] Ícone versionado em `assets/watchai.svg`
 - [x] Landing page atualizada (`docs/index.html`)
 - [x] Metadados do pacote (descrição, URLs) e versão 1.1.0
+- [x] **Release 1.1.0** publicada (tag `1.1.0`)
 
 ---
 
@@ -101,8 +102,6 @@ Atualizado em 2026-09-22.
       a de descoberta. Quem pede você primeiro subir ao topo ajuda com muitas
       sessões — mas card que dança de lugar sozinho atrapalha a memória visual.
       Talvez como tecla de ordenação, não como padrão.
-
-- [ ] **Release 1.1.0** — tag e publicação no GitHub.
 
 ---
 
