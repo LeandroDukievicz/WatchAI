@@ -102,9 +102,13 @@ def save_alerts(ligado: bool) -> bool:
     return save(**{ALERTS_KEY: bool(ligado)})
 
 
-def load_notify(default: bool = True) -> bool:
+def load_notify(default: bool = False) -> bool:
     """Se a notificação do sistema está ligada — interruptor próprio, separado
-    do bip: tem quem queira o som sem o pop-up, e vice-versa."""
+    do bip.
+
+    **Começa desligada**, ao contrário do bip: pop-up é intrusivo e quem decide
+    se quer é você (`N`). O bip avisa sem atravessar a sua tela.
+    """
     value = load().get(NOTIFY_KEY)
     return value if isinstance(value, bool) else default
 

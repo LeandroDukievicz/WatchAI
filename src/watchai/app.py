@@ -74,7 +74,8 @@ class WatchAIApp(App):
     tick: reactive[int] = reactive(0)
     version: reactive[int] = reactive(0)
     sound_on: reactive[bool] = reactive(True)
-    notify_on: reactive[bool] = reactive(True)
+    # A notificação do sistema nasce desligada: é intrusiva, e quem liga é você.
+    notify_on: reactive[bool] = reactive(False)
 
     def __init__(
         self,

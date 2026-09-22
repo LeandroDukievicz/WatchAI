@@ -472,14 +472,38 @@ class NotificadorFalso(Notifier):
         self.enviadas.append((title, body, kind))
 
 
-def test_notifica_so_quando_voce_nao_esta_olhando():
-    """Com o WatchAI em foco a notificação é ruído: você já está vendo."""
+def test_a_notificacao_comeca_desligada():
+    """Pop-up é intrusivo: o bip avisa desde o primeiro minuto, a notificação
+    só depois que você pedir."""
 
     async def main():
         alerta, avisos = AlertaFalso(), NotificadorFalso()
         app = WatchAIApp(seed=1, alert=alerta, mock=True, notifier=avisos)
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
+            assert app.sound_on is True and app.notify_on is False
+            app.on_app_blur()
+            await _vira_ready(app, pilot, "CLAUDE")
+            await pilot.pause()
+            assert alerta.bips == 1  # bipa
+            assert avisos.enviadas == []  # e não atravessa a sua tela
+
+    run(main())
+
+
+def test_notifica_so_quando_voce_nao_esta_olhando():
+    """Ligada em `N`, e com o WatchAI em foco ela continua calada: se você já
+    está vendo a tela, o pop-up é ruído."""
+
+    async def main():
+        alerta, avisos = AlertaFalso(), NotificadorFalso()
+        app = WatchAIApp(seed=1, alert=alerta, mock=True, notifier=avisos)
+        async with app.run_test(size=(150, 36)) as pilot:
+            await pilot.pause()
+            await pilot.press("n")  # o usuário liga
+            await pilot.pause()
+            assert app.notify_on is True
+
             app.on_app_focus()
             await _vira_ready(app, pilot, "CLAUDE")
             assert alerta.bips == 1 and avisos.enviadas == []  # bipa, não notifica
@@ -499,7 +523,7 @@ def test_o_interruptor_de_avisos_fica_salvo():
         app = WatchAIApp(seed=1, alert=AlertaFalso(), mock=True, notifier=NotificadorFalso())
         async with app.run_test(size=(150, 36)) as pilot:
             await pilot.pause()
-            assert app.sound_on is True  # padrão: quem instala um monitor quer aviso
+            assert app.sound_on is True  # o bip sim, começa ligado
             await pilot.press("b")
             await pilot.pause()
             assert app.sound_on is False

@@ -417,14 +417,17 @@ terminou, travou esperando você, quebrou.
 olhar a tela para saber qual foi. Cada um pega um som do tema do sistema; nada é
 embutido no pacote.
 
-**Notificação do sistema junto do bip**, com o estado, o projeto e o terminal —
-mas **só quando o WatchAI não está em foco**: se você já está olhando para ele,
-o pop-up é ruído. `notify-send` no Linux, `osascript` no macOS e toast por
-PowerShell no Windows (este último, não verificado em máquina real).
+**Notificação do sistema**, com o estado, o projeto e o terminal — **desligada
+por padrão**: pop-up atravessa a sua tela, então quem decide se quer é você
+(`N`). O bip avisa sem atrapalhar; a notificação é opcional.
 
-**Cada um tem o seu interruptor**: `B` para o bip, `N` para a notificação — tem
-quem queira o som sem o pop-up, e o contrário. As duas escolhas **ficam salvas**
-para as próximas execuções.
+Quando ligada, ela sai **só com o WatchAI fora de foco**: se você já está
+olhando para ele, o pop-up é ruído. `notify-send` no Linux, `osascript` no macOS
+e toast por PowerShell no Windows (este último, não verificado em máquina real).
+
+**Cada um tem o seu interruptor**: `B` para o bip (começa **ligado**), `N` para
+a notificação (começa **desligada**). As duas escolhas **ficam salvas** para as
+próximas execuções.
 
 O som sai pelo **servidor de som** (PipeWire/PulseAudio), não pelo bell do
 terminal (`\a`). Essa escolha é o ponto todo: bell vira flash visual em vários
@@ -647,7 +650,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-56 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
+57 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
 a sua config e **sem olhar os processos da máquina** — a tabela de processos é
 injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
 computador e no CI).

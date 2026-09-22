@@ -30,6 +30,10 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - `.gitignore`: `.env`, `*.log`, `.tox/`, `*.orig`, `*.rej` e o rascunho
   `docs/publicacao-snap.html`.
 
+- **A notificação do sistema agora começa desligada.** Pop-up atravessa a tela
+  de quem está trabalhando: quem decide se quer é o usuário (`N`). O bip
+  continua ligado por padrão — ele avisa sem atrapalhar.
+
 ### Corrigido
 - Matar um processo de notificação que já havia morrido sozinho levantava
   `ProcessLookupError` e chegava como **falha de worker** — o CI do Windows
@@ -108,6 +112,10 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   *vaga* na paleta em vez da cor — é o que permite trocar de tema com o app
   rodando, sem tocar em widget nenhum.
 - `__version__` estava em `0.1.0`, fora de sincronia com o `pyproject.toml`.
+
+- **A notificação do sistema agora começa desligada.** Pop-up atravessa a tela
+  de quem está trabalhando: quem decide se quer é o usuário (`N`). O bip
+  continua ligado por padrão — ele avisa sem atrapalhar.
 
 ### Corrigido
 - Rodapé do modal de temas quebrava para a linha de baixo (40 colunas numa caixa
