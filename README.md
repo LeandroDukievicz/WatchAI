@@ -416,19 +416,41 @@ selecionado no dashboard ou com os detalhes abertos.
 |---|---|
 | **macOS** | `System Events` ativa o processo pelo PID |
 | **Windows** | `AppActivate` do WScript.Shell, também pelo PID |
-| **Linux/X11** | `wmctrl` ou `xdotool`; com várias janelas no mesmo processo (um servidor de terminal hospeda todas as abas), o título da sessão desempata |
-| **Linux/Wayland** | o compositor **proíbe** um app levantar a janela de outro — é proteção contra roubo de foco. Com a extensão **[Window Calls]** instalada, o WatchAI usa o D-Bus dela e foca a **janela exata** por PID; sem ela, pede ao próprio terminal que se levante (`org.freedesktop.Application.Activate`), o que traz a janela mas não escolhe a aba |
+| **Linux/X11** | `wmctrl` ou `xdotool`; com várias janelas no mesmo processo (um servidor de terminal hospeda todas as abas), o diretório e o título da sessão desempatam |
+| **Linux/Wayland** | o compositor **proíbe** um app levantar a janela de outro — é proteção contra roubo de foco, e do GNOME 50 em diante não há mais sessão X11 para escapar por ela. O caminho é a extensão **[Window Calls]**: com ela o WatchAI restaura a janela (`Unminimize`), ativa (`Activate`) e **confere** relendo o foco. Sem ela não há foco preciso no Wayland — e o WatchAI diz isso, em vez de tentar e fingir que deu |
 
 [Window Calls]: https://extensions.gnome.org/extension/4724/window-calls/
+
+No GNOME/Wayland é a extensão que liga o `⇧A` de verdade:
+
+```bash
+curl -L -o /tmp/window-calls.zip \
+  "https://extensions.gnome.org/download-extension/window-calls@domandoman.xyz.shell-extension.zip?version_tag=69219"
+gnome-extensions install --force /tmp/window-calls.zip
+gnome-extensions enable window-calls@domandoman.xyz   # se reclamar, saia e entre na sessão
+```
+
+**Qual janela é a sessão.** Um servidor de terminal (gnome-terminal, konsole)
+hospeda **todas** as janelas num processo só, então o PID não identifica janela
+nenhuma — e o título também não: numa máquina real ele é de quem está rodando na
+aba (o agente escreve o que está fazendo, um player escreve a música, o shell
+escreve `usuário@host`). Quem identifica é a **tty**. Quando há mais de uma
+janela candidata, o WatchAI escreve na tty da sessão um título único, pergunta à
+lista quem ficou com ele e **devolve o título anterior**. Terminal que ignore o
+OSC simplesmente não é encontrado por aí, e o desempate volta a ser por
+diretório e nome.
 
 **E o sino.** Em qualquer Unix, o WatchAI também toca o bell **na tty da
 sessão** — o terminal marca aquela aba como "precisa de atenção" e a janela
 pisca na dock. No Wayland é o que resolve o que o `Activate` não resolve: ele
 levanta a janela, o sino aponta a aba certa.
 
-O rodapé confirma o que conseguiu fazer ("janela à frente e aba sinalizada",
-"sino tocado em pts/4", "não consegui chegar nessa janela") — sem fingir sucesso
-onde o sistema não deixou.
+**Só é sucesso o que dá para conferir.** No Wayland o `Activate` devolve código
+zero mesmo quando o compositor ignora o pedido: anunciar "janela à frente" ali
+manda você procurar na tela o que não se moveu. Por isso o rodapé só diz
+`window raised` depois de reler o foco da janela — e nos outros casos diz o que
+de fato houve: `bell rung on pts/4…`, `the compositor refused to raise the
+window`, `couldn't reach that window`.
 
 ## Ajuda (`?`)
 

@@ -13,6 +13,29 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   job no CI que instala e roda o comando em Linux, macOS e Windows.
 - Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
 
+### Corrigido
+- **`⇧A` anunciava foco que não acontecia.** No Wayland, o
+  `org.freedesktop.Application.Activate` devolve código zero mesmo quando o
+  compositor ignora o pedido — e o WatchAI lia esse zero como sucesso. Agora:
+  - com a **[Window Calls]** instalada, a janela é **restaurada** (`Unminimize`,
+    que faltava: `Activate` não traz de volta uma janela minimizada), ativada e
+    **conferida** relendo o `focus` da lista;
+  - **sem** a extensão, no Wayland, o `Activate` do terminal nem é tentado: ali
+    ele só produziria sucesso falso. Sobra o sino, e o recado diz o que instalar;
+  - **a janela da sessão passou a ser identificada pela tty**, não pelo título:
+    com um servidor de terminal todas as janelas têm o mesmo PID, e o título é
+    de quem está rodando na aba (o agente, um player, o prompt) — numa máquina
+    com quatro janelas abertas o `⇧A` levantava a errada. Agora o WatchAI marca
+    a tty com um título único, vê quem ficou com ele e devolve o título de
+    antes; quando isso não é possível, o desempate por diretório e nome segue
+    valendo.
+  - **leitura do GVariant com aspas duplas**: basta uma janela com apóstrofo no
+    título para o `gdbus` trocar o delimitador de `'` para `"` e escapar as
+    internas. O parser só entendia o primeiro caso, então **um nome de música
+    numa aba qualquer** fazia o WatchAI concluir que a extensão não estava
+    instalada.
+- Os recados do `⇧A` passaram para o inglês, como o resto da interface.
+
 ### Mudado
 - **Semáforo maior e mais redondo**: cada lâmpada passou a ocupar **duas linhas
   cheias com os cantos cortados** (um octógono, ~10× a área do ponto anterior),

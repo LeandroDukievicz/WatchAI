@@ -295,6 +295,7 @@ class WatchAIApp(App):
             app=session.window_app,
             tty=session.tty,
             title=session.project or session.name,
+            directory=session.directory,
         )
         self.notify(f"{session.short}: {resultado}", timeout=4)
 

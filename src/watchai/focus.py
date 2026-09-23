@@ -9,20 +9,32 @@ Cada sistema tem um jeito, e não é por capricho:
 * **Windows** — `AppActivate` do WScript.Shell, também pelo PID.
 * **Linux/X11** — `wmctrl` ou `xdotool` casam janela e PID.
 * **Linux/Wayland** — o compositor **proíbe** um app levantar a janela de
-  outro (é proteção contra roubo de foco). Há dois caminhos:
-  1. a extensão do GNOME **[Window Calls]**, que expõe `List` e `Activate` no
-     D-Bus e permite focar a **janela exata** por PID — é a única forma de foco
-     preciso no Wayland, e por isso é a preferida quando está instalada;
-  2. sem ela, pedir ao próprio terminal que se levante
-     (`org.freedesktop.Application.Activate`), o que traz a janela mas não
-     escolhe a aba.
+  outro (é proteção contra roubo de foco), e o GNOME 50 já nem tem sessão X11
+  para escapar por ela. O único caminho preciso é a extensão **[Window Calls]**,
+  que expõe `List`, `Unminimize` e `Activate` no D-Bus.
 
   [Window Calls]: https://extensions.gnome.org/extension/4724/window-calls/
 
-E quando nada disso existe, sobra o recurso mais antigo do Unix: **tocar o sino
-na tty da sessão**. O terminal marca a janela como "precisa de atenção" — na
-dock do GNOME ela pisca. Não é foco, mas é evidência, e funciona em qualquer
-lugar onde a tty seja sua.
+Sem a extensão sobra pedir ao terminal que se levante
+(`org.freedesktop.Application.Activate`), e aí vem a armadilha que justifica
+metade deste arquivo: **no Wayland esse pedido volta com sucesso e é ignorado**.
+Quem chama recebe código 0, a janela não se move, e o app anuncia uma coisa que
+não aconteceu. Por isso aqui só é sucesso o que dá para conferir: com a extensão
+instalada, relendo o `focus` da janela depois do `Activate`; sem ela, nada no
+Wayland é sucesso.
+
+O que resta então é o recurso mais antigo do Unix: **tocar o sino na tty da
+sessão**. O terminal marca a janela como "precisa de atenção" — na dock do GNOME
+ela pisca. Não é foco, e numa janela minimizada não restaura nada, mas é
+evidência, e funciona em qualquer lugar onde a tty seja sua.
+
+Um detalhe que atravessa tudo: um servidor de terminal (gnome-terminal, konsole)
+hospeda **todas** as janelas num processo só, e o PID não identifica janela ali.
+O título também não: numa máquina real ele é de quem está rodando na aba — o
+agente escreve o que está fazendo, um player escreve a música, o shell escreve
+`usuário@host`. Quem identifica é a **tty**, e o jeito de perguntar é escrever
+nela um título único (mesmo canal do sino), ver qual janela ficou com ele e
+devolver o título de antes.
 """
 
 from __future__ import annotations
@@ -33,6 +45,7 @@ import json
 import os
 import shutil
 import sys
+import time
 
 # Nome do processo do emulador -> app id no D-Bus (apps GTK/Qt que expõem
 # org.freedesktop.Application).
@@ -89,6 +102,12 @@ OSASCRIPT = (
 POWERSHELL_ACTIVATE = "(New-Object -ComObject WScript.Shell).AppActivate({pid})"
 
 
+def wayland() -> bool:
+    """Estamos num compositor Wayland? É a diferença entre pedir foco e
+    conseguir foco."""
+    return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+
 def detect() -> str | None:
     """O mecanismo desta máquina: 'osascript', 'powershell', 'wmctrl',
     'xdotool', 'gdbus' — ou None, e aí resta o sino."""
@@ -98,8 +117,7 @@ def detect() -> str | None:
         return "powershell" if shutil.which("powershell") or shutil.which("pwsh") else None
     # No Wayland o wmctrl/xdotool até existem, mas não enxergam janela nativa:
     # usá-los seria falhar com cara de sucesso.
-    wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
-    if not wayland:
+    if not wayland():
         if shutil.which("wmctrl"):
             return "wmctrl"
         if shutil.which("xdotool"):
@@ -109,15 +127,78 @@ def detect() -> str | None:
     return None
 
 
+# Escapes que o g_variant_print emite ao imprimir texto.
+_ESCAPES = {"a": "\a", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v"}
+
+
 def _gvariant_string(saida: str) -> str | None:
-    """O conteúdo de um `('...',)` devolvido pelo gdbus."""
+    """O conteúdo de um `('...',)` devolvido pelo gdbus.
+
+    O GVariant sai entre aspas simples — **menos** quando o próprio texto tem
+    uma aspa simples, e aí o gdbus passa tudo para aspas duplas e escapa as
+    internas. Como o texto aqui é a lista de janelas, basta **uma** janela com
+    apóstrofo no título para o formato virar; ler só o primeiro caso fazia o
+    WatchAI concluir que a extensão não estava instalada.
+    """
     texto = saida.strip()
     if not (texto.startswith("(") and texto.endswith(")")):
         return None
     dentro = texto[1:-1].rstrip(",").strip()
-    if len(dentro) < 2 or dentro[0] != "'" or dentro[-1] != "'":
+    if len(dentro) < 2 or dentro[0] not in "'\"" or dentro[-1] != dentro[0]:
         return None
-    return dentro[1:-1].replace("\\'", "'").replace("\\\\", "\\")
+    corpo = dentro[1:-1]
+    partes: list[str] = []
+    i = 0
+    while i < len(corpo):
+        letra = corpo[i]
+        if letra != "\\" or i + 1 >= len(corpo):
+            partes.append(letra)
+            i += 1
+            continue
+        seguinte = corpo[i + 1]
+        if seguinte == "u" and i + 6 <= len(corpo):
+            try:
+                partes.append(chr(int(corpo[i + 2 : i + 6], 16)))
+            except ValueError:
+                partes.append(seguinte)
+                i += 2
+                continue
+            i += 6
+            continue
+        partes.append(_ESCAPES.get(seguinte, seguinte))
+        i += 2
+    return "".join(partes)
+
+
+def _alvos(title: str | None, directory: str | None) -> list[str]:
+    """O que procurar no título da janela, do mais específico para o menos.
+
+    O diretório vem primeiro porque o título de uma janela de terminal costuma
+    ser o caminho (`~/Projetos/WatchAI`), enquanto o nome do projeto sozinho
+    também casaria com uma janela aberta em outra pasta de nome parecido.
+    """
+    return [texto.lower() for texto in (directory, title) if texto]
+
+
+def escolher(janelas: list, pid: int, title: str | None, directory: str | None = None) -> int | None:
+    """Entre as janelas daquele processo, a que é a sessão — ou None.
+
+    Com gnome-terminal as nove janelas do usuário têm o mesmo PID: sem casar o
+    título, `Shift+A` levantaria uma janela qualquer e ainda diria que deu certo.
+    """
+    candidatas = [j for j in janelas if isinstance(j, dict) and j.get("pid") == pid]
+    if not candidatas:
+        return None
+    if len(candidatas) > 1:
+        for alvo in _alvos(title, directory):
+            for janela in candidatas:
+                texto = " ".join(
+                    str(janela.get(chave, ""))
+                    for chave in ("title", "wm_class", "wm_class_instance")
+                ).lower()
+                if alvo in texto:
+                    return janela.get("id")
+    return candidatas[0].get("id")
 
 
 async def _rodar(comando: list[str], timeout: float = 5.0) -> tuple[int, str]:
@@ -140,12 +221,9 @@ async def _rodar(comando: list[str], timeout: float = 5.0) -> tuple[int, str]:
     return processo.returncode or 0, (saida or b"").decode("utf-8", "replace")
 
 
-def ring(tty: str | None) -> bool:
-    """Toca o sino na tty da sessão: a janela dela pede atenção na barra.
-
-    É o plano B universal — e o único caminho no Wayland quando o terminal não
-    fala D-Bus.
-    """
+def _escrever(tty: str | None, dados: bytes) -> bool:
+    """Escreve na tty da sessão. É o canal que o sino e o título usam: o que sai
+    ali é interpretado pelo emulador, não pelo programa que está rodando."""
     if not tty or not tty.startswith("/dev/"):
         return False
     try:
@@ -153,10 +231,31 @@ def ring(tty: str | None) -> bool:
     except OSError:
         return False
     try:
-        os.write(fd, b"\a")
+        os.write(fd, dados)
         return True
+    except OSError:
+        return False
     finally:
         os.close(fd)
+
+
+def ring(tty: str | None) -> bool:
+    """Toca o sino na tty da sessão: a janela dela pede atenção na barra.
+
+    É o plano B universal — e o único caminho no Wayland quando o terminal não
+    fala D-Bus.
+    """
+    return _escrever(tty, b"\a")
+
+
+def _limpar_titulo(texto: str) -> str:
+    """Título pronto para voltar à tty: sem controles, e curto."""
+    return "".join(c for c in texto if c.isprintable())[:300]
+
+
+def set_title(tty: str | None, texto: str) -> bool:
+    """Troca o título da janela pela tty da sessão (OSC 2)."""
+    return _escrever(tty, f"\033]2;{_limpar_titulo(texto)}\007".encode("utf-8", "replace"))
 
 
 class Focuser:
@@ -170,16 +269,21 @@ class Focuser:
     def available(self) -> bool:
         return bool(self.method)
 
-    async def _janela_window_calls(self, pid: int, title: str | None) -> int | None:
-        """O id da janela daquele processo, segundo a extensão Window Calls.
-
-        Devolve None quando a extensão não está instalada — e aí o caminho
-        segue para o `Activate` do terminal.
-        """
-        código, saida = await _rodar(
+    async def _window_calls(self, metodo: str, *args: str) -> tuple[int, str]:
+        return await _rodar(
             ["gdbus", "call", "--session", "--dest", WINDOW_CALLS[0],
-             "--object-path", WINDOW_CALLS[1], "--method", f"{WINDOW_CALLS[2]}.List"]
+             "--object-path", WINDOW_CALLS[1],
+             "--method", f"{WINDOW_CALLS[2]}.{metodo}", *args]
         )
+
+    async def _janelas_window_calls(self) -> list | None:
+        """As janelas da sessão gráfica, segundo a extensão Window Calls.
+
+        `None` quer dizer **extensão ausente** (ou muda) — e é informação: é a
+        diferença entre "não achei a janela" e "não tenho como achar janela
+        nenhuma". Uma lista vazia seria a primeira; None é a segunda.
+        """
+        código, saida = await self._window_calls("List")
         if código != 0:
             return None
         bruto = _gvariant_string(saida)
@@ -189,20 +293,71 @@ class Focuser:
             janelas = json.loads(bruto)
         except ValueError:
             return None
-        if not isinstance(janelas, list):
+        return janelas if isinstance(janelas, list) else None
+
+    async def _focada(self, janela: int) -> bool:
+        """A janela ficou mesmo em foco?
+
+        O `Activate` não devolve erro quando o compositor recusa: quem sabe a
+        verdade é a lista, que traz o `focus` de cada janela. Duas olhadas
+        porque a troca tem animação, e a primeira pode chegar cedo demais.
+        """
+        for tentativa in range(2):
+            if tentativa:
+                await asyncio.sleep(0.3)
+            for j in await self._janelas_window_calls() or ():
+                if isinstance(j, dict) and j.get("id") == janela:
+                    if j.get("focus"):
+                        return True
+                    break
+        return False
+
+    async def _janela_pela_tty(self, tty: str | None, candidatas: list) -> int | None:
+        """Qual das janelas é esta sessão — perguntando pela tty dela.
+
+        É o único vínculo confiável quando o emulador hospeda várias janelas num
+        processo só. O título não serve: numa máquina real ele é de quem está
+        rodando na aba — o agente escreve o que está fazendo, um player escreve a
+        música, o shell escreve `usuário@host`. Nada disso fala da sessão.
+
+        Mas a tty fala: escrevemos nela um título único (o mesmo canal do sino),
+        perguntamos à lista quem está com ele e devolvemos o título de antes.
+        Quem não responder ao OSC simplesmente não é encontrado aqui, e o
+        caminho segue para o desempate por texto.
+        """
+        antes = {j.get("id"): j.get("title") for j in candidatas if isinstance(j, dict)}
+        marca = f"watchai:{os.getpid()}:{time.monotonic_ns():x}"
+        if not set_title(tty, marca):
             return None
+        for espera in (0.2, 0.3):
+            await asyncio.sleep(espera)
+            for j in await self._janelas_window_calls() or ():
+                if isinstance(j, dict) and j.get("title") == marca:
+                    janela = j.get("id")
+                    # O agente reescreve o título dele no próximo quadro, mas
+                    # até lá a janela não fica com a nossa marca na cara.
+                    set_title(tty, antes.get(janela) or "")
+                    return janela
+        # Não achou: ou o terminal ignora o OSC, ou já reescreveu o título por
+        # cima. Nos dois casos não há marca nossa pendurada para desfazer.
+        return None
+
+    async def _janela_da_sessao(
+        self,
+        janelas: list,
+        pid: int,
+        tty: str | None,
+        title: str | None,
+        directory: str | None,
+    ) -> int | None:
+        """A janela desta sessão, do vínculo mais forte para o mais fraco."""
         candidatas = [j for j in janelas if isinstance(j, dict) and j.get("pid") == pid]
-        if not candidatas:
-            return None
-        if title and len(candidatas) > 1:
-            alvo = title.lower()
-            for janela in candidatas:
-                texto = " ".join(
-                    str(janela.get(chave, "")) for chave in ("title", "wm_class", "wm_class_instance")
-                ).lower()
-                if alvo in texto:
-                    return janela.get("id")
-        return candidatas[0].get("id")
+        if len(candidatas) > 1:
+            # Só vale marcar a tty quando há de fato ambiguidade.
+            janela = await self._janela_pela_tty(tty, candidatas)
+            if janela is not None:
+                return janela
+        return escolher(janelas, pid, title, directory)
 
     async def _janela_wmctrl(self, pid: int, title: str | None) -> str | None:
         """O id da janela daquele processo.
@@ -237,12 +392,19 @@ class Focuser:
         app: str | None = None,
         tty: str | None = None,
         title: str | None = None,
+        directory: str | None = None,
     ) -> str:
-        """Tenta focar e devolve, em uma linha, o que conseguiu fazer."""
+        """Tenta focar e devolve, em uma linha, o que conseguiu fazer.
+
+        Só chama de sucesso o que dá para conferir. Um aviso de sucesso que não
+        move a janela é pior que um "não consegui": manda você procurar na tela
+        o que não está lá.
+        """
+        dica = ""
         if pid and self.method == "osascript":
             código, _ = await _rodar(["osascript", "-e", OSASCRIPT.format(pid=pid)])
             if código == 0:
-                return "janela em evidência"
+                return "window raised"
         elif pid and self.method == "powershell":
             exe = shutil.which("powershell") or shutil.which("pwsh")
             if exe:
@@ -251,35 +413,42 @@ class Focuser:
                      POWERSHELL_ACTIVATE.format(pid=pid)]
                 )
                 if código == 0:
-                    return "janela em evidência"
+                    return "window raised"
         elif pid and self.method == "wmctrl":
             janela = await self._janela_wmctrl(pid, title)
             if janela:
                 código, _ = await _rodar(["wmctrl", "-i", "-a", janela])
                 if código == 0:
-                    return "janela em evidência"
+                    return "window raised"
         elif pid and self.method == "xdotool":
             código, saida = await _rodar(["xdotool", "search", "--pid", str(pid)])
             ids = [linha for linha in saida.split() if linha.strip()]
             if código == 0 and ids:
                 código, _ = await _rodar(["xdotool", "windowactivate", ids[-1]])
                 if código == 0:
-                    return "janela em evidência"
+                    return "window raised"
         elif self.method == "gdbus":
-            # 1) Window Calls: foco exato, a única forma precisa no Wayland.
-            if pid:
-                janela = await self._janela_window_calls(pid, title)
+            # 1) Window Calls: foco exato, e a única forma precisa no Wayland.
+            janelas = await self._janelas_window_calls() if pid else None
+            if janelas is None:
+                # Sem a extensão não há como escolher janela nem conferir foco.
+                dica = " — install Window Calls for real focus" if wayland() else ""
+            elif pid:
+                janela = await self._janela_da_sessao(janelas, pid, tty, title, directory)
                 if janela is not None:
-                    código, _ = await _rodar(
-                        ["gdbus", "call", "--session", "--dest", WINDOW_CALLS[0],
-                         "--object-path", WINDOW_CALLS[1],
-                         "--method", f"{WINDOW_CALLS[2]}.Activate", str(janela)]
-                    )
-                    if código == 0:
-                        return "janela em evidência"
-            # 2) sem a extensão: pedir ao terminal que se levante.
+                    # Minimizada, a janela ignora o Activate: é preciso
+                    # restaurá-la antes. Numa janela normal o Unminimize não faz
+                    # nada, então sai barato chamar sempre.
+                    await self._window_calls("Unminimize", str(janela))
+                    await self._window_calls("Activate", str(janela))
+                    if await self._focada(janela):
+                        return "window raised"
+                    return "the compositor refused to raise the window"
+            # 2) Sem a extensão: pedir ao próprio terminal que se levante. No
+            #    X11 o pedido é honrado; no Wayland ele volta zero e é ignorado,
+            #    e tentar só produziria um sucesso falso — então nem tenta.
             destino = APPS_DBUS.get(app or "")
-            if destino:
+            if destino and janelas is None and not wayland():
                 caminho = "/" + destino.replace(".", "/")
                 código, _ = await _rodar(
                     ["gdbus", "call", "--session", "--dest", destino,
@@ -287,16 +456,25 @@ class Focuser:
                      "--method", "org.freedesktop.Application.Activate", "{}"]
                 )
                 if código == 0:
-                    # O Activate levanta a janela, mas quem escolhe a aba é o
-                    # terminal. O sino na tty marca a aba certa — as duas coisas
-                    # juntas chegam onde o Wayland sozinho não deixa.
+                    # O Activate levanta o app, mas quem escolhe a aba é o
+                    # terminal: o sino na tty marca qual delas.
                     if ring(tty):
-                        return "janela à frente e aba sinalizada"
-                    return "terminal chamado para a frente"
+                        return "terminal raised, tab flagged"
+                    return "terminal raised"
 
         if ring(tty):
-            return f"sino tocado em {tty.replace('/dev/', '')} — a janela pede atenção"
-        return "não consegui chegar nessa janela"
+            onde = tty.replace("/dev/", "")
+            return f"bell rung on {onde}; the window is asking for attention{dica}"
+        return f"couldn't reach that window{dica}"
 
 
-__all__ = ["APPS_DBUS", "EMULADORES", "Focuser", "detect", "ring"]
+__all__ = [
+    "APPS_DBUS",
+    "EMULADORES",
+    "Focuser",
+    "detect",
+    "escolher",
+    "ring",
+    "set_title",
+    "wayland",
+]

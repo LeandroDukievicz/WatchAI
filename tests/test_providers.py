@@ -524,6 +524,64 @@ def test_shift_a_leva_para_a_janela_da_sessao_selecionada():
     asyncio.run(main())
 
 
+async def _sem_espera(segundos):
+    """As esperas do foco existem por causa da animação do compositor; no teste
+    elas só somariam segundos."""
+    return None
+
+
+def _lista_gvariant(janelas: list[dict]) -> str:
+    """A resposta do `List` como o gdbus entrega: JSON dentro de um GVariant."""
+    return "(" + repr(json.dumps(janelas)) + ",)"
+
+
+class FalsoShell:
+    """gdbus de mentira, com a parte que importa: **o foco só muda se a janela
+    for mesmo ativada**, e o `Activate` devolve zero de qualquer jeito — que é
+    exatamente como o Wayland se comporta quando ignora o pedido.
+    """
+
+    def __init__(self, janelas: list[dict], *, extensao: bool = True, recusa: bool = False):
+        self.janelas = janelas
+        self.extensao = extensao  # a Window Calls está instalada?
+        self.recusa = recusa  # o compositor ignora o Activate?
+        self.chamadas: list[list[str]] = []
+
+    async def __call__(self, comando, timeout=5.0):
+        self.chamadas.append(comando)
+        metodo = comando[8].rsplit(".", 1)[-1] if len(comando) > 8 else ""
+        args = comando[9:]
+        if metodo == "List":
+            return (0, _lista_gvariant(self.janelas)) if self.extensao else (1, "")
+        if metodo == "Unminimize":
+            for j in self.janelas:
+                if j["id"] == int(args[0]):
+                    j["minimized"] = False
+        elif metodo == "Activate" and not self.recusa:
+            for j in self.janelas:
+                j["focus"] = j["id"] == int(args[0]) and not j.get("minimized", False)
+        return 0, "()"
+
+    def args_de(self, metodo: str) -> list[str]:
+        return [c[9] for c in self.chamadas if len(c) > 9 and c[8].endswith("." + metodo)]
+
+    @property
+    def ordem(self) -> list[str]:
+        return [c[8].rsplit(".", 1)[-1] for c in self.chamadas if len(c) > 8]
+
+
+def janelas_de_um_gnome_terminal(**extra) -> list[dict]:
+    """Duas janelas do mesmo processo — o caso do gnome-terminal — e um
+    navegador para garantir que o pid filtra."""
+    return [
+        {"id": 77, "pid": 4242, "wm_class": "gnome-terminal-server",
+         "title": "eu@maquina: ~/outro", "focus": False, **extra},
+        {"id": 88, "pid": 4242, "wm_class": "gnome-terminal-server",
+         "title": "eu@maquina: ~/Projetos/WatchAI", "focus": False, **extra},
+        {"id": 99, "pid": 1, "wm_class": "firefox", "title": "web", "focus": False},
+    ]
+
+
 def test_sem_mecanismo_e_sem_tty_o_foco_avisa_que_nao_deu():
     import asyncio
 
@@ -532,7 +590,7 @@ def test_sem_mecanismo_e_sem_tty_o_foco_avisa_que_nao_deu():
     async def main():
         focuser = Focuser(None)  # nenhuma ferramenta de janela nesta máquina
         assert focuser.available is False
-        assert await focuser.focus(pid=1, app="", tty="") == "não consegui chegar nessa janela"
+        assert await focuser.focus(pid=1, app="", tty="") == "couldn't reach that window"
 
     asyncio.run(main())
 
@@ -560,52 +618,182 @@ def test_com_varias_janelas_no_mesmo_processo_o_titulo_desempata(monkeypatch):
     assert asyncio.run(focuser._janela_wmctrl(1, "watchai")) is None
 
 
-def test_window_calls_foca_a_janela_exata(monkeypatch):
-    """Com a extensão instalada dá para focar a janela certa no Wayland —
-    sem ela, o melhor possível é levantar o terminal."""
+def test_escolher_usa_o_diretorio_antes_do_nome_do_projeto():
+    """Duas janelas com o mesmo nome de pasta no fim: o caminho inteiro é o que
+    distingue, e por isso vem primeiro."""
+    from watchai.focus import escolher
+
+    janelas = [
+        {"id": 1, "pid": 9, "title": "eu@maquina: ~/arquivo/WatchAI"},
+        {"id": 2, "pid": 9, "title": "eu@maquina: ~/Projetos/WatchAI"},
+    ]
+    assert escolher(janelas, 9, "WatchAI", "~/Projetos/WatchAI") == 2
+    assert escolher(janelas, 9, "WatchAI", None) == 1  # só o nome: o primeiro que casa
+    assert escolher(janelas, 7, "WatchAI", None) is None  # nenhuma janela desse pid
+
+
+def test_gvariant_aceita_os_dois_jeitos_de_aspas():
+    """Basta uma janela com apóstrofo no título (um nome de música, por exemplo)
+    para o gdbus trocar todo o delimitador de `'` para `"` e escapar as internas.
+    Ler só o primeiro caso fazia o app concluir que a extensão não existia."""
+    from watchai.focus import _gvariant_string
+
+    simples = "('[{\"title\":\"ola\"}]',)"
+    duplas = '("[{\\"title\\":\\"Ngak\'thola\\"}]",)'
+    assert json.loads(_gvariant_string(simples))[0]["title"] == "ola"
+    assert json.loads(_gvariant_string(duplas))[0]["title"] == "Ngak'thola"
+    assert _gvariant_string("nada disso") is None
+
+
+def test_a_tty_identifica_a_janela_quando_o_titulo_nao_ajuda(monkeypatch):
+    """O caso real: quatro janelas no mesmo gnome-terminal, e nenhum título fala
+    do projeto — um é o agente dizendo o que faz, outro é o prompt do shell.
+    A sessão é reconhecida escrevendo um título único na própria tty."""
     import asyncio
 
     from watchai.focus import Focuser
 
-    chamadas: list[list[str]] = []
-    lista = (
-        '(\'[{"id":77,"pid":4242,"wm_class":"gnome-terminal-server","title":"outro"},'
-        '{"id":88,"pid":4242,"wm_class":"gnome-terminal-server","title":"watchai — claude"},'
-        '{"id":99,"pid":1,"wm_class":"firefox","title":"web"}]\',)'
-    )
+    janelas = [
+        {"id": 11, "pid": 4242, "title": "eu@maquina: ~", "focus": False},
+        {"id": 22, "pid": 4242, "title": "◐ mexendo noutra coisa", "focus": False},
+    ]
+    shell = FalsoShell(janelas)
+    escritas: list[tuple[str, str]] = []
 
-    async def falso(comando, timeout=5.0):
-        chamadas.append(comando)
-        if comando[-1].endswith(".List"):
-            return 0, lista
-        return 0, "()"
+    def falso_titulo(tty, texto):
+        escritas.append((tty, texto))
+        # Só a janela 22 é desta tty: é ela que recebe a marca.
+        janelas[1]["title"] = texto
+        return True
 
-    monkeypatch.setattr("watchai.focus._rodar", falso)
+    monkeypatch.setattr("watchai.focus._rodar", shell)
+    monkeypatch.setattr("watchai.focus.set_title", falso_titulo)
+    monkeypatch.setattr("watchai.focus.asyncio.sleep", _sem_espera)
+
     focuser = Focuser("gdbus")
     resultado = asyncio.run(
-        focuser.focus(pid=4242, app="gnome-terminal-server", tty="", title="watchai")
+        focuser.focus(pid=4242, app="gnome-terminal-server", tty="/dev/pts/7", title="projeto")
     )
-    assert resultado == "janela em evidência"
-    activate = [c for c in chamadas if c[-2].endswith(".Activate")]
-    assert activate and activate[0][-1] == "88"  # a janela cujo título casa
+    assert resultado == "window raised"
+    assert shell.args_de("Activate") == ["22"]  # e não a primeira da lista
+    # O título de antes volta para a janela: a marca não fica pendurada nela.
+    assert escritas[-1] == ("/dev/pts/7", "◐ mexendo noutra coisa")
 
 
-def test_sem_a_extensao_cai_no_activate_do_terminal(monkeypatch):
+def test_sem_resposta_ao_osc_o_desempate_por_texto_ainda_vale(monkeypatch):
+    """Terminal que ignora o OSC não deixa marca — e aí o caminho antigo, por
+    diretório e nome, é o que sobra."""
     import asyncio
 
     from watchai.focus import Focuser
 
-    async def falso(comando, timeout=5.0):
-        if comando[-1].endswith(".List"):
-            return 1, ""  # extensão não instalada
-        return 0, "()"
+    shell = FalsoShell(janelas_de_um_gnome_terminal())
+    monkeypatch.setattr("watchai.focus._rodar", shell)
+    monkeypatch.setattr("watchai.focus.set_title", lambda tty, texto: False)
+    monkeypatch.setattr("watchai.focus.asyncio.sleep", _sem_espera)
 
-    monkeypatch.setattr("watchai.focus._rodar", falso)
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(
+        focuser.focus(
+            pid=4242,
+            app="gnome-terminal-server",
+            tty="/dev/pts/7",
+            directory="~/Projetos/WatchAI",
+        )
+    )
+    assert resultado == "window raised"
+    assert shell.args_de("Activate") == ["88"]
+
+
+def test_window_calls_foca_a_janela_exata(monkeypatch):
+    """Com a extensão instalada dá para focar a janela certa no Wayland — sem
+    ela, não há foco preciso nenhum."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    shell = FalsoShell(janelas_de_um_gnome_terminal())
+    monkeypatch.setattr("watchai.focus._rodar", shell)
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(
+        focuser.focus(
+            pid=4242,
+            app="gnome-terminal-server",
+            tty="",
+            title="WatchAI",
+            directory="~/Projetos/WatchAI",
+        )
+    )
+    assert resultado == "window raised"
+    assert shell.args_de("Activate") == ["88"]  # a janela cujo caminho casa
+
+
+def test_janela_minimizada_e_restaurada_antes_de_ativar(monkeypatch):
+    """O caso que motivou tudo: a janela estava minimizada em outro monitor.
+    `Activate` sozinho não traz de volta — `Unminimize` tem que vir antes."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    shell = FalsoShell(janelas_de_um_gnome_terminal(minimized=True))
+    monkeypatch.setattr("watchai.focus._rodar", shell)
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(
+        focuser.focus(pid=4242, app="gnome-terminal-server", tty="", directory="~/Projetos/WatchAI")
+    )
+    assert resultado == "window raised"
+    acoes = [m for m in shell.ordem if m in ("Unminimize", "Activate")]
+    assert acoes == ["Unminimize", "Activate"]
+
+
+def test_activate_ignorado_pelo_compositor_nao_vira_sucesso(monkeypatch):
+    """O `Activate` devolve zero mesmo quando o Wayland ignora o pedido. Quem
+    diz a verdade é o `focus` relido depois — e aqui ele continua falso."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    shell = FalsoShell(janelas_de_um_gnome_terminal(), recusa=True)
+    monkeypatch.setattr("watchai.focus._rodar", shell)
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(
+        focuser.focus(pid=4242, app="gnome-terminal-server", tty="", directory="~/Projetos/WatchAI")
+    )
+    assert resultado == "the compositor refused to raise the window"
+
+
+def test_sem_a_extensao_no_wayland_o_app_nao_promete_foco(monkeypatch):
+    """Sem a Window Calls, no Wayland, o `Activate` do terminal só produziria um
+    sucesso falso: melhor não tentar e dizer o que falta."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    shell = FalsoShell([], extensao=False)
+    monkeypatch.setattr("watchai.focus._rodar", shell)
     focuser = Focuser("gdbus")
     resultado = asyncio.run(
         focuser.focus(pid=4242, app="gnome-terminal-server", tty="", title="x")
     )
-    assert resultado == "terminal chamado para a frente"
+    assert "install Window Calls" in resultado
+    assert shell.args_de("Activate") == []
+
+
+def test_sem_a_extensao_no_x11_cai_no_activate_do_terminal(monkeypatch):
+    """Fora do Wayland o pedido é honrado de verdade, e aí vale tentar."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    shell = FalsoShell([], extensao=False)
+    monkeypatch.setattr("watchai.focus._rodar", shell)
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(
+        focuser.focus(pid=4242, app="gnome-terminal-server", tty="", title="x")
+    )
+    assert resultado == "terminal raised"
 
 
 def test_abrir_e_fechar_agente_nao_derruba_a_tela():
