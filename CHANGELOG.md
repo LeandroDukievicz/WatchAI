@@ -14,6 +14,13 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
 
 ### Corrigido
+- **O card do codex também ficava com o nome da tty.** Duas causas somadas: o
+  codex grava o diretório como URI (`file:///...`), e `Path("file:///x")` não é
+  o caminho `/x`; e ele só o grava de vez em quando, aninhado em `payload.item`
+  — numa sessão de 20 MB o último ficava **1,3 MB antes do fim**, fora da cauda
+  de 64 KB que o WatchAI lê. Agora a URI é convertida, a busca olha o `cwd` em
+  qualquer nível da entrada, e quando a cauda não traz nada há uma varredura
+  mais funda: uma vez por arquivo (8 ms num diário de 20 MB), guardada depois.
 - **O card mostrava `PTS/7` no lugar do projeto.** O projeto vinha do `cwd` do
   **processo**, que é onde a sessão começou: quem abre o agente na home e depois
   entra no projeto mantém o processo na home para sempre — e como a home não tem

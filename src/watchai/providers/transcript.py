@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 # Quanto lemos do fim do arquivo. Uma entrada de transcript raramente passa de
 # alguns KB; 64 KB cobrem várias com folga.
@@ -32,6 +33,11 @@ CAUDA_BYTES = 64 * 1024
 # "Pensando" há mais de dois minutos sem nada novo no arquivo não é pensar: é
 # um diário parado. Aí o processo decide.
 FRESCOR_SEGUNDOS = 120.0
+
+# O diretório nem sempre está na cauda: o codex só o grava no `session_meta` e
+# nos `turn_context`, e numa sessão longa o último fica a megabytes do fim. Vale
+# procurar mais fundo — uma vez por arquivo, e guardando o resultado.
+CAUDA_FUNDA = 8 * 1024 * 1024
 
 # Estados que o diário sabe dizer.
 FEITO = "done"
@@ -63,6 +69,73 @@ def _resumo(texto, limite: int = 50) -> str:
     """
     limpo = " ".join(str(texto).split())
     return limpo.split(". ")[0].rstrip(".")[:limite] or "error"
+
+
+def _caminho(valor: str) -> str:
+    """O diretório como caminho de sistema.
+
+    O codex grava `file:///...` em boa parte dos eventos, e `Path("file:///x")`
+    não é o caminho `/x` — é uma pasta chamada `file:`.
+    """
+    if not valor.startswith("file://"):
+        return valor
+    caminho = unquote(urlparse(valor).path)
+    # `file:///C:/Users/voce` vira `/C:/Users/voce`: no Windows a barra sobra.
+    if len(caminho) > 2 and caminho[0] == "/" and caminho[2] == ":":
+        caminho = caminho[1:]
+    return caminho or valor
+
+
+def _cwd_em(objeto, profundidade: int = 6) -> str:
+    """Qualquer `cwd` dentro da entrada, em qualquer nível.
+
+    O codex grava o diretório em lugares diferentes conforme o evento: no
+    `payload` do `turn_context` e dentro de `payload.item` nos eventos de item.
+    Procurar em dois níveis fixos achava só o primeiro — e o primeiro é o
+    diretório em que a sessão **abriu**, não o de agora.
+    """
+    if profundidade < 0:
+        return ""
+    if isinstance(objeto, dict):
+        valor = objeto.get("cwd")
+        if isinstance(valor, str) and valor:
+            return _caminho(valor)
+        filhos = objeto.values()
+    elif isinstance(objeto, list):
+        filhos = objeto
+    else:
+        return ""
+    for filho in filhos:
+        achado = _cwd_em(filho, profundidade - 1)
+        if achado:
+            return achado
+    return ""
+
+
+def _cwd_do_arquivo(caminho: Path, limite: int = CAUDA_FUNDA) -> str:
+    """O último diretório gravado no diário, procurando de trás para frente.
+
+    Só as linhas que mencionam o campo são decodificadas: um diário de 20 MB
+    tem dezenas de milhares de entradas, e aqui interessa exatamente uma.
+    """
+    try:
+        with caminho.open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - limite))
+            bruto = f.read()
+    except OSError:
+        return ""
+    for linha in reversed(bruto.split(b"\n")):
+        if b'"cwd"' not in linha:
+            continue
+        try:
+            entrada = json.loads(linha)
+        except ValueError:
+            continue
+        achado = _cwd_em(entrada)
+        if achado:
+            return achado
+    return ""
 
 
 def _epoch(carimbo) -> float | None:
@@ -184,7 +257,7 @@ class ClaudeCode:
         cwd = ""
         for entrada in entradas:
             if isinstance(entrada.get("cwd"), str) and entrada["cwd"]:
-                cwd = entrada["cwd"]
+                cwd = _caminho(entrada["cwd"])
             tipo = entrada.get("type")
             if tipo not in ("assistant", "user"):
                 continue
@@ -262,9 +335,9 @@ class Codex:
         mtime = caminho.stat().st_mtime
         cwd = ""
         for entrada in entradas:
-            dados = entrada.get("payload") or {}
-            if isinstance(dados.get("cwd"), str) and dados["cwd"]:
-                cwd = dados["cwd"]
+            achado = _cwd_em(entrada)
+            if achado:
+                cwd = achado
         for entrada in reversed(entradas):
             payload = entrada.get("payload") or {}
             tipo = payload.get("type") or ""
@@ -373,6 +446,7 @@ class Transcripts:
         self.leitores = {r.kind: r for r in (ClaudeCode(raiz), Codex(raiz), OpenCode(raiz))}
         self._arquivo: dict[tuple[str, str], Path | None] = {}
         self._cache: dict[Path, tuple[float, Leitura | None]] = {}
+        self._cwd: dict[Path, str] = {}  # diretório por arquivo, achado uma vez
 
     def ler(self, kind: str, cwd: str | None) -> Leitura | None:
         leitor = self.leitores.get(kind)
@@ -390,11 +464,30 @@ class Transcripts:
             anterior = self._cache.get(caminho)
             if anterior is not None and anterior[0] == mtime:
                 return anterior[1]  # nada mudou: não relê o arquivo
-            leitura = leitor.ler(caminho)
+            leitura = self._com_diretorio(caminho, leitor.ler(caminho))
             self._cache[caminho] = (mtime, leitura)
             return leitura
         except OSError:
             return None
+
+    def _com_diretorio(self, caminho: Path, leitura: Leitura | None) -> Leitura | None:
+        """Garante o diretório de trabalho na leitura.
+
+        O Claude Code carimba o diretório em toda entrada; o codex, só de vez em
+        quando. Quando a cauda não traz nada, vale a varredura funda — uma vez
+        por arquivo, guardada depois: trocar de pasta é raro, reler megabytes a
+        cada volta não é.
+        """
+        if leitura is None:
+            return None
+        if leitura.cwd:
+            self._cwd[caminho] = leitura.cwd
+            return leitura
+        lembrado = self._cwd.get(caminho)
+        if lembrado is None:
+            lembrado = _cwd_do_arquivo(caminho)
+            self._cwd[caminho] = lembrado
+        return replace(leitura, cwd=lembrado) if lembrado else leitura
 
     def esquecer(self, kind: str, cwd: str) -> None:
         self._arquivo.pop((kind, cwd), None)

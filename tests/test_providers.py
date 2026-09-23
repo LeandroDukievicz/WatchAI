@@ -347,6 +347,42 @@ def test_o_card_acompanha_o_agente_que_troca_de_projeto(tmp_path):
     assert store.sessions[0].name == "DERIVASOCIAL"
 
 
+def test_caminho_entende_o_file_uri():
+    """O codex grava o diretório como URI em boa parte dos eventos, e
+    `Path("file:///x")` não é o caminho `/x` — é uma pasta chamada `file:`."""
+    from watchai.providers.transcript import _caminho
+
+    assert _caminho("/home/eu/proj") == "/home/eu/proj"
+    assert _caminho("file:///home/eu/proj") == "/home/eu/proj"
+    assert _caminho("file:///home/eu/um%20espaco") == "/home/eu/um espaco"
+    assert _caminho("file:///C:/Users/eu") == "C:/Users/eu"  # a barra da frente sai
+
+
+def test_o_projeto_do_codex_vem_de_fundo_no_diario(tmp_path):
+    """O codex grava o diretório só de vez em quando, e aninhado em
+    `payload.item`. Numa sessão longa o último fica muito antes do fim, fora da
+    cauda de 64 KB — e o card ficava com o nome da tty."""
+    casa = str(Path.home())
+    projeto = Path.home() / "Projetos" / "WatchAI"
+    enchimento = [
+        {"timestamp": "2026-09-22T22:00:00.000Z", "type": "event_msg",
+         "payload": {"type": "agent_message", "message": "x" * 400}}
+        for _ in range(300)  # ~126 KB: empurra o diretório para fora da cauda
+    ]
+    escreve_rollout_codex(tmp_path, casa, [
+        {"timestamp": "2026-09-22T21:00:00.000Z", "type": "event_msg",
+         "payload": {"type": "item_completed", "item": {"cwd": projeto.as_uri()}}},
+        *enchimento,
+        {"timestamp": "2026-09-22T22:03:51.070Z", "type": "event_msg",
+         "payload": {"type": "task_complete", "last_agent_message": "pronto"}},
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "codex", cwd=casa))), Transcripts(tmp_path))
+    p.poll(AGORA)
+    assert store.sessions[0].name == "WATCHAI"
+    assert store.sessions[0].status is Status.READY  # e o estado segue vindo da cauda
+
+
 def test_transcript_ilegivel_nao_derruba_nada(tmp_path):
     pasta = tmp_path / ".claude" / "projects" / "-home-eu-proj"
     pasta.mkdir(parents=True)
