@@ -39,7 +39,13 @@ platforms:
 
 apps:
   watchai:
-    command: bin/watchai
+    # O interpretador vem escrito, não resolvido pelo PATH. O plugin deixa os
+    # scripts com `#!/usr/bin/env python3`, e num snap **classic** o PATH é o do
+    # host: esse `python3` é o da máquina de quem instalou, que não conhece o
+    # site-packages do snap — dá `ModuleNotFoundError: No module named 'watchai'`
+    # depois de instalar com sucesso. Chamando `bin/python3` do próprio snap, o
+    # interpretador acha o `pyvenv.cfg` um nível acima e monta o sys.path certo.
+    command: bin/python3 $SNAP/bin/watchai
 
 parts:
   watchai:
