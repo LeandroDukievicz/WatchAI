@@ -6,6 +6,13 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Adicionado
+- **`⇧A` troca para o painel certo do tmux.** A aba de um gnome-terminal não é
+  endereçável — ele não expõe isso —, mas um painel do tmux é, e ali dava para
+  fazer o que o sino só sinalizava. Um detalhe torna isto possível: a janela a
+  levantar não é a da tty do agente (um pty de painel, que não pertence a janela
+  nenhuma) e sim a do **cliente** atado à sessão. Como efeito colateral, sessões
+  rodando dentro do tmux passaram a ser alcançáveis pelo `⇧A`: antes o pid da
+  janela apontava para o servidor do tmux e não achava janela nenhuma.
 - **`S` ordena os cards por atenção** — ERROR, INPUT, READY, WAITING, WORKING —
   e volta à ordem de descoberta. **Tecla, não padrão**: card que muda de lugar
   sozinho desfaz a memória visual (você aprende onde cada sessão fica e passa a

@@ -350,6 +350,11 @@ def set_title(tty: str | None, texto: str) -> bool:
     return _escrever(tty, f"\033]2;{_limpar_titulo(texto)}\007".encode("utf-8", "replace"))
 
 
+# O separador entre a tty e o alvo na saída do tmux. Tab porque nome de sessão
+# pode ter espaço, e `sessão:janela.painel` é o endereço que o tmux aceita.
+TMUX_FORMATO = "#{pane_tty}\t#{session_name}:#{window_index}.#{pane_index}\t#{session_name}"
+
+
 class Focuser:
     """Põe na frente a janela de uma sessão. `available` diz se há mecanismo
     além do sino."""
@@ -439,6 +444,58 @@ class Focuser:
         # cima. Nos dois casos não há marca nossa pendurada para desfazer.
         return None
 
+    async def _tmux(self, tty: str | None) -> str | None:
+        """Dentro do tmux, muda para o painel da sessão e devolve a tty do
+        terminal onde o cliente está atado.
+
+        Este é o único caso em que a **aba** é endereçável. A aba de um
+        gnome-terminal não é: ele não expõe isso por lugar nenhum, e por isso o
+        sino continua sendo a resposta ali. Já um painel do tmux tem endereço
+        (`sessão:janela.painel`) e uma API estável — e vale nos três sistemas,
+        não só no Wayland.
+
+        A tty que volta é outra de propósito: a do agente é o pty do painel,
+        que não pertence a janela nenhuma. Quem pertence é a tty do **cliente**,
+        e é ela que a marcação de título usa para achar a janela.
+        """
+        if not tty:
+            return None
+        código, saida = await _rodar(["tmux", "list-panes", "-a", "-F", TMUX_FORMATO])
+        if código != 0:  # sem tmux instalado, ou sem servidor rodando
+            return None
+        sessao = alvo = None
+        for linha in saida.splitlines():
+            partes = linha.split("\t")
+            if len(partes) == 3 and partes[0] == tty:
+                alvo, sessao = partes[1], partes[2]
+                break
+        if alvo is None:
+            return None  # esta tty não é painel de tmux nenhum
+        # Trocar de painel é o que resolve a "aba"; o resto é achar a janela.
+        await _rodar(["tmux", "select-window", "-t", alvo])
+        await _rodar(["tmux", "select-pane", "-t", alvo])
+        código, saida = await _rodar(
+            ["tmux", "list-clients", "-t", sessao, "-F", "#{client_tty}"]
+        )
+        if código != 0:
+            return None
+        # Sessão sem cliente atado não tem janela para levantar — mas o painel
+        # já ficou selecionado, e é o que você encontra ao voltar para ela.
+        clientes = [linha.strip() for linha in saida.splitlines() if linha.strip()]
+        return clientes[0] if clientes else None
+
+    async def _pares_todas_window_calls(self) -> list:
+        """Todas as janelas, sem filtrar por processo.
+
+        Serve ao caso do multiplexador: ali o agente é descendente do servidor
+        do tmux, não do emulador, então o pid da janela não bate com nada. A
+        marca na tty é única, então dispensa o filtro.
+        """
+        janelas = await self._janelas_window_calls() or []
+        return [
+            (j.get("id"), j.get("title") or "") for j in janelas if isinstance(j, dict)
+        ]
+
     async def _pares_window_calls(self, pid: int) -> list:
         janelas = await self._janelas_window_calls() or []
         return [
@@ -456,8 +513,16 @@ class Focuser:
         directory: str | None,
     ) -> int | None:
         """A janela desta sessão, do vínculo mais forte para o mais fraco."""
-        if len(_pares_de(janelas, pid)) > 1:
+        candidatas = _pares_de(janelas, pid)
+        if len(candidatas) > 1:
             janela = await self._pela_tty(tty, lambda: self._pares_window_calls(pid))
+            if janela is not None:
+                return janela
+        elif not candidatas:
+            # Nenhuma janela deste processo. É o caso do multiplexador: o agente
+            # descende do servidor do tmux, não do emulador, e o pid não leva a
+            # janela nenhuma. A marca na tty é única e acha sem o pid.
+            janela = await self._pela_tty(tty, self._pares_todas_window_calls)
             if janela is not None:
                 return janela
         return escolher(janelas, pid, title, directory)
@@ -505,6 +570,12 @@ class Focuser:
         o que não está lá.
         """
         dica = ""
+        # Dentro do tmux, a aba é um painel e tem endereço: trocar para ele é o
+        # que o sino só sinalizava. A tty passa a ser a do cliente, que é quem
+        # tem janela — a do painel não pertence a nenhuma.
+        cliente = await self._tmux(tty)
+        if cliente:
+            tty = cliente
         if pid and self.method == "osascript":
             # A marca vai no próprio script: pedir a lista de janelas ao
             # AppleScript e casar aqui seria brigar com nomes que têm vírgula.

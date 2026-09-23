@@ -1080,7 +1080,8 @@ def test_mac_marca_a_janela_pela_tty_e_devolve_o_titulo(monkeypatch):
     escritas: list[tuple[str, str]] = []
 
     async def falso(comando, timeout=5.0):
-        scripts.append(comando[-1])
+        if comando[0] == "osascript":  # o tmux é consultado antes; não é o alvo
+            scripts.append(comando[-1])
         return 0, "RAISED"
 
     def falso_titulo(tty, texto):
@@ -1450,3 +1451,51 @@ def test_a_tecla_de_ordenar_reordena_os_cards_sem_perder_a_selecao():
             ]
 
     asyncio.run(main())
+
+
+def test_dentro_do_tmux_o_painel_certo_e_selecionado(monkeypatch):
+    """A aba de um gnome-terminal não é endereçável por lugar nenhum; um painel
+    do tmux é. E a tty que tem janela é a do **cliente**: a do painel é um pty
+    que não pertence a janela nenhuma, então marcar o título nela não acharia
+    nada."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    comandos: list[list[str]] = []
+
+    async def falso(comando, timeout=5.0):
+        comandos.append(comando)
+        if comando[:2] == ["tmux", "list-panes"]:
+            return 0, "/dev/pts/6\twt:0.1\twt\n/dev/pts/9\twt:1.0\twt\n"
+        if comando[:2] == ["tmux", "list-clients"]:
+            return 0, "/dev/pts/11\n"
+        return 0, ""
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    focuser = Focuser(None)
+
+    assert asyncio.run(focuser._tmux("/dev/pts/6")) == "/dev/pts/11"
+    assert ["tmux", "select-window", "-t", "wt:0.1"] in comandos
+    assert ["tmux", "select-pane", "-t", "wt:0.1"] in comandos
+
+    # tty que não é painel de tmux nenhum não pode mexer na seleção de ninguém
+    comandos.clear()
+    assert asyncio.run(focuser._tmux("/dev/pts/99")) is None
+    assert not [c for c in comandos if "select-pane" in c]
+
+
+def test_sem_tmux_o_foco_segue_como_antes(monkeypatch):
+    """Máquina sem tmux, ou com o servidor parado: o `list-panes` falha e o
+    caminho continua o de sempre, sem nada de novo para dar errado."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    async def falso(comando, timeout=5.0):
+        if comando[0] == "tmux":
+            return 127, ""  # comando não existe
+        return 0, ""
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    assert asyncio.run(Focuser(None)._tmux("/dev/pts/6")) is None

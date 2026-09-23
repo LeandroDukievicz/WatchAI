@@ -445,6 +445,14 @@ Isso vale nos três sistemas — Window Calls, `wmctrl`, `xdotool` e AppleScript
 listam janela e título do mesmo jeito. A exceção é o Windows, onde a sessão não
 tem tty: ali o alvo é a janela principal do processo.
 
+**A aba, quando ela tem endereço.** A aba de um gnome-terminal não é
+endereçável — ele não expõe isso por lugar nenhum, e é por isso que o sino
+existe. Mas um **painel do tmux** tem endereço (`sessão:janela.painel`) e API
+estável: quando a sessão roda dentro do tmux, o `⇧A` troca para o painel certo
+antes de levantar a janela. E a janela que ele levanta é a do **cliente**
+atado — a tty do painel é um pty que não pertence a janela nenhuma. Vale nos
+três sistemas, não só no Wayland.
+
 **E o sino.** Em qualquer Unix, o WatchAI também toca o bell **na tty da
 sessão** — o terminal marca aquela aba como "precisa de atenção" e a janela
 pisca na dock. No Wayland é o que resolve o que o `Activate` não resolve: ele
