@@ -220,6 +220,21 @@ máquina Windows ou macOS de verdade — isso continua sendo a pendência númer
       (`sem-psutil`, `restrito`, `erro`) e cada um tem a sua resposta
 - [x] **1.2.0 cortada**: 24 commits e 43 entradas que estavam em `[Não lançado]`
 
+
+### M12 — a fila curta
+
+- [x] **`S` ordena os cards por atenção**, e não vira o padrão: card que muda
+      de lugar sozinho desfaz a memória visual. A seleção segue a sessão, não a
+      posição
+- [x] **A aba exata, onde ela tem endereço**: a aba de um gnome-terminal não é
+      endereçável, mas um painel do tmux é — e de quebra, sessões dentro do
+      tmux passaram a ser alcançáveis pelo `⇧A`, que antes não achava janela
+      nenhuma porque o agente descende do servidor do tmux
+- [x] **Snap empacotado** (`snap/snapcraft.yaml` + build no CI que instala e
+      roda o que construiu). Em `classic`, porque sob strict o `⇧A` e a
+      notificação ficariam de fora do sandbox — falta só o envio à loja, que
+      pede conta e revisão manual
+
 ---
 
 ## O que ainda falta
@@ -242,19 +257,6 @@ máquina Windows ou macOS de verdade — isso continua sendo a pendência númer
       publisher* para este repositório (workflow `publish.yml`, ambiente `pypi`)
       e definir a variável `PYPI_READY=true`. Enquanto isso, o caminho é
       `pipx install git+https://github.com/LeandroDukievicz/WatchAI.git`.
-
-- [ ] **Focar a aba exata no Wayland.** Com o Window Calls o WatchAI já foca a
-      **janela** certa; escolher a **aba** dentro dela continua dependendo de
-      cada emulador expor isso (o GNOME Terminal não expõe) — o sino é o que
-      resolve na prática.
-
-- [ ] **Empacotar para Snap** em `classic` (`snapcraft.yaml` + job de build no
-      CI + pedido de revisão).
-
-- [ ] **Ordenar os cards por atenção** (decidir antes de fazer). Hoje a ordem é
-      a de descoberta. Quem pede você primeiro subir ao topo ajuda com muitas
-      sessões — mas card que dança de lugar sozinho atrapalha a memória visual.
-      Talvez como tecla de ordenação, não como padrão.
 
 ---
 

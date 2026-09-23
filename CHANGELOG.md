@@ -6,6 +6,13 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Adicionado
+- **Empacotamento para Snap** (`snap/snapcraft.yaml`), com job de CI que
+  constrói **e instala e roda** o que construiu: snap classic de app Python
+  quebra calado quando o patchelf não acerta o interpretador, e o build passa
+  mesmo assim. Em `classic` de propósito — sob strict daria para ler processos
+  e diários, mas o `⇧A` (D-Bus do shell) e a notificação (`notify-send`)
+  ficariam fora do sandbox, e um monitor que avisa sem conseguir levar você
+  até a janela perde metade do motivo de existir. Falta só o envio à loja.
 - **`⇧A` troca para o painel certo do tmux.** A aba de um gnome-terminal não é
   endereçável — ele não expõe isso —, mas um painel do tmux é, e ali dava para
   fazer o que o sino só sinalizava. Um detalhe torna isto possível: a janela a

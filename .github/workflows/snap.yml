@@ -1,0 +1,40 @@
+name: snap
+
+# Constrói o snap e **prova que ele roda**: instala o que acabou de sair e
+# chama o comando. Essa segunda parte é o que importa aqui — snap classic de
+# app Python quebra calado quando o patchelf não acerta o interpretador, e o
+# build passa mesmo assim.
+#
+# Não publica na loja: isso pede credencial e a revisão manual do confinamento
+# classic. O caminho está em docs/publicacao-snap.html.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "snap/**"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/snap.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: snapcore/action-build@v1
+        id: build
+
+      - name: Instalar e rodar
+        run: |
+          sudo snap install --classic --dangerous "${{ steps.build.outputs.snap }}"
+          watchai --version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap
+          path: ${{ steps.build.outputs.snap }}

@@ -1,0 +1,56 @@
+name: watchai
+title: WatchAI
+base: core24
+adopt-info: watchai
+summary: Monitore sessões de agentes de IA no terminal
+description: |
+  WatchAI reúne as sessões de Claude Code, Codex e outros agentes num painel
+  no terminal, com um semáforo por sessão: verde quando terminou, âmbar
+  enquanto trabalha, vermelho quando quebrou.
+
+  A detecção é local e sem integração: varredura da tabela de processos mais
+  leitura dos diários que os próprios agentes já gravam no seu disco. Não há
+  API, hook, credencial nem configuração de agente envolvida.
+
+grade: stable
+license: MIT
+website: https://leandrodukievicz.github.io/WatchAI/
+source-code: https://github.com/LeandroDukievicz/WatchAI
+issues: https://github.com/LeandroDukievicz/WatchAI/issues
+
+# Por que **classic** e não strict com interfaces.
+#
+# Sob confinamento strict daria para ler a tabela de processos
+# (`system-observe`) e os diários (`personal-files`), e o app funcionaria pela
+# metade: detecção e bip. Só que as duas coisas que tiram você da tela ficam de
+# fora — o `⇧A` precisa falar com o shell da sessão gráfica pelo D-Bus (Window
+# Calls, `wmctrl`, `osascript`), e a notificação precisa do `notify-send` do
+# sistema. Nenhum dos dois atravessa o sandbox, e um monitor que avisa sem
+# conseguir levar você até a janela perde metade do motivo de existir.
+#
+# Vale saber que os dois caminhos passam por revisão manual da loja: tanto
+# `classic` quanto `personal-files` são pedidos revisados por gente. Se um dia a
+# escolha mudar, o rascunho da versão strict está em `docs/publicacao-snap.html`.
+confinement: classic
+
+platforms:
+  amd64:
+  arm64:
+
+apps:
+  watchai:
+    command: bin/watchai
+
+parts:
+  watchai:
+    plugin: python
+    source: .
+    # Em snap classic o binário do Python sai com o rpath do ambiente de build,
+    # que não existe na máquina de quem instala. O patchelf reescreve isso.
+    build-attributes:
+      - enable-patchelf
+    build-packages:
+      - build-essential
+    override-pull: |
+      craftctl default
+      craftctl set version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)"

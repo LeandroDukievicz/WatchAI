@@ -771,6 +771,7 @@ WatchAI/
 │   └── styles/app.tcss          # todo o CSS
 ├── tests/                       # suíte headless (conftest silencia o áudio)
 ├── scripts/screenshot.py        # refaz as capturas do README e da landing
+├── snap/snapcraft.yaml          # empacotamento para a loja do Ubuntu (classic)
 └── docs/                        # marca e screenshot
 ```
 
