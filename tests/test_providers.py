@@ -237,6 +237,69 @@ def test_resultado_de_ferramenta_e_trabalho(tmp_path):
     assert store.sessions[0].agents[0].status is Status.WORKING
 
 
+def test_pensar_por_muito_tempo_nao_e_ter_terminado(tmp_path):
+    """O diário só é escrito quando a mensagem fecha, e um pensamento longo
+    passa dos dois minutos sem gastar CPU — a espera é do outro lado da rede.
+    Tratar isso como "terminou" acendia o verde e apitava "pode vir buscar" com
+    o agente no meio da rodada."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        assistente({"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "a.py"}}),
+        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}},
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    # bem depois do FRESCOR, e com o processo parado: continua sendo uma rodada
+    # em aberto, não uma tarefa entregue.
+    p.poll(datetime.now() + timedelta(seconds=600))
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.WAITING
+    assert agente.status.slot != "green"
+
+
+def escreve_rollout_codex(home: Path, cwd: str, entradas: list[dict]) -> Path:
+    pasta = home / ".codex" / "sessions" / "2026" / "09" / "22"
+    pasta.mkdir(parents=True, exist_ok=True)
+    arquivo = pasta / "rollout-2026-09-22T13-45-41-teste.jsonl"
+    cabeca = {"type": "session_meta", "payload": {"type": "session_meta", "cwd": cwd}}
+    linhas = [cabeca, *entradas]
+    arquivo.write_text("\n".join(json.dumps(e) for e in linhas) + "\n", encoding="utf-8")
+    return arquivo
+
+
+def test_limite_de_uso_do_codex_e_erro_e_nao_tarefa_concluida(tmp_path):
+    """O codex fecha a rodada com `task_complete` mesmo quando bateu o limite —
+    o motivo vem dentro, em `error`, com `last_agent_message: null`. Ler só o
+    tipo do evento pintava de verde uma sessão que parou e não volta sozinha."""
+    escreve_rollout_codex(tmp_path, "/home/eu/proj", [
+        {"timestamp": "2026-09-22T22:03:51.070Z", "type": "event_msg", "payload": {
+            "type": "task_complete",
+            "last_agent_message": None,
+            "error": {"message": "You\u2019ve hit your usage limit. Upgrade to Pro "
+                                 "(https://exemplo), try again at Sep 27th, 2026."},
+        }},
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "codex"))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.ERROR
+    assert agente.status.slot == "red"
+    # só a primeira frase: o link e a data de retorno não cabem na linha do card
+    assert agente.activity == "You\u2019ve hit your usage limit"
+
+
+def test_codex_que_terminou_bem_continua_sendo_tarefa_concluida(tmp_path):
+    escreve_rollout_codex(tmp_path, "/home/eu/proj", [
+        {"timestamp": "2026-09-22T22:03:51.070Z", "type": "event_msg", "payload": {
+            "type": "task_complete", "last_agent_message": "pronto",
+        }},
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "codex"))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    assert store.sessions[0].agents[0].status is Status.READY
+
+
 def test_transcript_ilegivel_nao_derruba_nada(tmp_path):
     pasta = tmp_path / ".claude" / "projects" / "-home-eu-proj"
     pasta.mkdir(parents=True)

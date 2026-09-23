@@ -14,6 +14,18 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
 
 ### Corrigido
+- **Pensamento longo virava "tarefa concluída".** O diário do agente só é
+  escrito quando a mensagem fecha, e um pensamento longo passa dos dois minutos
+  do `FRESCOR` sem gastar CPU nenhuma — a espera é do outro lado da rede. Com o
+  diário "velho" e o processo parado, o estado caía em READY: o card acendia o
+  **verde** e ainda apitava "pode vir buscar" com o agente no meio da rodada.
+  Uma rodada em aberto agora é WAITING (âmbar): um turno que termina deixa texto
+  no diário, e é esse texto que vira READY.
+- **Limite de uso do codex ficava verde.** Ao bater o limite, o codex fecha a
+  rodada com `task_complete` — o motivo vem **dentro** do evento, em `error`,
+  com `last_agent_message: null`. O leitor olhava só o tipo e dava a sessão como
+  concluída. Agora é ERROR (vermelho), com a primeira frase do erro na linha do
+  card ("You've hit your usage limit").
 - **`⇧A` anunciava foco que não acontecia.** No Wayland, o
   `org.freedesktop.Application.Activate` devolve código zero mesmo quando o
   compositor ignora o pedido — e o WatchAI lia esse zero como sucesso. Agora:

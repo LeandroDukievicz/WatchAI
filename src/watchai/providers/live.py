@@ -340,7 +340,15 @@ class LiveProvider:
             if leitura.estado == PENSANDO:
                 if ocupado or leitura.fresca(agora):
                     return Status.WORKING, leitura.atividade, desde
-                return Status.READY, "task completed", desde
+                # Diário parado no meio da rodada: o agente recebeu o resultado
+                # da ferramenta e ainda não escreveu a resposta. Isso **não** é
+                # "terminou" — um turno que acaba deixa texto no diário, e é
+                # esse texto que vira FEITO. O diário envelhece porque só é
+                # escrito quando a mensagem fecha: um pensamento longo passa dos
+                # dois minutos sem gastar CPU nenhuma (a espera é do outro lado
+                # da rede). Chamar isso de READY acendia o verde e ainda apitava
+                # "pode vir buscar" com o agente no meio do trabalho.
+                return Status.WAITING, leitura.atividade, desde
             if leitura.estado == FEITO:
                 if ocupado:
                     atividade = (

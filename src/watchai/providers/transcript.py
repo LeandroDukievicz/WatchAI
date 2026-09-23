@@ -51,6 +51,16 @@ class Leitura:
         return agora - self.mtime <= FRESCOR_SEGUNDOS
 
 
+def _resumo(texto, limite: int = 50) -> str:
+    """A primeira frase de um erro, curta o bastante para caber no card.
+
+    Mensagem de limite de uso vem com link e data de retorno junto; o que
+    interessa na linha do card é a primeira frase.
+    """
+    limpo = " ".join(str(texto).split())
+    return limpo.split(". ")[0].rstrip(".")[:limite] or "error"
+
+
 def _epoch(carimbo) -> float | None:
     """ISO-8601 do diário -> epoch. O `Z` do fim é UTC, que o Python < 3.11
     não aceita direto."""
@@ -243,6 +253,13 @@ class Codex:
                 return Leitura(FERRAMENTA, "waiting for approval", mtime, quando)
             if tipo in self.EVENTOS:
                 estado, atividade = self.EVENTOS[tipo]
+                # `task_complete` não quer dizer que deu certo: quando bate o
+                # limite de uso, o codex fecha a rodada com o erro **dentro** do
+                # evento (`last_agent_message: null`). Ler só o tipo pintava de
+                # verde uma sessão que parou e não volta sozinha.
+                erro = payload.get("error")
+                if isinstance(erro, dict) and erro.get("message"):
+                    return Leitura(ERRO, _resumo(erro["message"]), mtime, quando)
                 return Leitura(estado, atividade, mtime, quando)
             if tipo in ("function_call", "local_shell_call", "custom_tool_call"):
                 detalhe = _detalhe(payload.get("arguments") if isinstance(payload.get("arguments"), dict) else None)
