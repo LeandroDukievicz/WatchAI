@@ -604,6 +604,55 @@ def test_o_interruptor_de_avisos_fica_salvo():
     run(main())
 
 
+def test_notificador_que_falha_e_desligado_com_o_motivo():
+    """O toast do Windows falhava em silêncio: stderr no lixo, código de saída
+    ignorado, e um processo novo a cada mudança de estado sem nada na tela.
+    Agora a primeira falha desliga o mecanismo e guarda o porquê."""
+
+    async def main():
+        from watchai.notify import Notifier
+
+        class ProcessoQuebrado:
+            returncode = 1
+
+            async def communicate(self):
+                return b"", "Unable to find type [Windows.UI.Notifications]\n".encode()
+
+            def kill(self):  # pragma: no cover - não chega a ser chamado
+                raise AssertionError("não era para matar um processo que terminou")
+
+        chamadas = []
+
+        async def spawn(*args, **kwargs):
+            chamadas.append((args, kwargs.get("env") or {}))
+            return ProcessoQuebrado()
+
+        import watchai.notify as modulo
+
+        original = modulo.asyncio.create_subprocess_exec
+        procurar = modulo.shutil.which
+        modulo.asyncio.create_subprocess_exec = spawn
+        # Sem isto o caminho do toast nem chega a montar comando fora do
+        # Windows, e o teste passaria sem exercitar nada.
+        modulo.shutil.which = lambda nome: "/mentira/powershell"
+        try:
+            avisos = Notifier("toast")
+            await avisos.send("t", "b", "ready")
+            assert avisos.available is False
+            assert "Unable to find type" in avisos.erro
+            # E, desligado, não gasta mais processo nenhum.
+            await avisos.send("t", "b", "ready")
+            assert len(chamadas) == 1
+            # O AUMID registrado é o que faz o toast aparecer: com um nome
+            # inventado, o Windows cria a notificação e não mostra nada.
+            assert chamadas[0][1]["WATCHAI_AUMID"] == modulo.TOAST_AUMID
+        finally:
+            modulo.asyncio.create_subprocess_exec = original
+            modulo.shutil.which = procurar
+
+    run(main())
+
+
 def test_notificador_que_morre_no_meio_nao_derruba_o_app():
     """O processo do toast pode sumir sozinho antes do timeout: matar um
     processo já morto levanta ProcessLookupError e isso chegava como falha de
@@ -613,7 +662,9 @@ def test_notificador_que_morre_no_meio_nao_derruba_o_app():
         from watchai.notify import Notifier
 
         class ProcessoFantasma:
-            async def wait(self):
+            returncode = None
+
+            async def communicate(self):
                 await asyncio.sleep(3600)  # nunca termina: força o timeout
 
             def kill(self):
@@ -630,8 +681,56 @@ def test_notificador_que_morre_no_meio_nao_derruba_o_app():
         try:
             avisos = Notifier("notify-send")
             await asyncio.wait_for(avisos.send("t", "b", "ready"), timeout=5)
+            # Notificador que travou uma vez trava sempre: fica desligado, e o
+            # motivo sobra para quem for diagnosticar.
+            assert avisos.available is False
+            assert "não respondeu" in avisos.erro
         finally:
             modulo.asyncio.create_subprocess_exec = original
             modulo.TIMEOUT = espera
 
     run(main())
+
+
+def test_a_config_vai_para_o_lugar_certo_de_cada_sistema(tmp_path, monkeypatch):
+    """`~/.config` no Windows funciona, mas é pasta de outro sistema plantada na
+    casa do usuário — lá o lugar é o `%APPDATA%`. E quem já tinha config no
+    caminho antigo não pode perder tema e histórico numa atualização."""
+    from watchai import config
+
+    casa = tmp_path / "casa"
+    casa.mkdir()
+    monkeypatch.setattr(config.Path, "home", staticmethod(lambda: casa))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+
+    monkeypatch.setattr(config.sys, "platform", "linux")
+    assert config.config_dir() == casa / ".config" / config.APP_DIR
+
+    monkeypatch.setattr(config.sys, "platform", "win32")
+    assert config.config_dir() == tmp_path / "AppData" / "Roaming" / config.APP_DIR
+
+    # Config que já existe no caminho antigo continua valendo.
+    antigo = casa / ".config" / config.APP_DIR
+    antigo.mkdir(parents=True)
+    assert config.config_dir() == antigo
+
+    # E o XDG ganha de todo mundo: quem o define quer isso.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "escolhido"))
+    assert config.config_dir() == tmp_path / "escolhido" / config.APP_DIR
+
+
+def test_o_bip_do_windows_tem_plano_b_quando_falta_o_system_media():
+    """O `System.Media` vem no Windows PowerShell 5.1, mas não no `pwsh`. Sem
+    plano B, o aviso sumiria justamente em quem usa o PowerShell novo."""
+    from watchai import sound
+
+    comando = sound._windows_command(sound.ERROR)
+    if comando is None:  # máquina sem PowerShell: nada a verificar aqui
+        return
+    script = comando[-1]
+    assert "SystemSounds" in script and "catch" in script
+    hz, ms = sound.WINDOWS_BEEP[sound.ERROR]
+    assert f"[Console]::Beep({hz}, {ms})" in script
+    # Um timbre por estado também no plano B: três avisos distinguíveis.
+    assert len({sound.WINDOWS_BEEP[k] for k in sound.KINDS}) == len(sound.KINDS)

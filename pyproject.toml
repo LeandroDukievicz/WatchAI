@@ -1,6 +1,6 @@
 [project]
 name = "watchai"
-version = "1.1.0"
+version = "1.2.0"
 description = "WatchAI — monitor de sessões de IA no terminal: detecta Claude Code, Codex e outros agentes por processo e diário local"
 readme = "README.md"
 requires-python = ">=3.10"

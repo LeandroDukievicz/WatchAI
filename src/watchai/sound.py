@@ -63,6 +63,15 @@ CANBERRA_EVENT = {READY: "bell", INPUT: "message-new-instant", ERROR: "dialog-wa
 
 # Windows não tem arquivo canônico: usa os sons de sistema do .NET.
 WINDOWS_SOUND = {READY: "Asterisk", INPUT: "Question", ERROR: "Hand"}
+
+# E o plano B, quando o `System.Media` não está lá: o beep do console, que
+# existe desde sempre e não depende de esquema de som nenhum. Uma frequência
+# por estado mantém o que importa — três avisos distinguíveis sem olhar.
+WINDOWS_BEEP = {READY: (880, 180), INPUT: (620, 220), ERROR: (320, 320)}
+
+# O Windows PowerShell 5.1 vem com o `System.Media`; o `pwsh` (PowerShell 7)
+# não — ali a classe mora num pacote que nem sempre está instalado. Por isso o
+# 5.1 vem primeiro, e por isso o script tem `try`/`catch` em vez de confiar.
 POWERSHELL = ("powershell", "pwsh")
 
 
@@ -71,12 +80,14 @@ def _windows_command(kind: str) -> list[str] | None:
     if not exe:
         return None
     som = WINDOWS_SOUND.get(kind, WINDOWS_SOUND[READY])
+    hz, ms = WINDOWS_BEEP.get(kind, WINDOWS_BEEP[READY])
     return [
         exe,
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        f"[System.Media.SystemSounds]::{som}.Play(); Start-Sleep -Milliseconds 500",
+        f"try {{ [System.Media.SystemSounds]::{som}.Play(); Start-Sleep -Milliseconds 500 }} "
+        f"catch {{ [Console]::Beep({hz}, {ms}) }}",
     ]
 
 
@@ -139,4 +150,14 @@ class Alert:
         await process.wait()  # aguardar aqui é o que evita processo zumbi
 
 
-__all__ = ["Alert", "ERROR", "INPUT", "KINDS", "PLAYERS", "READY", "SOUNDS", "find_player"]
+__all__ = [
+    "Alert",
+    "ERROR",
+    "INPUT",
+    "KINDS",
+    "PLAYERS",
+    "READY",
+    "SOUNDS",
+    "WINDOWS_BEEP",
+    "find_player",
+]

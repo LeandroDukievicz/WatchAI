@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +24,23 @@ AGENTS_KEY = "agents"
 
 
 def config_dir() -> Path:
-    base = os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config"
-    return Path(base).expanduser() / APP_DIR
+    """Onde ficam o tema, os avisos e o histórico que você escolheu.
+
+    O `XDG_CONFIG_HOME` vale em qualquer sistema: quem o define quer isso. No
+    Windows, o lugar do costume é o `%APPDATA%` — `~/.config` até funciona ali,
+    mas é pasta de outro sistema operacional plantada na casa do usuário. Uma
+    config que **já exista** no caminho antigo continua valendo, para ninguém
+    perder tema e histórico numa atualização.
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg).expanduser() / APP_DIR
+    antigo = Path.home() / ".config" / APP_DIR
+    if sys.platform == "win32" and not antigo.is_dir():
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / APP_DIR
+    return antigo
 
 
 def config_path() -> Path:

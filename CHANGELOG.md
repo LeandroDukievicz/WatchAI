@@ -5,6 +5,8 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.2.0] — 2026-09-23
+
 ### Adicionado
 - **Suporte à extensão [Window Calls]** do GNOME: com ela instalada, o `⇧A` foca
   a **janela exata** por PID mesmo no Wayland — é a única forma de foco preciso
@@ -30,7 +32,30 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - O **nome curto** (EVENT STREAM, modo compacto) continua sendo o projeto ou o
   terminal: ali a coluna tem oito casas, e um caminho cortado não diria nada.
 
+### Adicionado
+- **A tela vazia diz a causa certa.** "Nenhum agente aberto" e "não consigo ler
+  a tabela de processos" são situações diferentes e mostravam a mesma frase — e
+  quem caía na segunda concluía que o app é quebrado. A varredura passou a
+  informar o porquê (`sem-psutil`, `restrito`, `erro`), e a área vazia responde
+  cada um: instalar a dependência, sair do confinamento (Snap, Flatpak,
+  container, `hidepid`) ou conferir a interface com `--mock`.
+
 ### Corrigido
+- **O toast do Windows falhava em silêncio**, que é a pior forma de falhar: o
+  `stderr` ia para o lixo e o código de saída era ignorado, então nada aparecia
+  na tela e um processo novo era gasto a cada mudança de estado. Agora a
+  primeira falha desliga o mecanismo e guarda o motivo. Duas causas prováveis
+  foram atacadas de uma vez: o AUMID passou a ser um **registrado** (com um nome
+  inventado, o Windows cria a notificação e não mostra nada) e ficou anotado que
+  o `pwsh` não projeta WinRT — por isso o Windows PowerShell 5.1 vem primeiro.
+- **O bip do Windows ganhou plano B.** O `System.Media` vem no PowerShell 5.1,
+  mas não no `pwsh`; sem alternativa, o aviso sumiria justamente para quem usa o
+  PowerShell novo. Agora cai em `[Console]::Beep`, com uma frequência por estado
+  para os três continuarem distinguíveis sem olhar a tela.
+- **A config do Windows foi para o `%APPDATA%`.** `~/.config` funciona ali, mas
+  é pasta de outro sistema operacional plantada na casa do usuário. Quem já
+  tiver config no caminho antigo continua usando ela, para ninguém perder tema e
+  histórico numa atualização.
 - **Sessão do Antigravity CLI não aparecia.** O registro esperava os nomes
   `antigravity`/`antigravity-cli`, mas o CLI instala o executável como **`agy`**
   — e, sendo binário nativo, não há caminho de pacote que sirva de segunda

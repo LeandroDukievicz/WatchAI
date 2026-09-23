@@ -28,6 +28,28 @@ from ..widgets import (
 from .details import DetailsScreen
 
 
+# O que a área vazia diz, por causa. São três situações distintas e cada uma tem
+# uma resposta própria — a última é a única em que não há nada errado.
+VAZIO = {
+    "sem-psutil": (
+        "  psutil is missing — WatchAI cannot read the process table",
+        "  install it:  pip install psutil   (or reinstall WatchAI)",
+    ),
+    "restrito": (
+        "  cannot read the process table — only a handful of processes are visible",
+        "  a sandbox (Snap, Flatpak), a container or hidepid is hiding the rest",
+    ),
+    "erro": (
+        "  the process scan failed — the screen keeps the last reading",
+        "  run with --mock to check whether the interface itself is fine",
+    ),
+    "": (
+        "  no AI session detected",
+        "  open claude, codex, gemini, opencode or aider in a terminal",
+    ),
+}
+
+
 class Dashboard(Screen):
     BINDINGS = [
         Binding("up,k", "move('up')", "Up", show=False),
@@ -127,15 +149,20 @@ class Dashboard(Screen):
         self._reveal_selected()
 
     def _apply_empty(self) -> None:
-        """Sem nenhuma sessão, a área explica o que fazer em vez de ficar vazia."""
+        """Sem nenhuma sessão, a área explica o que fazer em vez de ficar vazia.
+
+        E explica **a causa certa**: uma lista vazia porque não há agente aberto
+        e uma lista vazia porque não conseguimos ler a tabela de processos são
+        situações diferentes, com respostas diferentes. Dizer a mesma frase nas
+        duas faz quem caiu na segunda concluir que o app é quebrado.
+        """
         vazio = self.query_one("#empty", Static)
         nenhuma = not self.app.store.sessions
         vazio.display = nenhuma
         if nenhuma:
-            vazio.update(
-                "  no AI session detected\n"
-                "  open claude, codex, gemini, opencode or aider in a terminal"
-            )
+            provider = getattr(self.app, "provider", None)
+            causa = getattr(provider, "diagnostico", "") if provider else ""
+            vazio.update("\n".join(VAZIO.get(causa, VAZIO[""])))
         self.query_one("#cards").display = self.view == "cards" and not nenhuma
         self.query_one("#rows").display = self.view == "list" and not nenhuma
 

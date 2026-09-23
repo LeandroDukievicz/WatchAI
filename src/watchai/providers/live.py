@@ -102,6 +102,9 @@ class LiveProvider:
         self.remocao = remocao
         self._cpu: dict[int, tuple[float, float]] = {}  # pid -> (cpu, epoch)
         self._proximo_id = 1
+        # Por que a última leitura veio vazia — é o que a tela mostra no lugar
+        # de "nenhuma sessão" quando o problema não é ausência de sessão.
+        self.diagnostico = ""
         # A primeira leitura é um inventário do que já estava aberto: ela não
         # deve encher o EVENT STREAM com um "agente iniciou" por sessão antiga.
         self._inventario = True
@@ -116,6 +119,7 @@ class LiveProvider:
     # -- reconciliação (thread da UI) -----------------------------------------
     def apply(self, snap: Snapshot, now: datetime) -> bool:
         agora = now.timestamp()
+        self.diagnostico = snap.diagnostico
         mudou = False
         grupos: dict[str, list[ProcObs]] = {}
         for o in self._raizes(snap.agents):

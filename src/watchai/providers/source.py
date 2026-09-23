@@ -82,6 +82,10 @@ class Snapshot:
 
     agents: tuple[ProcObs, ...] = field(default=())
     terminals: dict[str, TermObs] = field(default_factory=dict)
+    # Por que a leitura veio vazia, quando veio. Lista vazia e lista impossível
+    # de ler são coisas diferentes, e a tela precisa dizer qual das duas é:
+    # "" (leu normalmente) · "sem-psutil" · "restrito" · "erro".
+    diagnostico: str = ""
 
 
 class ProcessSource(Protocol):
@@ -111,6 +115,13 @@ def rotulo_terminal(
     return "?"
 
 
+# Quantos processos uma máquina de verdade mostra. Abaixo disto, não é que não
+# haja o que ver: é que não estamos conseguindo ver — confinamento de Snap ou
+# Flatpak, container, `hidepid`. Qualquer sistema com uma sessão gráfica aberta
+# passa de dezenas.
+PROCESSOS_PLAUSIVEIS = 8
+
+
 class PsutilSource:
     """A fonte real. Importa `psutil` na chamada, não no import do módulo —
     assim o app (e a suíte) sobem mesmo sem a dependência instalada."""
@@ -122,13 +133,15 @@ class PsutilSource:
         try:
             import psutil
         except ImportError:
-            return Snapshot()
+            # Sem a dependência não há o que ler — e isso tem conserto de uma
+            # linha, desde que alguém diga qual.
+            return Snapshot(diagnostico="sem-psutil")
         try:
             return self._varrer(psutil)
         except Exception:
             # Uma varredura que falha não pode derrubar a TUI: a tela apenas
             # não muda até a próxima.
-            return Snapshot()
+            return Snapshot(diagnostico="erro")
 
     def _varrer(self, psutil) -> Snapshot:
         agora = time.time()
@@ -139,9 +152,11 @@ class PsutilSource:
             usuario = None
 
         tabela: dict[int, dict] = {}
+        vistos = 0  # antes de filtrar por usuário: mede o que dá para enxergar
         for p in psutil.process_iter(
             ["pid", "ppid", "name", "cmdline", "create_time", "cpu_times", "username", "uids"]
         ):
+            vistos += 1
             info = p.info
             if eu is not None:
                 uids = info.get("uids")
@@ -296,7 +311,11 @@ class PsutilSource:
                 o.terminal,
                 TermObs(key=o.terminal, label=o.terminal_label, started=o.terminal_started),
             )
-        return Snapshot(agents=tuple(obs), terminals=terminais)
+        return Snapshot(
+            agents=tuple(obs),
+            terminals=terminais,
+            diagnostico="restrito" if vistos < PROCESSOS_PLAUSIVEIS else "",
+        )
 
 
 __all__ = [

@@ -420,12 +420,80 @@ def test_transcript_ilegivel_nao_derruba_nada(tmp_path):
     assert store.sessions[0].agents[0].status is Status.READY  # caiu no sinal do processo
 
 
-def test_sem_psutil_ou_com_erro_a_varredura_devolve_vazio(monkeypatch):
-    from watchai.providers.source import PsutilSource
+def test_a_varredura_diz_por_que_veio_vazia(monkeypatch):
+    """Lista vazia porque não há agente aberto e lista vazia porque não dá para
+    ler a tabela de processos são situações diferentes, com respostas
+    diferentes. Diziam a mesma frase — e quem caía na segunda concluía que o
+    app é quebrado."""
+    import builtins
 
+    from watchai.providers.source import PROCESSOS_PLAUSIVEIS, PsutilSource
+
+    # 1) a varredura levantou: a tela mantém a última leitura e diz isso
     fonte = PsutilSource()
     monkeypatch.setattr(fonte, "_varrer", lambda _: (_ for _ in ()).throw(RuntimeError("boom")))
-    assert fonte.snapshot() == Snapshot()
+    vazio = fonte.snapshot()
+    assert vazio.agents == () and vazio.diagnostico == "erro"
+
+    # 2) sem a dependência, a causa é outra e o conserto é de uma linha
+    original = builtins.__import__
+
+    def sem_psutil(nome, *args, **kwargs):
+        if nome == "psutil":
+            raise ImportError("sem psutil")
+        return original(nome, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", sem_psutil)
+    assert PsutilSource().snapshot().diagnostico == "sem-psutil"
+    monkeypatch.setattr(builtins, "__import__", original)
+
+    # 3) a leitura funcionou, mas mal enxerga processo: é confinamento, não
+    #    ausência de sessão
+    class FalsoPsutil:
+        class Process:
+            def username(self):
+                return "eu"
+
+        @staticmethod
+        def process_iter(campos):
+            return []
+
+    restrito = PsutilSource()._varrer(FalsoPsutil)
+    assert restrito.agents == () and restrito.diagnostico == "restrito"
+    assert PROCESSOS_PLAUSIVEIS > 1  # o limite existe e não é trivial
+
+
+def test_a_tela_vazia_explica_a_causa_certa():
+    """O texto que aparece quando não há card: uma frase por causa."""
+    import asyncio
+
+    from textual.widgets import Static
+
+    from watchai.app import WatchAIApp
+    from watchai.notify import Notifier
+    from watchai.providers.source import Snapshot as Snap
+
+    class FonteVazia:
+        def __init__(self, diagnostico):
+            self.s = Snap(diagnostico=diagnostico)
+
+        def snapshot(self):
+            return self.s
+
+    async def main(diagnostico, esperado):
+        app = WatchAIApp(mock=False, source=FonteVazia(diagnostico),
+                         theme_key="watchai", notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            texto = str(app.screen.query_one("#empty", Static).render())
+            assert esperado in texto, f"{diagnostico!r} -> {texto!r}"
+
+    asyncio.run(main("", "no AI session detected"))
+    asyncio.run(main("sem-psutil", "psutil is missing"))
+    asyncio.run(main("restrito", "cannot read the process table"))
+    asyncio.run(main("erro", "the process scan failed"))
 
 
 # ---- a tela acompanhando o que aparece e some ------------------------------

@@ -193,6 +193,33 @@ falhava no sentido pior: dizendo que a sessão está livre quando ela não está
 - [x] **`scripts/screenshot.py`**: o caminho para refazer as capturas deixou de
       viver só na cabeça de quem já fez
 
+
+### M11 — pronto para Windows e macOS, e a tela vazia explica a causa (1.2.0)
+
+Uma leva de "o código trata os três sistemas" para "o código trata os três
+sistemas **e avisa quando não consegue**". Nenhum item aqui foi verificado em
+máquina Windows ou macOS de verdade — isso continua sendo a pendência número um.
+
+- [x] **O toast do Windows parou de falhar em silêncio.** O `stderr` ia para o
+      lixo e o código de saída era ignorado: nada na tela e um processo novo a
+      cada mudança de estado. Agora a primeira falha **desliga o mecanismo** e
+      guarda o motivo
+- [x] **Duas causas prováveis do toast atacadas**: o AUMID passou a ser um
+      registrado — com um nome inventado, o Windows cria a notificação e
+      simplesmente não a mostra — e ficou anotado que o `pwsh` não projeta
+      WinRT, por isso o Windows PowerShell 5.1 vem primeiro
+- [x] **Plano B para o bip do Windows**: o `System.Media` não existe no `pwsh`,
+      e sem alternativa o aviso sumiria para quem usa o PowerShell novo. Cai em
+      `[Console]::Beep`, com uma frequência por estado para os três continuarem
+      distinguíveis sem olhar
+- [x] **Config do Windows no `%APPDATA%`**, com o caminho antigo preservado
+      quando já existe: ninguém perde tema e histórico numa atualização
+- [x] **A tela vazia diz a causa certa.** "Nenhum agente aberto" e "não consigo
+      ler a tabela de processos" mostravam a mesma frase, e quem caía na segunda
+      concluía que o app é quebrado. A varredura passou a informar o porquê
+      (`sem-psutil`, `restrito`, `erro`) e cada um tem a sua resposta
+- [x] **1.2.0 cortada**: 24 commits e 43 entradas que estavam em `[Não lançado]`
+
 ---
 
 ## O que ainda falta
@@ -202,41 +229,13 @@ falhava no sentido pior: dizendo que a sessão está livre quando ela não está
       reconhecido pelo caminho do pacote, agora há o `⇧A` reescrito nos dois —
       P/Invoke no Windows para restaurar a janela minimizada e conferir quem
       está em primeiro plano, AppleScript no macOS com `AXRaise` e
-      `AXMinimized`. **Nenhum job de CI abre janela**, então a suíte passar nos
-      três sistemas não diz nada sobre isso. Três perguntas resolvem: janela
+      `AXMinimized`. O M11 tratou o resto do que dava para tratar sem a máquina
+      (toast, bip e config), mas **nenhum job de CI abre janela nem mostra
+      notificação**: a suíte passar nos três sistemas não diz nada sobre isso. Três perguntas resolvem: janela
       minimizada volta? Com várias janelas do mesmo terminal, vai para a certa?
       Quando falha, o recado diz `refused` em vez de `window raised`? Até lá, é
       código testado, não software verificado. O toast do Windows, em especial,
       falha em silêncio.
-
-- [ ] **Confirmar o leitor do OpenCode** contra uma sessão real. O layout veio
-      do binário; os nomes dos campos (`directory`, `time.completed`,
-      `state.status`) são a melhor leitura disponível, não verificação. Abrir
-      uma sessão no OpenCode e conferir `~/.local/share/opencode/storage/`
-      resolve em minutos.
-
-- [ ] **Diários dos demais agentes.** Hoje só Claude Code, Codex e OpenCode têm
-      leitor; o resto vive da camada de processos. Cada leitor novo é uma classe
-      em `providers/transcript.py` com dois métodos, e o formato precisa ser
-      verificado contra uma sessão real.
-
-      O **Antigravity** já tem um caminho mapeado, e é diferente dos outros
-      três: ele guarda as conversas em **SQLite**
-      (`~/.gemini/antigravity-cli/conversations/*.db`, mais
-      `conversation_summaries.db`), não num arquivo de linhas. Daria um leitor,
-      mas com outra forma — e vale medir o custo de abrir um banco a cada
-      varredura antes de decidir.
-
-      O **Gemini CLI** continua fora: o `logs.json` dele grava só as mensagens
-      do usuário.
-
-- [ ] **Cortar a 1.2.0.** São **24 commits** e 43 entradas acumuladas em
-      `[Não lançado]` desde a tag `1.1.0`, e o `pyproject.toml` ainda diz
-      1.1.0 — semáforo em octógono com neon, tema claro corrigido, `⇧A` +
-      Window Calls, pipx verificado nos três sistemas, registro de 17 agentes,
-      notificação opt-in, responsividade em dois eixos, ciclo de vida da sessão
-      encerrada e a leva inteira do M10. É o item mais atrasado da lista e o
-      único que não depende de ninguém.
 
 - [ ] **Publicar no PyPI** (`pipx install watchai`). O workflow já existe e
       empacota; falta **você** criar o projeto no PyPI, apontar o *trusted
@@ -249,14 +248,6 @@ falhava no sentido pior: dizendo que a sessão está livre quando ela não está
       cada emulador expor isso (o GNOME Terminal não expõe) — o sino é o que
       resolve na prática.
 
-- [ ] **Dizer por que a lista está vazia.** Hoje, se a varredura não puder ler
-      os processos, a tela mostra "no AI session detected" — a mesma mensagem de
-      quando realmente não há sessão. O usuário conclui que o app é quebrado.
-      São três causas distintas e cada uma tem uma resposta: **sem `psutil`**
-      (instalar), **sem permissão** (container, `hidepid`, Snap/Flatpak, macOS —
-      dizer o comando) e **nenhum agente rodando** (a mensagem atual). Vale para
-      qualquer empacotamento, não só para o Snap.
-
 - [ ] **Empacotar para Snap** em `classic` (`snapcraft.yaml` + job de build no
       CI + pedido de revisão).
 
@@ -268,6 +259,12 @@ falhava no sentido pior: dizendo que a sessão está livre quando ela não está
 ---
 
 ## Fora de escopo (decidido)
+
+- **Validar o leitor do OpenCode e escrever um para o Antigravity.** Tirados da
+  lista em 2026-09-23. A ressalva do OpenCode continua onde importa — no
+  docstring do leitor e no README —, então quem usar aquele CLI e vir estado
+  errado sabe onde olhar; e o Antigravity segue na camada de processos, com
+  projeto, tempo e CPU, mas sem estado de diário.
 
 - **Integração por API, hook ou plugin dos agentes.** A regra do produto é não
   conectar nada: só processo e arquivo local.
