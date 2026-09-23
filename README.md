@@ -107,8 +107,8 @@ A detecção tem duas camadas, e é a combinação que faz sentido:
 
 | Camada | De onde vem | O que responde |
 |---|---|---|
-| **Processos** | varredura da tabela de processos (`psutil`), a cada 2 s | quem existe, em que terminal, em que projeto (`cwd`), desde quando — e se está gastando CPU |
-| **Diário** | o `.jsonl` que o próprio agente grava (`~/.claude/projects/…`, `~/.codex/sessions/…`) | **o que** ele está fazendo agora, e se terminou ou se travou esperando você |
+| **Processos** | varredura da tabela de processos (`psutil`), a cada 2 s | quem existe, em que terminal, desde quando — e se está gastando CPU. O `cwd` daqui é onde a sessão **abriu**, que serve de plano B para o projeto |
+| **Diário** | o `.jsonl` que o próprio agente grava (`~/.claude/projects/…`, `~/.codex/sessions/…`) | **o que** ele está fazendo agora, se terminou ou se travou esperando você — e **em que projeto está**, que o processo não sabe quando o agente troca de pasta |
 
 Nenhuma das duas sozinha resolve. O processo não distingue **READY** ("terminou,
 é a sua vez") de **INPUT** ("parou esperando você confirmar"): nos dois casos
@@ -120,7 +120,8 @@ ele está dormindo com 0% de CPU. E o diário não sabe se o que ele registrou p
 ─────────────────────────────────────────────────────────
 texto do assistente             qualquer        READY     terminou
 erro de API / limite            qualquer        ERROR     parou e não volta só
-resultado de ferramenta         qualquer        WORKING   voltou a pensar
+resultado de ferramenta         gastando CPU    WORKING   voltou a pensar
+resultado de ferramenta         diário parado   WAITING   rodada em aberto
 chamada de ferramenta           gastando CPU    WORKING   a ferramenta roda
 chamada de ferramenta           parado há 8 s   INPUT     esperando VOCÊ
 chamada de ferramenta           parado agora    WAITING   esperando algo externo
@@ -618,7 +619,7 @@ Cor **e** símbolo **e** label — dá para ler sem depender só de cor.
 |---|---|---|---|---|---|
 | READY | `●` (pulso lento) | verde | **verde** | terminou, pronta p/ nova instrução | card verde + label/tempo em negrito |
 | WORKING | `◐◓◑◒` (giro lento) | cyan | **amarela** | executando | card âmbar |
-| WAITING | `◇` | amarelo | **amarela** | esperando processo externo | card âmbar |
+| WAITING | `◇` | amarelo | **amarela** | esperando algo que não é você: um processo externo, ou o próprio modelo pensando | card âmbar |
 | INPUT | `◆` (pulso lento) | magenta | **amarela piscando** | esperando ação do usuário | card âmbar + tempo em negrito |
 | ERROR | `▲` (estático) | vermelho | **vermelha** | problema detectado | card vermelho |
 | OFFLINE | `○` (apagado) | cinza escuro | todas apagadas | terminal fechado | quase some no fundo |
