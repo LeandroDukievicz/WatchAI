@@ -5,6 +5,20 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **`S` ordena os cards por atenção** — ERROR, INPUT, READY, WAITING, WORKING —
+  e volta à ordem de descoberta. **Tecla, não padrão**: card que muda de lugar
+  sozinho desfaz a memória visual (você aprende onde cada sessão fica e passa a
+  olhar direto para lá), mas com muitas sessões na tela subir quem precisa de
+  você compensa. Dentro do mesmo estado a ordem de descoberta continua valendo,
+  para o movimento ser o menor possível, e a seleção segue a **sessão**, não a
+  posição: reordenar debaixo do cursor não troca o card selecionado. A escolha
+  fica salva entre execuções.
+
+### Mudado
+- A keybar passou para o inglês onde ainda não estava: `MUDO` virou `MUTED` e
+  `BIP` virou `BEEP`.
+
 ## [1.2.0] — 2026-09-23
 
 ### Adicionado

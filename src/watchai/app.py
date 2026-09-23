@@ -20,7 +20,7 @@ from textual.reactive import reactive
 from . import config, sound
 from .focus import Focuser
 from .mock import MockSimulator, build_store
-from .models import PRIORIDADE, SessionStore, Status
+from .models import PRIORIDADE, SessionStore, Status, ordenar
 from .notify import Notifier
 from .providers import LiveProvider, agents
 from .screens import Dashboard, DetailsScreen, HelpScreen, ThemeScreen
@@ -66,6 +66,7 @@ class WatchAIApp(App):
         Binding("b", "toggle_sound", "Bip"),
         Binding("t", "themes", "Themes"),
         Binding("n", "toggle_notify", "Notify"),
+        Binding("s", "toggle_sort", "Sort"),
         Binding("A", "goto", "Go to window"),
     ]
 
@@ -76,6 +77,9 @@ class WatchAIApp(App):
     sound_on: reactive[bool] = reactive(True)
     # A notificação do sistema nasce desligada: é intrusiva, e quem liga é você.
     notify_on: reactive[bool] = reactive(False)
+    # Ordenar por atenção nasce desligado: ordem estável é o que deixa você
+    # olhar direto para o card certo sem ler.
+    sort_on: reactive[bool] = reactive(False)
 
     def __init__(
         self,
@@ -93,6 +97,7 @@ class WatchAIApp(App):
         self.palette_key = use(saved or DEFAULT.key).key
         self.set_reactive(WatchAIApp.sound_on, config.load_alerts())
         self.set_reactive(WatchAIApp.notify_on, config.load_notify())
+        self.set_reactive(WatchAIApp.sort_on, config.load_sort())
         if mock:
             self.store = build_store()
             self.simulator = MockSimulator(self.store, seed=seed)
@@ -279,7 +284,7 @@ class WatchAIApp(App):
         indice = getattr(tela, "selected", None)
         if indice is None:
             return None
-        sessions = self.store.sessions
+        sessions = self.sessions_ordenadas()
         return sessions[indice] if 0 <= indice < len(sessions) else None
 
     def action_goto(self) -> None:
@@ -298,6 +303,23 @@ class WatchAIApp(App):
             directory=session.directory,
         )
         self.notify(f"{session.short}: {resultado}", timeout=4)
+
+    def sessions_ordenadas(self) -> list:
+        """As sessões na ordem em que a tela as mostra.
+
+        Existe um lugar só para isto porque índice de seleção e ordem do DOM
+        têm que concordar: se a tela ordena por atenção e a seleção anda pela
+        ordem de descoberta, `⇧A` leva você para a janela do card errado.
+        """
+        return ordenar(self.store.sessions, self.sort_on)
+
+    def action_toggle_sort(self) -> None:
+        """`S` alterna entre a ordem de descoberta e a ordem por atenção."""
+        self.sort_on = not self.sort_on
+        config.save_sort(self.sort_on)
+        self.version += 1  # a tela reordena na mesma volta
+        como = "attention" if self.sort_on else "discovery"
+        self.notify(f"cards sorted by {como}", timeout=3)
 
     def action_toggle_notify(self) -> None:
         """`N` liga e desliga a notificação do sistema, sem mexer no bip."""

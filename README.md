@@ -647,6 +647,7 @@ branco suave e cinza.
 | `⇧A` | põe na frente a janela do terminal onde a sessão roda |
 | `T` | abre o seletor de temas (preview ao vivo; `ENTER` salva, `ESC` desfaz) |
 | `V` | alterna **CARDS ⇄ LIST** |
+| `S` | **ordena os cards por atenção** (ERROR › INPUT › READY › WAITING › WORKING) e volta à ordem de descoberta. Nasce desligada: a ordem estável é o que deixa você olhar direto para o card certo sem ler; ordenar compensa quando há sessões demais na tela. Dentro do mesmo estado a ordem de descoberta continua valendo, e a seleção segue a **sessão**, não a posição |
 | `R` | refresh — varre os processos na hora (no `--mock`, avança a simulação) |
 | `B` | liga/desliga o bip |
 | `N` | liga/desliga a notificação do sistema |

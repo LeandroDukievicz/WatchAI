@@ -69,7 +69,7 @@ class Dashboard(Screen):
 
     # -- composição ----------------------------------------------------------
     def compose(self):
-        sessions = self.app.store.sessions
+        sessions = self.app.sessions_ordenadas()
         # A lista tem que ser gravada aqui, e não no on_mount: a primeira
         # varredura roda em thread e pode terminar entre os dois. Anotando no
         # on_mount, o dashboard registraria como "já desenhado" um conjunto de
@@ -104,7 +104,7 @@ class Dashboard(Screen):
     # -- sessões que entram e saem -------------------------------------------
     def reconcile(self) -> None:
         """Agenda o acerto dos widgets com o store."""
-        ids = [s.id for s in self.app.store.sessions]
+        ids = [s.id for s in self.app.sessions_ordenadas()]
         if ids == self._ids:
             return
         self._ids = ids
@@ -121,7 +121,13 @@ class Dashboard(Screen):
         permanece nem é tocado (nada de piscar nem perder o scroll).
         """
         async with self._reconcile_lock:
-            sessions = list(self.app.store.sessions)
+            anteriores = self._cards()
+            escolhida = (
+                anteriores[self.selected].session.id
+                if 0 <= self.selected < len(anteriores)
+                else None
+            )
+            sessions = self.app.sessions_ordenadas()
             vivos = {s.id for s in sessions}
             cards = {c.session.id: c for c in self.query(SessionCard)}
             rows = {r.session.id: r for r in self.query(SessionRow)}
@@ -138,6 +144,24 @@ class Dashboard(Screen):
             if novos_rows:
                 await self.query_one("#rows", Vertical).mount_all(novos_rows)
 
+            # A ordem do DOM tem que seguir a da lista: sem isto, ligar o `S`
+            # reordenaria os dados e deixaria os widgets onde estavam.
+            # `sort_children` reposiciona sem desmontar — remontar aqui é o que
+            # já derrubou o app uma vez, com `DuplicateIds`.
+            lugar = {s.id: i for i, s in enumerate(sessions)}
+            fim = len(lugar)
+
+            def posicao(widget) -> int:
+                # O cabeçalho da lista não é sessão e fica sempre em cima.
+                sessao = getattr(widget, "session", None)
+                return -1 if sessao is None else lugar.get(sessao.id, fim)
+
+            self.query_one("#cards", Grid).sort_children(key=posicao)
+            self.query_one("#rows", Vertical).sort_children(key=posicao)
+            # A seleção segue a **sessão**, não a posição: reordenar debaixo do
+            # cursor não pode trocar qual card está selecionado.
+            if escolhida is not None and escolhida in lugar:
+                self.selected = lugar[escolhida]
             self.selected = max(0, min(self.selected, len(sessions) - 1))
             self._after_reconcile()
 

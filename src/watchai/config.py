@@ -20,6 +20,7 @@ MAX_EVENTOS_SALVOS = 200
 THEME_KEY = "theme"
 ALERTS_KEY = "alerts"
 NOTIFY_KEY = "notify"
+SORT_KEY = "sort_by_attention"
 AGENTS_KEY = "agents"
 
 
@@ -160,7 +161,22 @@ def save_notify(ligado: bool) -> bool:
     return save(**{NOTIFY_KEY: bool(ligado)})
 
 
+def load_sort(default: bool = False) -> bool:
+    """Se os cards sobem por atenção em vez de ficarem na ordem de descoberta.
+
+    **Começa desligado**: a ordem estável é o que deixa você olhar direto para
+    o card certo sem ler. Ordenar é para quando há sessões demais na tela.
+    """
+    value = load().get(SORT_KEY)
+    return value if isinstance(value, bool) else default
+
+
+def save_sort(ligado: bool) -> bool:
+    return save(**{SORT_KEY: bool(ligado)})
+
+
 __all__ = [
+    "SORT_KEY",
     "config_dir",
     "config_path",
     "events_path",
@@ -170,9 +186,11 @@ __all__ = [
     "load_agents",
     "load_alerts",
     "load_notify",
+    "load_sort",
     "load_theme",
     "save",
     "save_alerts",
     "save_notify",
+    "save_sort",
     "save_theme",
 ]

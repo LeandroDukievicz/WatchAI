@@ -84,6 +84,23 @@ def agregar(estados) -> Status:
     return next(s for s in PRIORIDADE if s in estados)
 
 
+def ordenar(sessions, por_atencao: bool) -> list["Session"]:
+    """A ordem dos cards na tela.
+
+    O padrão é a de **descoberta**, e é de propósito: card que muda de lugar
+    sozinho desfaz a memória visual — você aprende onde cada sessão fica e passa
+    a olhar direto para lá, sem ler.
+
+    Por atenção, quem precisa de você sobe ao topo, o que compensa quando há
+    sessões demais para varrer com o olho. Dentro do mesmo estado a ordem de
+    descoberta continua valendo, para o movimento ser o menor possível.
+    """
+    if not por_atencao:
+        return list(sessions)
+    posicao = {status: i for i, status in enumerate(PRIORIDADE)}
+    return sorted(sessions, key=lambda s: (posicao.get(s.status, len(posicao)), s.id))
+
+
 @dataclass
 class Agent:
     """Um agente de IA rodando dentro de um terminal."""

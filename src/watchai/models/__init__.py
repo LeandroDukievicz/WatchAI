@@ -8,6 +8,7 @@ from .session import (
     SessionEvent,
     Status,
     agregar,
+    ordenar,
 )
 from .store import SessionStore
 
@@ -22,4 +23,5 @@ __all__ = [
     "SessionStore",
     "Status",
     "agregar",
+    "ordenar",
 ]

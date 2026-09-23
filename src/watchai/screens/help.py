@@ -19,6 +19,7 @@ HELP_KEYS = [
     ("TAB", "change panel"),
     ("T", "theme picker"),
     ("V", "cards / list view"),
+    ("S", "sort cards by attention (off: discovery order)"),
     ("R", "refresh (mock: next change)"),
     ("B", "beep (on/off)"),
     ("N", "system notification (on/off)"),

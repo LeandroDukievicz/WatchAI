@@ -1385,3 +1385,68 @@ def test_agente_sem_terminal_ainda_vira_card():
     assert rotulo_terminal(None, "pwsh", 4312) == "pwsh #4312"
     assert rotulo_terminal(None, None, None, "antigravity", 99) == "antigravity #99"
     assert rotulo_terminal(None, None, None) == "?"
+
+
+def test_ordenar_por_atencao_sobe_quem_precisa_de_voce():
+    """A regra pura: quem pede você primeiro sobe, e dentro do mesmo estado a
+    ordem de descoberta continua valendo — para o card se mexer o mínimo."""
+    from watchai.models import ordenar
+    from watchai.models.session import Session
+
+    def sessao(id, status):
+        return Session(
+            id=id, name=f"s{id}", short=f"S{id}", status=status, project="",
+            directory="", pid=id, started_at=AGORA, status_since=AGORA, activity="",
+        )
+
+    sessoes = [
+        sessao(1, Status.WORKING),
+        sessao(2, Status.ERROR),
+        sessao(3, Status.WORKING),
+        sessao(4, Status.READY),
+    ]
+    assert [s.id for s in ordenar(sessoes, False)] == [1, 2, 3, 4]  # descoberta
+    assert [s.id for s in ordenar(sessoes, True)] == [2, 4, 1, 3]  # ERROR, READY, resto
+
+
+def test_a_tecla_de_ordenar_reordena_os_cards_sem_perder_a_selecao():
+    """Reordenar não pode trocar o card selecionado debaixo do cursor: a
+    seleção segue a sessão, não a posição."""
+    import asyncio
+
+    from watchai.app import WatchAIApp
+    from watchai.notify import Notifier
+    from watchai.widgets import SessionCard
+
+    async def main():
+        fonte = Fonte(snap(
+            obs(10, "claude", "/dev/pts/1", cwd="/home/eu/a"),
+            obs(20, "claude", "/dev/pts/2", cwd="/home/eu/b"),
+        ))
+        app = WatchAIApp(mock=False, source=fonte, theme_key="watchai", notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+
+            sessoes = app.store.sessions
+            sessoes[0].status, sessoes[1].status = Status.WORKING, Status.ERROR
+            # seleciona a de baixo (a que vai subir ao ordenar)
+            app.screen.selected = 1
+            escolhida = app.selected_session().id
+
+            await pilot.press("s")
+            await pilot.pause()
+            assert app.sort_on is True
+            ordem = [c.session.id for c in app.screen.query(SessionCard)]
+            assert ordem == [sessoes[1].id, sessoes[0].id]  # o ERROR subiu
+            assert app.selected_session().id == escolhida  # e continua a mesma
+
+            await pilot.press("s")
+            await pilot.pause()
+            assert app.sort_on is False
+            assert [c.session.id for c in app.screen.query(SessionCard)] == [
+                sessoes[0].id, sessoes[1].id
+            ]
+
+    asyncio.run(main())

@@ -14,23 +14,25 @@ from textual.widget import Widget
 
 from ..theme import colors
 
-SOUND_KEY = "B"  # alterna o bip: a descrição vira MUDO quando está desligado
-NOTIFY_KEY = "N"  # alterna a notificação do sistema: vira MUDO quando desligada
+SOUND_KEY = "B"  # alterna o bip: a descrição vira MUTED quando está desligado
+NOTIFY_KEY = "N"  # alterna a notificação do sistema: vira MUTED quando desligada
+SORT_KEY = "S"  # ordena por atenção: apagada enquanto a ordem é a de descoberta
 
 # (tecla, descrição, prioridade). A ORDEM da lista é a de leitura na barra; a
 # prioridade só decide quem sai primeiro quando não cabe — maior fica por último.
 KEYS = [
-    ("↑↓", "NAV", 11),
-    ("ENTER", "OPEN", 10),
-    ("⇧A", "GO", 9),
-    ("TAB", "PANEL", 5),
-    ("T", "THEMES", 4),
-    ("V", "VIEW", 8),
+    ("↑↓", "NAV", 12),
+    ("ENTER", "OPEN", 11),
+    ("⇧A", "GO", 10),
+    ("TAB", "PANEL", 6),
+    ("T", "THEMES", 5),
+    ("V", "VIEW", 9),
+    ("S", "SORT", 4),
     ("R", "REFRESH", 3),
-    ("B", "BIP", 2),
+    ("B", "BEEP", 2),
     ("N", "NOTIF", 1),
-    ("?", "HELP", 7),
-    ("Q", "QUIT", 6),
+    ("?", "HELP", 8),
+    ("Q", "QUIT", 7),
 ]
 
 
@@ -49,17 +51,23 @@ class KeyBar(Widget):
     def notify_on(self) -> bool:
         return getattr(self.app, "notify_on", True)
 
+    @property
+    def sort_on(self) -> bool:
+        return getattr(self.app, "sort_on", False)
+
     def _desligado(self, key: str) -> bool:
         """Interruptores apagam a própria tecla quando estão desligados."""
-        return (key == SOUND_KEY and not self.sound_on) or (
-            key == NOTIFY_KEY and not self.notify_on
+        return (
+            (key == SOUND_KEY and not self.sound_on)
+            or (key == NOTIFY_KEY and not self.notify_on)
+            or (key == SORT_KEY and not self.sort_on)
         )
 
     def _keys(self) -> list[tuple[str, str, int]]:
         """KEYS com os dois interruptores descrevendo o estado atual."""
         rotulos = {
-            SOUND_KEY: "BIP" if self.sound_on else "MUDO",
-            NOTIFY_KEY: "NOTIF" if self.notify_on else "MUDO",
+            SOUND_KEY: "BEEP" if self.sound_on else "MUTED",
+            NOTIFY_KEY: "NOTIF" if self.notify_on else "MUTED",
         }
         return [
             (key, rotulos.get(key, desc), priority) for key, desc, priority in KEYS
