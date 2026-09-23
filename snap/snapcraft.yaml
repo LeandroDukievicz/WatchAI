@@ -51,8 +51,18 @@ parts:
     # interpretador da base, o classic não tem base para usar. Sem isto o build
     # falha em `No suitable Python interpreter found, giving up.`, que não diz
     # o que fazer.
+    #
+    # E não basta pedir `python3-venv`: o filtro do craft-parts tira do payload
+    # **tudo que a base já tem**, exceto o que estiver listado aqui pelo nome
+    # (`filtered_packages - stage_packages`, em `_get_filtered_stage_package_names`).
+    # O `python3-venv` passa, mas quem carrega o `/usr/bin/python3.12` é a
+    # dependência dele — e dependência não escapa do filtro. Por isso os nomes
+    # vêm um a um. O `3.12` está preso ao core24, que é a base declarada acima.
     stage-packages:
       - python3-venv
+      - python3.12-minimal      # o binário /usr/bin/python3.12
+      - libpython3.12-minimal
+      - libpython3.12-stdlib    # sem isto o interpretador é achado e não roda
     # E, embarcado, o binário sai com o rpath do ambiente de build, que não
     # existe na máquina de quem instala. O patchelf reescreve isso.
     build-attributes:
