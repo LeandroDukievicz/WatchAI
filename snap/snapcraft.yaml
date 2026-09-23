@@ -45,8 +45,16 @@ parts:
   watchai:
     plugin: python
     source: .
-    # Em snap classic o binário do Python sai com o rpath do ambiente de build,
-    # que não existe na máquina de quem instala. O patchelf reescreve isso.
+    # Snap classic **tem que embarcar o próprio Python**. A regra está no
+    # plugin do snapcraft, em `get_system_interpreter`: "Classic snaps, and
+    # snaps without bases, must always provision Python" — um snap strict usa o
+    # interpretador da base, o classic não tem base para usar. Sem isto o build
+    # falha em `No suitable Python interpreter found, giving up.`, que não diz
+    # o que fazer.
+    stage-packages:
+      - python3-venv
+    # E, embarcado, o binário sai com o rpath do ambiente de build, que não
+    # existe na máquina de quem instala. O patchelf reescreve isso.
     build-attributes:
       - enable-patchelf
     build-packages:
