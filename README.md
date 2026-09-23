@@ -710,6 +710,21 @@ sua máquina — e é sobre ele que roda boa parte da suíte de testes visuais. 
 card volta a ser uma IA, com `project` no lugar de `agents`. Fora do mock, `R`
 força uma varredura na hora.
 
+### Refazer as capturas
+
+```bash
+scripts/screenshot.py docs/screenshot.png              # sessões reais
+scripts/screenshot.py --mock --temas docs/theme-shots  # um PNG por tema
+```
+
+Três armadilhas estão resolvidas dentro do script, e é por elas que ele existe:
+o **`NO_COLOR`** do ambiente faz o Rich exportar em escala de cinza e os oito
+temas saem idênticos (fácil de não perceber até a galeria estar no ar); o SVG do
+Textual só é renderizado fielmente pelo **Chrome headless** — o ImageMagick
+troca as fontes e o Inkscape empacotado como snap nem abre o arquivo; e a janela
+do navegador é maior que o alvo de propósito, porque é o `-resize` para baixo
+que deixa o texto nítido.
+
 ---
 
 ## Arquitetura
@@ -746,6 +761,7 @@ WatchAI/
 │   ├── screens/                 # dashboard.py · details.py · help.py · themes.py
 │   └── styles/app.tcss          # todo o CSS
 ├── tests/                       # suíte headless (conftest silencia o áudio)
+├── scripts/screenshot.py        # refaz as capturas do README e da landing
 └── docs/                        # marca e screenshot
 ```
 

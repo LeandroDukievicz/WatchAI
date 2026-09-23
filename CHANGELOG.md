@@ -13,6 +13,13 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   job no CI que instala e roda o comando em Linux, macOS e Windows.
 - Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
 
+### Adicionado
+- **`scripts/screenshot.py`**: refaz as capturas do README e da galeria de temas.
+  O caminho que funciona não estava escrito em lugar nenhum, e redescobri-lo
+  custa caro — o ImageMagick erra as fontes do SVG do Textual, o Inkscape do
+  snap não abre o arquivo, e `NO_COLOR` no ambiente faz os oito temas saírem
+  idênticos em escala de cinza. Tudo isso está resolvido dentro do script.
+
 ### Mudado
 - **O título do card virou o caminho da aba**, igual para todas: `~`,
   `~/Projetos/WatchAI`. Antes era o nome do projeto em maiúsculas, e a aba sem
