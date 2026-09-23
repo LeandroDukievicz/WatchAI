@@ -14,6 +14,10 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
 
 ### Corrigido
+- **Sessão do Antigravity CLI não aparecia.** O registro esperava os nomes
+  `antigravity`/`antigravity-cli`, mas o CLI instala o executável como **`agy`**
+  — e, sendo binário nativo, não há caminho de pacote que sirva de segunda
+  chance: o nome é tudo o que existe. Entrou na tabela.
 - **O card do codex também ficava com o nome da tty.** Duas causas somadas: o
   codex grava o diretório como URI (`file:///...`), e `Path("file:///x")` não é
   o caminho `/x`; e ele só o grava de vez em quando, aninhado em `payload.item`

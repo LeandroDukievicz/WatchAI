@@ -149,7 +149,7 @@ que o agente abriu.
 | **Codex** | `codex` | diário completo: `task_started`, `task_complete`, aprovação, erro |
 | **OpenCode** | `opencode` | leitor escrito a partir do layout do storage, **ainda não validado contra uma sessão real** — cai nos processos se o formato não bater |
 | **Gemini CLI** | `gemini` | processos. O `logs.json` dele grava só as **suas** mensagens |
-| **Antigravity** | `antigravity` | processos |
+| **Antigravity** | `agy`, `antigravity` | processos. O CLI instala o executável como **`agy`** — é por esse nome que ele é reconhecido |
 | **GitHub Copilot** | `copilot`, `gh copilot` | processos |
 | **Grok** | `grok` | processos |
 | **DeepSeek** | `deepseek` | processos |

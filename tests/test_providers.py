@@ -66,6 +66,9 @@ def test_reconhece_o_programa_e_ignora_o_caminho_parecido():
     assert identify(
         ["node.exe", r"C:\Users\eu\AppData\npm\@anthropic-ai\claude-code\cli.js"]
     ).key == "claude"
+    # o Antigravity CLI se chama `agy`, e é binário nativo: o nome é tudo o que há
+    assert identify(["agy"]).key == "antigravity"
+    assert identify(["/home/eu/.local/bin/agy"]).key == "antigravity"
     # o plugin do Telegram tem "claude" no caminho e NÃO é agente
     assert identify(["bun", "run", "--cwd", "/home/eu/.claude/plugins/telegram", "start"]) is None
     assert identify(["nvim", "claude.md"]) is None

@@ -50,10 +50,13 @@ KINDS: tuple[AgentKind, ...] = (
     AgentKind("claude", "claude", ("claude",), ("@anthropic-ai/claude-code",)),
     AgentKind("codex", "codex", ("codex",), ("@openai/codex",)),
     AgentKind("gemini", "gemini", ("gemini",), ("@google/gemini-cli",)),
+    # O executável do Antigravity CLI se chama `agy` — nome curto e nada óbvio,
+    # e um binário nativo, sem caminho de pacote que sirva de segunda chance.
+    # Sem ele na lista, a sessão simplesmente não aparecia.
     AgentKind(
         "antigravity",
         "antigravity",
-        ("antigravity", "antigravity-cli"),
+        ("agy", "antigravity", "antigravity-cli"),
         ("antigravity-cli",),
     ),
     AgentKind("opencode", "opencode", ("opencode",), ("opencode-ai",)),
