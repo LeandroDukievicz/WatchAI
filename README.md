@@ -280,7 +280,7 @@ se o foco está no EVENT STREAM (`TAB`).
 
 | Elemento | O que é |
 |---|---|
-| Título na borda | O **projeto** (a pasta em que os agentes trabalham). Ganha `▶` e vira cyan quando é o card selecionado |
+| Título na borda | O **projeto** em que o agente está trabalhando — segundo o diário dele, não segundo o processo: quem abre o agente na home e depois entra no projeto mantém o processo na home para sempre. O rótulo é relido a cada volta, então trocar de pasta troca o título. Sem projeto legível (a sessão está mesmo na home), fica o rótulo do terminal. Ganha `▶` e vira cyan quando é o card selecionado |
 | `pts/10` na borda | O terminal. No Windows, o shell (`pwsh #4312`) |
 | `● READY` | Estado do terminal: o do agente que mais pede você (ERROR › INPUT › READY › WAITING › WORKING) |
 | `for 04:12` | Há quanto tempo está **neste** estado (não é o tempo de sessão) |

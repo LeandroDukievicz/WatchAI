@@ -14,6 +14,12 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
 
 ### Corrigido
+- **O card mostrava `PTS/7` no lugar do projeto.** O projeto vinha do `cwd` do
+  **processo**, que é onde a sessão começou: quem abre o agente na home e depois
+  entra no projeto mantém o processo na home para sempre — e como a home não tem
+  nome de projeto legível (ali a pasta se chama como você), sobrava o rótulo da
+  tty. Agora o diretório vem do diário, que o agente reescreve a cada mensagem,
+  e o rótulo é relido a cada volta: trocar de pasta troca o título do card.
 - **Pensamento longo virava "tarefa concluída".** O diário do agente só é
   escrito quando a mensagem fecha, e um pensamento longo passa dos dois minutos
   do `FRESCOR` sem gastar CPU nenhuma — a espera é do outro lado da rede. Com o

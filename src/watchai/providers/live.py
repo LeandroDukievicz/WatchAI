@@ -146,10 +146,28 @@ class LiveProvider:
     def _sessao(self, key: str) -> Session | None:
         return next((s for s in self.store.sessions if s.key == key), None)
 
+    def _cwd(self, grupo: list[ProcObs]) -> str | None:
+        """Onde o agente está trabalhando — segundo ele, não segundo o processo.
+
+        O cwd do processo é onde a sessão **começou**: quem abre o agente na
+        home e depois entra no projeto mantém o processo na home para sempre, e
+        o card ficava com o nome da tty (`PTS/7`) porque a home não tem projeto
+        legível. O diário grava o diretório a cada mensagem, e é esse que diz em
+        que projeto a sessão está agora.
+        """
+        if self.transcripts is not None:
+            for o in grupo:
+                if not o.cwd:
+                    continue
+                leitura = self.transcripts.ler(o.kind, o.cwd)
+                if leitura is not None and leitura.cwd:
+                    return leitura.cwd
+        return next((o.cwd for o in grupo if o.cwd), None)
+
     def _rotulos(self, grupo: list[ProcObs]) -> tuple[str, str, str]:
         """(título do card, projeto, diretório). O título é o projeto — é o que
         você reconhece de longe; sem projeto legível, é o terminal."""
-        cwd = next((o.cwd for o in grupo if o.cwd), None)
+        cwd = self._cwd(grupo)
         projeto = _projeto(cwd)
         rotulo = grupo[0].terminal_label
         nome = rotulo.upper() if projeto in ("", "~") else projeto.upper()
@@ -252,9 +270,14 @@ class LiveProvider:
             mudou = True
 
         sessao.agents = novos
-        if not sessao.project:
-            _, projeto, cwd = self._rotulos(grupo)
-            sessao.project, sessao.directory = projeto, _encurtar(cwd)
+        # O rótulo é relido a cada volta: o agente que entra num projeto depois
+        # de abrir troca de diretório sem trocar de processo, e o card tem que
+        # acompanhar — é a diferença entre `PTS/7` e `WATCHAI` na tela.
+        nome, projeto, cwd = self._rotulos(grupo)
+        if nome != sessao.name:
+            sessao.name = sessao.short = nome
+            mudou = True
+        sessao.project, sessao.directory = projeto, _encurtar(cwd)
         return self._agregar(sessao, now) or mudou
 
     def _sem_agentes(self, sessao: Session, vivo: bool, now: datetime) -> bool:

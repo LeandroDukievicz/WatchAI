@@ -46,6 +46,10 @@ class Leitura:
     atividade: str
     mtime: float
     desde: float | None = None  # quando o estado começou, segundo o diário
+    # Onde o agente está trabalhando **agora**. O cwd do processo é onde ele
+    # começou: quem abre o agente na home e depois entra no projeto mantém o
+    # processo na home para sempre. O diário grava o diretório a cada mensagem.
+    cwd: str = ""
 
     def fresca(self, agora: float) -> bool:
         return agora - self.mtime <= FRESCOR_SEGUNDOS
@@ -169,7 +173,10 @@ class ClaudeCode:
         mtime = caminho.stat().st_mtime
         pendentes: dict[str, tuple[str, str, float | None]] = {}  # id -> (nome, detalhe, quando)
         ultimo = None  # (estado, atividade, quando)
+        cwd = ""
         for entrada in entradas:
+            if isinstance(entrada.get("cwd"), str) and entrada["cwd"]:
+                cwd = entrada["cwd"]
             tipo = entrada.get("type")
             if tipo not in ("assistant", "user"):
                 continue
@@ -204,10 +211,10 @@ class ClaudeCode:
         if pendentes:
             ferramenta, detalhe, quando = next(reversed(list(pendentes.values())))
             texto = f"{ferramenta}: {detalhe}" if detalhe else ferramenta
-            return Leitura(FERRAMENTA, texto, mtime, quando)
+            return Leitura(FERRAMENTA, texto, mtime, quando, cwd)
         if ultimo is None:
             return None
-        return Leitura(ultimo[0], ultimo[1], mtime, ultimo[2])
+        return Leitura(ultimo[0], ultimo[1], mtime, ultimo[2], cwd)
 
 
 class Codex:
@@ -245,12 +252,17 @@ class Codex:
         if not entradas:
             return None
         mtime = caminho.stat().st_mtime
+        cwd = ""
+        for entrada in entradas:
+            dados = entrada.get("payload") or {}
+            if isinstance(dados.get("cwd"), str) and dados["cwd"]:
+                cwd = dados["cwd"]
         for entrada in reversed(entradas):
             payload = entrada.get("payload") or {}
             tipo = payload.get("type") or ""
             quando = _epoch(entrada.get("timestamp"))
             if any(a in tipo for a in self.APROVACAO):
-                return Leitura(FERRAMENTA, "waiting for approval", mtime, quando)
+                return Leitura(FERRAMENTA, "waiting for approval", mtime, quando, cwd)
             if tipo in self.EVENTOS:
                 estado, atividade = self.EVENTOS[tipo]
                 # `task_complete` não quer dizer que deu certo: quando bate o
@@ -259,12 +271,12 @@ class Codex:
                 # verde uma sessão que parou e não volta sozinha.
                 erro = payload.get("error")
                 if isinstance(erro, dict) and erro.get("message"):
-                    return Leitura(ERRO, _resumo(erro["message"]), mtime, quando)
-                return Leitura(estado, atividade, mtime, quando)
+                    return Leitura(ERRO, _resumo(erro["message"]), mtime, quando, cwd)
+                return Leitura(estado, atividade, mtime, quando, cwd)
             if tipo in ("function_call", "local_shell_call", "custom_tool_call"):
                 detalhe = _detalhe(payload.get("arguments") if isinstance(payload.get("arguments"), dict) else None)
                 nome = payload.get("name") or "tool"
-                return Leitura(FERRAMENTA, f"{nome}: {detalhe}" if detalhe else nome, mtime, quando)
+                return Leitura(FERRAMENTA, f"{nome}: {detalhe}" if detalhe else nome, mtime, quando, cwd)
         return None
 
 

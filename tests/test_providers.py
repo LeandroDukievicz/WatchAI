@@ -300,6 +300,50 @@ def test_codex_que_terminou_bem_continua_sendo_tarefa_concluida(tmp_path):
     assert store.sessions[0].agents[0].status is Status.READY
 
 
+def test_o_projeto_do_card_vem_do_diario_e_nao_do_processo(tmp_path):
+    """Quem abre o agente na home e depois entra no projeto mantém o **processo**
+    na home para sempre. Como a home não tem nome de projeto legível (ali a
+    pasta se chama como você), o card caía no rótulo da tty — `PTS/7` no lugar
+    do projeto. O diário grava o diretório a cada mensagem."""
+    casa = str(Path.home())
+    entrada = assistente({"type": "text", "text": "pronto"})
+    entrada["cwd"] = casa + "/Projetos/WatchAI"
+    escreve_transcript(tmp_path, casa, [entrada])
+
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, cwd=casa))), Transcripts(tmp_path))
+    p.poll(AGORA)
+    assert store.sessions[0].name == "WATCHAI"
+    assert store.sessions[0].project == "WatchAI"
+
+    # E o contraste: sem diário, a home não diz projeto nenhum e sobra a tty.
+    # (O diário vai para uma pasta vazia de propósito: `transcripts=None` faria
+    # o provider ler o diário real de quem está rodando o teste.)
+    sem = SessionStore()
+    provider(sem, Fonte(snap(obs(10, cwd=casa))), Transcripts(tmp_path / "vazio")).poll(AGORA)
+    assert sem.sessions[0].name == "PTS/1"
+
+
+def test_o_card_acompanha_o_agente_que_troca_de_projeto(tmp_path):
+    """Trocar de pasta não troca o processo: o rótulo é relido a cada volta."""
+    casa = str(Path.home())
+    primeira = assistente({"type": "text", "text": "pronto"})
+    primeira["cwd"] = casa + "/Projetos/WatchAI"
+    escreve_transcript(tmp_path, casa, [primeira])
+
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, cwd=casa))), Transcripts(tmp_path))
+    p.poll(AGORA)
+    assert store.sessions[0].name == "WATCHAI"
+
+    segunda = assistente({"type": "text", "text": "pronto"})
+    segunda["cwd"] = casa + "/Projetos/DerivaSocial"
+    escreve_transcript(tmp_path, casa, [segunda])
+    p.transcripts.esquecer("claude", casa)
+    p.poll(AGORA + timedelta(seconds=3))
+    assert store.sessions[0].name == "DERIVASOCIAL"
+
+
 def test_transcript_ilegivel_nao_derruba_nada(tmp_path):
     pasta = tmp_path / ".claude" / "projects" / "-home-eu-proj"
     pasta.mkdir(parents=True)
