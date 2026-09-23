@@ -5,8 +5,13 @@ ele roda. É o fim natural do fluxo: ver, decidir, voltar.
 
 Cada sistema tem um jeito, e não é por capricho:
 
-* **macOS** — `System Events` ativa um processo pelo PID.
-* **Windows** — `AppActivate` do WScript.Shell, também pelo PID.
+* **macOS** — `System Events`. `set frontmost` sozinho levanta o **app**, não a
+  janela, e não tira nada da Dock: o script escolhe a janela, zera o
+  `AXMinimized`, levanta com `AXRaise` e confere se o app ficou na frente.
+* **Windows** — `AppActivate` do WScript.Shell, com `SW_RESTORE` antes para a
+  janela minimizada e `GetForegroundWindow` depois para conferir. O código de
+  saída do PowerShell não serve de resposta: ele é zero mesmo quando o
+  `AppActivate` devolve `False`.
 * **Linux/X11** — `wmctrl` ou `xdotool` casam janela e PID.
 * **Linux/Wayland** — o compositor **proíbe** um app levantar a janela de
   outro (é proteção contra roubo de foco), e o GNOME 50 já nem tem sessão X11
@@ -95,17 +100,91 @@ WINDOW_CALLS = (
     "org.gnome.Shell.Extensions.Windows",
 )
 
-OSASCRIPT = (
-    'tell application "System Events" to set frontmost of '
-    "(first process whose unix id is {pid}) to true"
-)
-POWERSHELL_ACTIVATE = "(New-Object -ComObject WScript.Shell).AppActivate({pid})"
+# macOS. `set frontmost` levanta o **app**, não a janela: com Terminal.app ou
+# iTerm2 isso vai para a janela da frente, que pode não ser a da sessão — e
+# janela minimizada na Dock não volta com ele. Por isso o script escolhe a
+# janela pela marca (quando a tty respondeu ao OSC), tira do Dock pelo
+# AXMinimized, levanta com AXRaise e só então confere se o app ficou na frente.
+OSASCRIPT = """
+tell application "System Events"
+  set escolhidas to (every process whose unix id is __PID__)
+  if escolhidas is {} then return "REFUSED"
+  set alvo to item 1 of escolhidas
+  set janelas to {}
+  if "__MARCA__" is not "" then
+    try
+      set janelas to (every window of alvo whose name contains "__MARCA__")
+    end try
+  end if
+  if janelas is {} then
+    try
+      set janelas to windows of alvo
+    end try
+  end if
+  if janelas is {} then return "REFUSED"
+  set janela to item 1 of janelas
+  try
+    set value of attribute "AXMinimized" of janela to false
+  end try
+  try
+    perform action "AXRaise" of janela
+  end try
+  set frontmost of alvo to true
+  delay 0.2
+  if frontmost of alvo is true then return "RAISED"
+  return "REFUSED"
+end tell
+"""
+
+# Windows. O `AppActivate` devolve True/False, mas o PowerShell sai com código
+# zero nos dois casos — ler só o código era o mesmo "sucesso falso" do Wayland.
+# Aqui a janela minimizada é restaurada antes (SW_RESTORE = 9) e o resultado é
+# conferido: quem está em primeiro plano é mesmo este processo? Cada pedaço
+# arriscado tem try próprio, para que a falta de um não derrube o resto: sem
+# como conferir, vale a palavra do AppActivate.
+POWERSHELL_ACTIVATE = """
+$alvo = __PID__
+try {
+  Add-Type -Name Janela -Namespace WatchAI -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int c);
+[DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr h, out uint p);
+'@
+  $proc = Get-Process -Id $alvo -ErrorAction SilentlyContinue
+  if ($proc -and $proc.MainWindowHandle -ne [IntPtr]::Zero) {
+    if ([WatchAI.Janela]::IsIconic($proc.MainWindowHandle)) {
+      [WatchAI.Janela]::ShowWindowAsync($proc.MainWindowHandle, 9) | Out-Null
+      Start-Sleep -Milliseconds 200
+    }
+  }
+} catch { }
+$ativou = $false
+try { $ativou = (New-Object -ComObject WScript.Shell).AppActivate($alvo) } catch { }
+Start-Sleep -Milliseconds 200
+$confere = $null
+try {
+  $dono = [uint32]0
+  $null = [WatchAI.Janela]::GetWindowThreadProcessId([WatchAI.Janela]::GetForegroundWindow(), [ref]$dono)
+  $confere = ($dono -eq $alvo)
+} catch { }
+if ($confere -eq $true) { 'RAISED' }
+elseif ($confere -eq $false) { 'REFUSED' }
+elseif ($ativou) { 'RAISED' }
+else { 'REFUSED' }
+"""
 
 
 def wayland() -> bool:
     """Estamos num compositor Wayland? É a diferença entre pedir foco e
     conseguir foco."""
     return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+
+def gnome() -> bool:
+    """A sessão é GNOME? A extensão Window Calls só existe ali — sugeri-la no
+    KDE ou no sway seria mandar o usuário atrás de algo que não serve."""
+    return "gnome" in os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
 
 
 def detect() -> str | None:
@@ -180,25 +259,38 @@ def _alvos(title: str | None, directory: str | None) -> list[str]:
     return [texto.lower() for texto in (directory, title) if texto]
 
 
-def escolher(janelas: list, pid: int, title: str | None, directory: str | None = None) -> int | None:
-    """Entre as janelas daquele processo, a que é a sessão — ou None.
+def casar(pares: list, title: str | None = None, directory: str | None = None):
+    """Entre janelas do mesmo processo, a que casa com a sessão — ou a primeira.
 
-    Com gnome-terminal as nove janelas do usuário têm o mesmo PID: sem casar o
-    título, `Shift+A` levantaria uma janela qualquer e ainda diria que deu certo.
+    `pares` é `[(id, texto)]`. É o desempate fraco, o que sobra quando a tty não
+    identificou nada: serve quando o terminal titula a janela com o caminho, e
+    erra quando quem titula é o programa de dentro.
     """
-    candidatas = [j for j in janelas if isinstance(j, dict) and j.get("pid") == pid]
-    if not candidatas:
+    if not pares:
         return None
-    if len(candidatas) > 1:
+    if len(pares) > 1:
         for alvo in _alvos(title, directory):
-            for janela in candidatas:
-                texto = " ".join(
-                    str(janela.get(chave, ""))
-                    for chave in ("title", "wm_class", "wm_class_instance")
-                ).lower()
-                if alvo in texto:
-                    return janela.get("id")
-    return candidatas[0].get("id")
+            for identificador, texto in pares:
+                if alvo in (texto or "").lower():
+                    return identificador
+    return pares[0][0]
+
+
+def _pares_de(janelas: list, pid: int) -> list:
+    """As janelas daquele processo como `[(id, texto)]`, para o `casar`."""
+    return [
+        (
+            j.get("id"),
+            " ".join(str(j.get(c, "")) for c in ("title", "wm_class", "wm_class_instance")),
+        )
+        for j in janelas
+        if isinstance(j, dict) and j.get("pid") == pid
+    ]
+
+
+def escolher(janelas: list, pid: int, title: str | None, directory: str | None = None) -> int | None:
+    """Entre as janelas daquele processo, a que é a sessão — ou None."""
+    return casar(_pares_de(janelas, pid), title, directory)
 
 
 async def _rodar(comando: list[str], timeout: float = 5.0) -> tuple[int, str]:
@@ -312,7 +404,7 @@ class Focuser:
                     break
         return False
 
-    async def _janela_pela_tty(self, tty: str | None, candidatas: list) -> int | None:
+    async def _pela_tty(self, tty: str | None, listar) -> object | None:
         """Qual das janelas é esta sessão — perguntando pela tty dela.
 
         É o único vínculo confiável quando o emulador hospeda várias janelas num
@@ -321,26 +413,39 @@ class Focuser:
         música, o shell escreve `usuário@host`. Nada disso fala da sessão.
 
         Mas a tty fala: escrevemos nela um título único (o mesmo canal do sino),
-        perguntamos à lista quem está com ele e devolvemos o título de antes.
-        Quem não responder ao OSC simplesmente não é encontrado aqui, e o
+        perguntamos a `listar()` quem está com ele e devolvemos o título de
+        antes. Quem não responder ao OSC simplesmente não é encontrado aqui, e o
         caminho segue para o desempate por texto.
+
+        `listar()` devolve `[(id, título)]` — é o que faz isto valer para o
+        Window Calls, o wmctrl e o xdotool sem mudar uma linha.
         """
-        antes = {j.get("id"): j.get("title") for j in candidatas if isinstance(j, dict)}
+        antes = dict(await listar())
+        if len(antes) < 2:
+            # Sem ambiguidade não vale mexer no título de ninguém.
+            return None
         marca = f"watchai:{os.getpid()}:{time.monotonic_ns():x}"
         if not set_title(tty, marca):
             return None
         for espera in (0.2, 0.3):
             await asyncio.sleep(espera)
-            for j in await self._janelas_window_calls() or ():
-                if isinstance(j, dict) and j.get("title") == marca:
-                    janela = j.get("id")
+            for identificador, titulo in await listar():
+                if titulo and marca in titulo:
                     # O agente reescreve o título dele no próximo quadro, mas
                     # até lá a janela não fica com a nossa marca na cara.
-                    set_title(tty, antes.get(janela) or "")
-                    return janela
+                    set_title(tty, antes.get(identificador) or "")
+                    return identificador
         # Não achou: ou o terminal ignora o OSC, ou já reescreveu o título por
         # cima. Nos dois casos não há marca nossa pendurada para desfazer.
         return None
+
+    async def _pares_window_calls(self, pid: int) -> list:
+        janelas = await self._janelas_window_calls() or []
+        return [
+            (j.get("id"), j.get("title") or "")
+            for j in janelas
+            if isinstance(j, dict) and j.get("pid") == pid
+        ]
 
     async def _janela_da_sessao(
         self,
@@ -351,39 +456,38 @@ class Focuser:
         directory: str | None,
     ) -> int | None:
         """A janela desta sessão, do vínculo mais forte para o mais fraco."""
-        candidatas = [j for j in janelas if isinstance(j, dict) and j.get("pid") == pid]
-        if len(candidatas) > 1:
-            # Só vale marcar a tty quando há de fato ambiguidade.
-            janela = await self._janela_pela_tty(tty, candidatas)
+        if len(_pares_de(janelas, pid)) > 1:
+            janela = await self._pela_tty(tty, lambda: self._pares_window_calls(pid))
             if janela is not None:
                 return janela
         return escolher(janelas, pid, title, directory)
 
-    async def _janela_wmctrl(self, pid: int, title: str | None) -> str | None:
-        """O id da janela daquele processo.
-
-        Um servidor de terminal (gnome-terminal, konsole) hospeda **todas** as
-        janelas com o mesmo PID: quando há mais de uma, o título da sessão é o
-        que desempata.
-        """
+    async def _pares_wmctrl(self, pid: int) -> list:
         código, saida = await _rodar(["wmctrl", "-l", "-p"])
         if código != 0:
-            return None
-        candidatas: list[tuple[str, str]] = []
+            return []
+        pares = []
         for linha in saida.splitlines():
             partes = linha.split(None, 4)  # id, área, pid, host, título
-            if len(partes) < 5:
-                continue
-            if partes[2] == str(pid):
-                candidatas.append((partes[0], partes[4]))
-        if not candidatas:
-            return None
-        if title:
-            alvo = title.lower()
-            for janela, titulo in candidatas:
-                if alvo in titulo.lower():
-                    return janela
-        return candidatas[0][0]
+            if len(partes) >= 5 and partes[2] == str(pid):
+                pares.append((partes[0], partes[4]))
+        return pares
+
+    async def _pares_xdotool(self, pid: int) -> list:
+        código, saida = await _rodar(["xdotool", "search", "--pid", str(pid)])
+        if código != 0:
+            return []
+        pares = []
+        # `search --pid` traz também janelas invisíveis; 20 cobrem qualquer uso
+        # real e evitam uma rajada de processos numa sessão cheia.
+        for identificador in [i for i in saida.split() if i.strip()][:20]:
+            _, nome = await _rodar(["xdotool", "getwindowname", identificador])
+            pares.append((identificador, nome.strip()))
+        return pares
+
+    async def _janela_wmctrl(self, pid: int, title: str | None, directory: str | None = None):
+        """O id da janela daquele processo, pelo desempate fraco."""
+        return casar(await self._pares_wmctrl(pid), title, directory)
 
     async def focus(
         self,
@@ -402,29 +506,58 @@ class Focuser:
         """
         dica = ""
         if pid and self.method == "osascript":
-            código, _ = await _rodar(["osascript", "-e", OSASCRIPT.format(pid=pid)])
-            if código == 0:
+            # A marca vai no próprio script: pedir a lista de janelas ao
+            # AppleScript e casar aqui seria brigar com nomes que têm vírgula.
+            marca = f"watchai:{os.getpid()}:{time.monotonic_ns():x}"
+            marcou = set_title(tty, marca)
+            if marcou:
+                await asyncio.sleep(0.2)
+            script = OSASCRIPT.replace("__PID__", str(pid)).replace(
+                "__MARCA__", marca if marcou else ""
+            )
+            código, saida = await _rodar(["osascript", "-e", script], timeout=15.0)
+            if marcou:
+                # Aqui não dá para devolver o título de antes (ele não foi lido
+                # antes da marca): o título vazio faz o Terminal.app e o iTerm2
+                # voltarem ao que eles mesmos calculam, e o agente reescreve o
+                # dele no próximo quadro.
+                set_title(tty, "")
+            if código == 0 and "RAISED" in saida:
                 return "window raised"
+            if "REFUSED" in saida:
+                return "the window manager refused to raise the window"
+            # Código não-zero aqui costuma ser permissão de Acessibilidade
+            # faltando — e aí o sino, abaixo, é o que sobra.
         elif pid and self.method == "powershell":
             exe = shutil.which("powershell") or shutil.which("pwsh")
             if exe:
-                código, _ = await _rodar(
+                # O Add-Type compila na primeira chamada; 5 s seria apertado.
+                código, saida = await _rodar(
                     [exe, "-NoProfile", "-NonInteractive", "-Command",
-                     POWERSHELL_ACTIVATE.format(pid=pid)]
+                     POWERSHELL_ACTIVATE.replace("__PID__", str(pid))],
+                    timeout=15.0,
                 )
-                if código == 0:
+                if código == 0 and "RAISED" in saida:
                     return "window raised"
+                if "REFUSED" in saida:
+                    return "the window manager refused to raise the window"
         elif pid and self.method == "wmctrl":
-            janela = await self._janela_wmctrl(pid, title)
+            janela = await self._pela_tty(tty, lambda: self._pares_wmctrl(pid))
+            if janela is None:
+                janela = await self._janela_wmctrl(pid, title, directory)
             if janela:
-                código, _ = await _rodar(["wmctrl", "-i", "-a", janela])
+                código, _ = await _rodar(["wmctrl", "-i", "-a", str(janela)])
                 if código == 0:
                     return "window raised"
         elif pid and self.method == "xdotool":
-            código, saida = await _rodar(["xdotool", "search", "--pid", str(pid)])
-            ids = [linha for linha in saida.split() if linha.strip()]
-            if código == 0 and ids:
-                código, _ = await _rodar(["xdotool", "windowactivate", ids[-1]])
+            janela = await self._pela_tty(tty, lambda: self._pares_xdotool(pid))
+            if janela is None:
+                código, saida = await _rodar(["xdotool", "search", "--pid", str(pid)])
+                ids = [linha for linha in saida.split() if linha.strip()]
+                # A última é a mais recente, que costuma ser a janela de fato.
+                janela = ids[-1] if código == 0 and ids else None
+            if janela:
+                código, _ = await _rodar(["xdotool", "windowactivate", str(janela)])
                 if código == 0:
                     return "window raised"
         elif self.method == "gdbus":
@@ -432,7 +565,7 @@ class Focuser:
             janelas = await self._janelas_window_calls() if pid else None
             if janelas is None:
                 # Sem a extensão não há como escolher janela nem conferir foco.
-                dica = " — install Window Calls for real focus" if wayland() else ""
+                dica = " — install Window Calls for real focus" if wayland() and gnome() else ""
             elif pid:
                 janela = await self._janela_da_sessao(janelas, pid, tty, title, directory)
                 if janela is not None:
@@ -473,7 +606,9 @@ __all__ = [
     "EMULADORES",
     "Focuser",
     "detect",
+    "casar",
     "escolher",
+    "gnome",
     "ring",
     "set_title",
     "wayland",

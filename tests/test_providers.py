@@ -825,6 +825,137 @@ def test_activate_ignorado_pelo_compositor_nao_vira_sucesso(monkeypatch):
     assert resultado == "the compositor refused to raise the window"
 
 
+def test_x11_identifica_a_janela_pela_tty(monkeypatch):
+    """Marcar a tty não é coisa de Wayland: no X11 o título das janelas tem o
+    mesmo problema, e o wmctrl lista do mesmo jeito."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    janela = {"titulo": "◐ outra coisa"}
+    ativadas: list[str] = []
+
+    async def falso(comando, timeout=5.0):
+        if comando[:2] == ["wmctrl", "-l"]:
+            return 0, f"0x01  0 4242  maq  eu@maq: ~\n0x02  0 4242  maq  {janela['titulo']}\n"
+        if comando[:2] == ["wmctrl", "-i"]:
+            ativadas.append(comando[-1])
+        return 0, ""
+
+    def falso_titulo(tty, texto):
+        janela["titulo"] = texto or "◐ outra coisa"
+        return True
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    monkeypatch.setattr("watchai.focus.set_title", falso_titulo)
+    monkeypatch.setattr("watchai.focus.asyncio.sleep", _sem_espera)
+
+    focuser = Focuser("wmctrl")
+    assert asyncio.run(focuser.focus(pid=4242, tty="/dev/pts/9")) == "window raised"
+    assert ativadas == ["0x02"]  # e não a primeira da lista
+    assert janela["titulo"] == "◐ outra coisa"  # o título de antes volta
+
+
+def test_windows_nao_chama_de_sucesso_o_appactivate_que_falhou(monkeypatch):
+    """O PowerShell sai com código zero mesmo quando o AppActivate devolve
+    False — era o mesmo sucesso falso do Wayland, com outra roupa. Quem decide
+    agora é o que o script imprime."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    scripts: list[str] = []
+
+    async def falso(comando, timeout=5.0):
+        scripts.append(comando[-1])
+        return 0, "REFUSED\r\n"
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    monkeypatch.setattr("watchai.focus.shutil.which", lambda nome: "/mentira/powershell")
+    focuser = Focuser("powershell")
+    resultado = asyncio.run(focuser.focus(pid=99, tty=""))
+    assert resultado == "the window manager refused to raise the window"
+    assert "__PID__" not in scripts[0] and "99" in scripts[0]
+
+
+def test_windows_confirmado_e_sucesso(monkeypatch):
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    async def falso(comando, timeout=5.0):
+        return 0, "RAISED\r\n"
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    monkeypatch.setattr("watchai.focus.shutil.which", lambda nome: "/mentira/powershell")
+    assert asyncio.run(Focuser("powershell").focus(pid=99, tty="")) == "window raised"
+
+
+def test_mac_marca_a_janela_pela_tty_e_devolve_o_titulo(monkeypatch):
+    """No macOS a marca vai dentro do AppleScript: pedir a lista de janelas e
+    casar em Python brigaria com nomes que têm vírgula."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    scripts: list[str] = []
+    escritas: list[tuple[str, str]] = []
+
+    async def falso(comando, timeout=5.0):
+        scripts.append(comando[-1])
+        return 0, "RAISED"
+
+    def falso_titulo(tty, texto):
+        escritas.append((tty, texto))
+        return True
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    monkeypatch.setattr("watchai.focus.set_title", falso_titulo)
+    monkeypatch.setattr("watchai.focus.asyncio.sleep", _sem_espera)
+
+    assert asyncio.run(Focuser("osascript").focus(pid=77, tty="/dev/ttys002")) == "window raised"
+    assert escritas[0][1].startswith("watchai:")  # marcou
+    assert escritas[0][1] in scripts[0]  # e o script procura por ela
+    assert "__PID__" not in scripts[0] and "77" in scripts[0]
+    # Devolve o título vazio: o Terminal.app volta ao que ele mesmo calcula.
+    assert escritas[-1] == ("/dev/ttys002", "")
+
+
+def test_mac_sem_permissao_de_acessibilidade_nao_promete_nada(monkeypatch):
+    """Sem Acessibilidade o osascript sai com erro — e aí sobra o sino."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    async def falso(comando, timeout=5.0):
+        return 1, ""
+
+    monkeypatch.setattr("watchai.focus._rodar", falso)
+    monkeypatch.setattr("watchai.focus.set_title", lambda tty, texto: False)
+    monkeypatch.setattr("watchai.focus.asyncio.sleep", _sem_espera)
+    assert asyncio.run(Focuser("osascript").focus(pid=77, tty="")) == "couldn't reach that window"
+
+
+def test_a_dica_da_extensao_e_so_no_gnome(monkeypatch):
+    """No KDE ou no sway não existe Window Calls: mandar instalar ali seria
+    mandar o usuário atrás de algo que não serve."""
+    import asyncio
+
+    from watchai.focus import Focuser
+
+    shell = FalsoShell([], extensao=False)
+    monkeypatch.setattr("watchai.focus._rodar", shell)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
+    focuser = Focuser("gdbus")
+    resultado = asyncio.run(focuser.focus(pid=4242, app="konsole", tty="", title="x"))
+    assert "Window Calls" not in resultado
+
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
+    resultado = asyncio.run(focuser.focus(pid=4242, app="konsole", tty="", title="x"))
+    assert "Window Calls" in resultado
+
+
 def test_sem_a_extensao_no_wayland_o_app_nao_promete_foco(monkeypatch):
     """Sem a Window Calls, no Wayland, o `Activate` do terminal só produziria um
     sucesso falso: melhor não tentar e dizer o que falta."""
@@ -833,6 +964,7 @@ def test_sem_a_extensao_no_wayland_o_app_nao_promete_foco(monkeypatch):
     from watchai.focus import Focuser
 
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
     shell = FalsoShell([], extensao=False)
     monkeypatch.setattr("watchai.focus._rodar", shell)
     focuser = Focuser("gdbus")

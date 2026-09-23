@@ -26,6 +26,19 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   com `last_agent_message: null`. O leitor olhava só o tipo e dava a sessão como
   concluída. Agora é ERROR (vermelho), com a primeira frase do erro na linha do
   card ("You've hit your usage limit").
+- **O mesmo sucesso falso existia no Windows e no macOS.** O `AppActivate`
+  devolve `True`/`False`, mas o PowerShell sai com código zero nos dois casos, e
+  era só o código que se lia. Agora o script confere com `GetForegroundWindow`
+  quem ficou em primeiro plano, restaura a janela minimizada (`SW_RESTORE`) e
+  responde `RAISED`/`REFUSED`. No macOS, `set frontmost` levanta o app e não a
+  janela, e não tira nada da Dock: o AppleScript passou a escolher a janela pela
+  marca da tty, zerar o `AXMinimized`, levantar com `AXRaise` e conferir. Sem
+  permissão de Acessibilidade o `osascript` falha, e aí o recado diz isso em vez
+  de prometer foco.
+- **A identificação por tty vale no X11 também**, com `wmctrl` e `xdotool`: o
+  título das janelas tem o mesmo problema ali, e o mecanismo é o mesmo.
+- **A dica de instalar a Window Calls só aparece no GNOME.** No KDE ou no sway
+  ela mandava o usuário atrás de uma extensão que não existe lá.
 - **`⇧A` anunciava foco que não acontecia.** No Wayland, o
   `org.freedesktop.Application.Activate` devolve código zero mesmo quando o
   compositor ignora o pedido — e o WatchAI lia esse zero como sucesso. Agora:

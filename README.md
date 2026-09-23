@@ -414,8 +414,8 @@ selecionado no dashboard ou com os detalhes abertos.
 
 | Sistema | Como |
 |---|---|
-| **macOS** | `System Events` ativa o processo pelo PID |
-| **Windows** | `AppActivate` do WScript.Shell, também pelo PID |
+| **macOS** | `System Events`: escolhe a janela, zera o `AXMinimized` (janela na Dock não volta com `set frontmost`), levanta com `AXRaise` e confere se o app ficou na frente. Precisa da permissão de **Acessibilidade** — sem ela o `osascript` falha e o WatchAI diz isso |
+| **Windows** | `AppActivate` do WScript.Shell, com `SW_RESTORE` antes para a janela minimizada e `GetForegroundWindow` depois para conferir. O código de saída do PowerShell não serve de resposta: é zero mesmo quando o `AppActivate` devolve `False` |
 | **Linux/X11** | `wmctrl` ou `xdotool`; com várias janelas no mesmo processo (um servidor de terminal hospeda todas as abas), o diretório e o título da sessão desempatam |
 | **Linux/Wayland** | o compositor **proíbe** um app levantar a janela de outro — é proteção contra roubo de foco, e do GNOME 50 em diante não há mais sessão X11 para escapar por ela. O caminho é a extensão **[Window Calls]**: com ela o WatchAI restaura a janela (`Unminimize`), ativa (`Activate`) e **confere** relendo o foco. Sem ela não há foco preciso no Wayland — e o WatchAI diz isso, em vez de tentar e fingir que deu |
 
@@ -439,6 +439,10 @@ janela candidata, o WatchAI escreve na tty da sessão um título único, pergunt
 lista quem ficou com ele e **devolve o título anterior**. Terminal que ignore o
 OSC simplesmente não é encontrado por aí, e o desempate volta a ser por
 diretório e nome.
+
+Isso vale nos três sistemas — Window Calls, `wmctrl`, `xdotool` e AppleScript
+listam janela e título do mesmo jeito. A exceção é o Windows, onde a sessão não
+tem tty: ali o alvo é a janela principal do processo.
 
 **E o sino.** Em qualquer Unix, o WatchAI também toca o bell **na tty da
 sessão** — o terminal marca aquela aba como "precisa de atenção" e a janela
