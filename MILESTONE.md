@@ -3,7 +3,7 @@
 Onde o WatchAI está e o que falta. Cada item diz **o que é**, **por que importa**
 e **onde mexer** — para dar para pegar um e fazer sem redescobrir o contexto.
 
-Atualizado em 2026-09-22.
+Atualizado em 2026-09-23.
 
 ---
 
@@ -91,7 +91,9 @@ Atualizado em 2026-09-22.
 - [x] **`G` leva você até a janela** da sessão selecionada — `System Events` no
       macOS, `AppActivate` no Windows, `wmctrl`/`xdotool` no X11 (título
       desempata quando o servidor de terminal hospeda várias janelas) e
-      `org.freedesktop.Application.Activate` no Wayland
+      `org.freedesktop.Application.Activate` no Wayland — este último **não
+      funciona**, como o M10 descobriu: ele responde sucesso e o compositor
+      ignora o pedido
 - [x] **Sino na tty da sessão**: marca a aba certa e faz a janela piscar na
       dock — é o que resolve o que o Wayland não deixa resolver
 - [x] **`N` liga/desliga a notificação** sem mexer no bip, com interruptor
@@ -142,13 +144,70 @@ Atualizado em 2026-09-22.
 - [x] **Sessão sem agente tem prazo** mesmo com a aba aberta — antes, agente
       encerrado com o terminal vivo deixava o card `IDLE` para sempre
 
+
+### M10 — o card diz a verdade, e diz de onde
+
+Uma leva inteira de "o app afirmava o que não tinha acontecido". Os dois lados
+do produto — o semáforo e o `⇧A` — anunciavam sucesso sem conferir, e cada um
+falhava no sentido pior: dizendo que a sessão está livre quando ela não está.
+
+- [x] **`⇧A` prometia foco que não acontecia.** No Wayland, o
+      `org.freedesktop.Application.Activate` devolve código zero **mesmo quando
+      o compositor ignora o pedido** — e o zero era lido como sucesso. Agora o
+      foco é conferido relendo a lista de janelas depois do `Activate`; sem a
+      Window Calls, no Wayland, o `Activate` do terminal nem é tentado, porque
+      ali ele só produziria sucesso falso. Faltava também o `Unminimize`, sem o
+      qual nenhuma janela minimizada volta
+- [x] **O mesmo erro existia no Windows e no macOS.** O `AppActivate` devolve
+      `True`/`False`, mas o PowerShell sai com código zero nos dois casos; e
+      `set frontmost` levanta o **app**, não a janela, e não tira nada da Dock.
+      Os dois foram reescritos com restauração da janela minimizada e
+      verificação do resultado — ⚠️ **sem execução em máquina real** (ver
+      pendências)
+- [x] **A janela da sessão passou a ser identificada pela tty.** Com um servidor
+      de terminal, todas as janelas têm o mesmo PID, e o título é de quem está
+      rodando na aba (o agente escreve o que faz, um player escreve a música).
+      O WatchAI escreve um título único na tty, vê qual janela ficou com ele e
+      devolve o título de antes. Vale para Window Calls, `wmctrl`, `xdotool` e
+      AppleScript
+- [x] **Pensamento longo deixou de virar "tarefa concluída".** O diário só é
+      escrito quando a mensagem fecha, e um pensamento demorado passa dos dois
+      minutos do `FRESCOR` sem gastar CPU — a espera é do outro lado da rede.
+      Isso acendia o **verde** e apitava "pode vir buscar" no meio da rodada;
+      agora é WAITING (âmbar)
+- [x] **Limite de uso do codex virou ERROR.** Ele fecha a rodada com
+      `task_complete` e põe o motivo **dentro** do evento (`error.message`, com
+      `last_agent_message` nulo) — ler só o tipo dava a sessão como concluída
+- [x] **O título do card é o caminho da aba**, igual para todas: `~`,
+      `~/Projetos/WatchAI`. Antes era o projeto em maiúsculas, e a aba sem
+      projeto legível caía no rótulo da tty (`PTS/9`), que não diz nada sobre de
+      qual sessão se trata. Caminho fundo é cortado pela esquerda, porque o que
+      identifica está no fim
+- [x] **O diretório vem do diário, não do processo.** O `cwd` do processo é onde
+      a sessão **abriu**: quem entra no projeto depois mantém o processo na home
+      para sempre. No codex isso exigiu duas coisas a mais — ele grava o
+      diretório como URI `file://` e só de vez em quando, aninhado, e o último
+      registro pode estar megabytes antes do fim do arquivo
+- [x] **Antigravity reconhecido**: o executável se chama `agy`, e é binário
+      nativo — não há caminho de pacote que sirva de segunda chance
+- [x] **`scripts/screenshot.py`**: o caminho para refazer as capturas deixou de
+      viver só na cabeça de quem já fez
+
+---
+
 ## O que ainda falta
 
-- [ ] **Validar Windows e macOS na prática.** O código trata os dois (identidade
-      de terminal pelo shell quando não há tty, agente reconhecido pelo caminho
-      do pacote) e o CI roda a suíte nos três, mas ninguém abriu o app num
-      Windows ou num Mac ainda. Até lá, é código testado, não software
-      verificado. O toast do Windows, em especial, falha em silêncio.
+- [ ] **Validar Windows e macOS na prática.** É a maior dívida do projeto, e ela
+      **cresceu** no M10: além da identidade de terminal pelo shell e do agente
+      reconhecido pelo caminho do pacote, agora há o `⇧A` reescrito nos dois —
+      P/Invoke no Windows para restaurar a janela minimizada e conferir quem
+      está em primeiro plano, AppleScript no macOS com `AXRaise` e
+      `AXMinimized`. **Nenhum job de CI abre janela**, então a suíte passar nos
+      três sistemas não diz nada sobre isso. Três perguntas resolvem: janela
+      minimizada volta? Com várias janelas do mesmo terminal, vai para a certa?
+      Quando falha, o recado diz `refused` em vez de `window raised`? Até lá, é
+      código testado, não software verificado. O toast do Windows, em especial,
+      falha em silêncio.
 
 - [ ] **Confirmar o leitor do OpenCode** contra uma sessão real. O layout veio
       do binário; os nomes dos campos (`directory`, `time.completed`,
@@ -158,16 +217,26 @@ Atualizado em 2026-09-22.
 
 - [ ] **Diários dos demais agentes.** Hoje só Claude Code, Codex e OpenCode têm
       leitor; o resto vive da camada de processos. Cada leitor novo é uma classe
-      em `providers/transcript.py` com dois métodos. Os formatos precisam ser
-      verificados contra uma sessão real de cada um — e nenhum deles está
-      instalado nesta máquina, o que torna isto trabalho de quem usa (ou de um
-      PR da comunidade).
+      em `providers/transcript.py` com dois métodos, e o formato precisa ser
+      verificado contra uma sessão real.
 
-- [ ] **Cortar a 1.2.0.** O `CHANGELOG` está em `[Não lançado]` com tudo que
-      entrou depois da 1.1.0 — semáforo em octógono com neon, tema claro
-      corrigido, `⇧A` + Window Calls, pipx verificado nos três sistemas,
-      registro de 17 agentes, notificação opt-in, responsividade em dois eixos e
-      o ciclo de vida da sessão encerrada. O `pyproject.toml` ainda diz 1.1.0.
+      O **Antigravity** já tem um caminho mapeado, e é diferente dos outros
+      três: ele guarda as conversas em **SQLite**
+      (`~/.gemini/antigravity-cli/conversations/*.db`, mais
+      `conversation_summaries.db`), não num arquivo de linhas. Daria um leitor,
+      mas com outra forma — e vale medir o custo de abrir um banco a cada
+      varredura antes de decidir.
+
+      O **Gemini CLI** continua fora: o `logs.json` dele grava só as mensagens
+      do usuário.
+
+- [ ] **Cortar a 1.2.0.** São **24 commits** e 43 entradas acumuladas em
+      `[Não lançado]` desde a tag `1.1.0`, e o `pyproject.toml` ainda diz
+      1.1.0 — semáforo em octógono com neon, tema claro corrigido, `⇧A` +
+      Window Calls, pipx verificado nos três sistemas, registro de 17 agentes,
+      notificação opt-in, responsividade em dois eixos, ciclo de vida da sessão
+      encerrada e a leva inteira do M10. É o item mais atrasado da lista e o
+      único que não depende de ninguém.
 
 - [ ] **Publicar no PyPI** (`pipx install watchai`). O workflow já existe e
       empacota; falta **você** criar o projeto no PyPI, apontar o *trusted
@@ -217,7 +286,12 @@ Atualizado em 2026-09-22.
   recente; o segundo cai na camada de processos.
 - INPUT é inferido: ferramenta pendente + processo parado há 8 s. Uma ferramenta
   lenta que não gasta CPU aparece como INPUT.
-- `cwd` pode ser negado no macOS para processos que não são seus — o card cai
-  para o rótulo do terminal.
+- `cwd` pode ser negado no macOS para processos que não são seus — sem
+  diretório, o título do card cai para o rótulo do terminal.
+- **Duas abas no mesmo projeto têm o mesmo título**, já que o título é o
+  caminho. Quem as distingue é o terminal no canto do card (`pts/4` contra
+  `pts/7`) — foi o que deu função a ele.
+- O **Antigravity** aparece e mostra projeto, tempo e CPU, mas não estado de
+  diário: ele não grava um.
 - O aviso não dispara pelas sessões que já estavam abertas quando o WatchAI
   subiu: só pelo que muda depois.
