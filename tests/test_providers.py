@@ -179,8 +179,11 @@ def test_tty_reaproveitada_vira_sessao_nova():
 
 
 def escreve_transcript(home: Path, cwd: str, entradas: list[dict]) -> Path:
-    slug = "-" + cwd.strip("/").replace("/", "-")
-    pasta = home / ".claude" / "projects" / slug
+    # A mesma regra do produto, importada de lá: quando o helper tinha a dele,
+    # um caminho do Windows (`C:\\Users\\voce`) virava nome de pasta inválido.
+    from watchai.providers.transcript import slug
+
+    pasta = home / ".claude" / "projects" / slug(cwd)
     pasta.mkdir(parents=True, exist_ok=True)
     arquivo = pasta / "sessao.jsonl"
     arquivo.write_text("\n".join(json.dumps(e) for e in entradas) + "\n", encoding="utf-8")
@@ -307,7 +310,7 @@ def test_o_projeto_do_card_vem_do_diario_e_nao_do_processo(tmp_path):
     do projeto. O diário grava o diretório a cada mensagem."""
     casa = str(Path.home())
     entrada = assistente({"type": "text", "text": "pronto"})
-    entrada["cwd"] = casa + "/Projetos/WatchAI"
+    entrada["cwd"] = str(Path.home() / "Projetos" / "WatchAI")
     escreve_transcript(tmp_path, casa, [entrada])
 
     store = SessionStore()
@@ -328,7 +331,7 @@ def test_o_card_acompanha_o_agente_que_troca_de_projeto(tmp_path):
     """Trocar de pasta não troca o processo: o rótulo é relido a cada volta."""
     casa = str(Path.home())
     primeira = assistente({"type": "text", "text": "pronto"})
-    primeira["cwd"] = casa + "/Projetos/WatchAI"
+    primeira["cwd"] = str(Path.home() / "Projetos" / "WatchAI")
     escreve_transcript(tmp_path, casa, [primeira])
 
     store = SessionStore()
@@ -337,7 +340,7 @@ def test_o_card_acompanha_o_agente_que_troca_de_projeto(tmp_path):
     assert store.sessions[0].name == "WATCHAI"
 
     segunda = assistente({"type": "text", "text": "pronto"})
-    segunda["cwd"] = casa + "/Projetos/DerivaSocial"
+    segunda["cwd"] = str(Path.home() / "Projetos" / "DerivaSocial")
     escreve_transcript(tmp_path, casa, [segunda])
     p.transcripts.esquecer("claude", casa)
     p.poll(AGORA + timedelta(seconds=3))

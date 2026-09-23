@@ -120,6 +120,16 @@ def _tail(caminho: Path, limite: int = CAUDA_BYTES) -> list[dict]:
     return saida
 
 
+def slug(cwd: str) -> str:
+    """O nome da pasta que o Claude Code dá ao projeto: o caminho com os
+    separadores virados em `-`.
+
+    O `:` entra na conta por causa do Windows — `C:\\Users\\voce` sem essa troca
+    não é sequer um nome de pasta válido lá.
+    """
+    return "-" + cwd.strip("/\\").replace("/", "-").replace("\\", "-").replace(":", "-")
+
+
 def _primeira_linha(caminho: Path) -> dict | None:
     try:
         with caminho.open("r", encoding="utf-8", errors="replace") as f:
@@ -151,12 +161,10 @@ class ClaudeCode:
     def arquivo(self, cwd: str) -> Path | None:
         if not self.raiz.is_dir():
             return None
-        # O slug é o caminho com os separadores virados em "-". Em vez de
-        # reproduzir a regra de cada sistema, tentamos o slug e, se não houver,
-        # procuramos pelo `cwd` que o próprio arquivo grava.
-        slug = "-" + cwd.strip("/\\").replace("/", "-").replace("\\", "-").replace(":", "-")
+        # Tentamos o slug e, se não houver, procuramos pelo `cwd` que o próprio
+        # arquivo grava.
         candidatos = []
-        direto = self.raiz / slug
+        direto = self.raiz / slug(cwd)
         if direto.is_dir():
             candidatos = sorted(direto.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not candidatos:
