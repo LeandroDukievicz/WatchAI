@@ -90,8 +90,10 @@ def test_um_card_por_terminal_com_os_agentes_dentro():
     assert [s.terminal for s in store.sessions] == ["pts/1", "pts/2"]
     primeiro = store.sessions[0]
     assert [a.label for a in primeiro.agents] == ["claude", "codex"]
-    assert primeiro.name == "PROJ"  # o título é o projeto, não a IA
-    assert store.sessions[1].name == "OUTRO"
+    # O título é o caminho da aba; o nome curto (EVENT STREAM) é o projeto.
+    assert primeiro.name == "/home/eu/proj"
+    assert primeiro.short == "PROJ"
+    assert store.sessions[1].name == "/home/eu/outro"
 
 
 def test_arvore_do_mesmo_agente_conta_uma_vez():
@@ -306,6 +308,26 @@ def test_codex_que_terminou_bem_continua_sendo_tarefa_concluida(tmp_path):
     assert store.sessions[0].agents[0].status is Status.READY
 
 
+def test_o_titulo_do_card_e_o_caminho_da_aba():
+    """Toda aba passa a ser identificada do mesmo jeito: pelo caminho em que
+    está aberta. Antes, a que não tinha projeto legível virava `PTS/9`, que não
+    diz nada sobre de qual sessão se trata."""
+    from watchai.providers.live import _encurtar, _titulo
+
+    casa = str(Path.home())
+    assert _encurtar(casa) == "~"  # e não "~/.", que ninguém escreve
+    assert _encurtar(str(Path.home() / "Projetos" / "WatchAI")) == "~/Projetos/WatchAI"
+    assert _encurtar(None) == ""
+
+    # Cabendo, o caminho vai inteiro.
+    assert _titulo("~") == "~"
+    assert _titulo("~/Projetos/WatchAI") == "~/Projetos/WatchAI"
+    assert _titulo("/usr/local") == "/usr/local"
+    # Fundo demais, corta pela esquerda: o que identifica o projeto está no fim.
+    assert _titulo("/run/media/disco/EBAC/CIENTISTA DE DADOS/Videos") == "…/CIENTISTA DE DADOS/Videos"
+    assert _titulo("~/Projetos/a/b/c") == "…/b/c"
+
+
 def test_o_projeto_do_card_vem_do_diario_e_nao_do_processo(tmp_path):
     """Quem abre o agente na home e depois entra no projeto mantém o **processo**
     na home para sempre. Como a home não tem nome de projeto legível (ali a
@@ -319,7 +341,8 @@ def test_o_projeto_do_card_vem_do_diario_e_nao_do_processo(tmp_path):
     store = SessionStore()
     p = provider(store, Fonte(snap(obs(10, cwd=casa))), Transcripts(tmp_path))
     p.poll(AGORA)
-    assert store.sessions[0].name == "WATCHAI"
+    assert store.sessions[0].name == "~/Projetos/WatchAI"
+    assert store.sessions[0].short == "WATCHAI"
     assert store.sessions[0].project == "WatchAI"
 
     # E o contraste: sem diário, a home não diz projeto nenhum e sobra a tty.
@@ -327,7 +350,8 @@ def test_o_projeto_do_card_vem_do_diario_e_nao_do_processo(tmp_path):
     # o provider ler o diário real de quem está rodando o teste.)
     sem = SessionStore()
     provider(sem, Fonte(snap(obs(10, cwd=casa))), Transcripts(tmp_path / "vazio")).poll(AGORA)
-    assert sem.sessions[0].name == "PTS/1"
+    assert sem.sessions[0].name == "~"  # a aba está na home, e o título diz isso
+    assert sem.sessions[0].short == "PTS/1"  # sem projeto, o curto é o terminal
 
 
 def test_o_card_acompanha_o_agente_que_troca_de_projeto(tmp_path):
@@ -340,14 +364,14 @@ def test_o_card_acompanha_o_agente_que_troca_de_projeto(tmp_path):
     store = SessionStore()
     p = provider(store, Fonte(snap(obs(10, cwd=casa))), Transcripts(tmp_path))
     p.poll(AGORA)
-    assert store.sessions[0].name == "WATCHAI"
+    assert store.sessions[0].name == "~/Projetos/WatchAI"
 
     segunda = assistente({"type": "text", "text": "pronto"})
     segunda["cwd"] = str(Path.home() / "Projetos" / "DerivaSocial")
     escreve_transcript(tmp_path, casa, [segunda])
     p.transcripts.esquecer("claude", casa)
     p.poll(AGORA + timedelta(seconds=3))
-    assert store.sessions[0].name == "DERIVASOCIAL"
+    assert store.sessions[0].name == "~/Projetos/DerivaSocial"
 
 
 def test_caminho_entende_o_file_uri():
@@ -382,7 +406,7 @@ def test_o_projeto_do_codex_vem_de_fundo_no_diario(tmp_path):
     store = SessionStore()
     p = provider(store, Fonte(snap(obs(10, "codex", cwd=casa))), Transcripts(tmp_path))
     p.poll(AGORA)
-    assert store.sessions[0].name == "WATCHAI"
+    assert store.sessions[0].name == "~/Projetos/WatchAI"
     assert store.sessions[0].status is Status.READY  # e o estado segue vindo da cauda
 
 
@@ -1075,6 +1099,30 @@ def test_sem_a_extensao_no_x11_cai_no_activate_do_terminal(monkeypatch):
         focuser.focus(pid=4242, app="gnome-terminal-server", tty="", title="x")
     )
     assert resultado == "terminal raised"
+
+
+def test_o_card_mostra_o_caminho_da_aba_na_borda():
+    """O que aparece na tela, não só no modelo: a borda do card traz o caminho
+    e o canto segue trazendo o terminal — é o par que distingue duas abas
+    abertas no mesmo projeto."""
+    import asyncio
+
+    from watchai.app import WatchAIApp
+    from watchai.notify import Notifier
+    from watchai.widgets import SessionCard
+
+    async def main():
+        fonte = Fonte(snap(obs(10, "claude", "/dev/pts/1", cwd="/home/eu/proj")))
+        app = WatchAIApp(mock=False, source=fonte, theme_key="watchai", notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            card = app.screen.query_one(SessionCard)
+            assert card.border_title.endswith("/home/eu/proj")
+            assert card.border_subtitle == "pts/1"
+
+    asyncio.run(main())
 
 
 def test_abrir_e_fechar_agente_nao_derruba_a_tela():

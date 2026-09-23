@@ -13,6 +13,16 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   job no CI que instala e roda o comando em Linux, macOS e Windows.
 - Workflow de publicação no PyPI (inerte até a variável `PYPI_READY` existir).
 
+### Mudado
+- **O título do card virou o caminho da aba**, igual para todas: `~`,
+  `~/Projetos/WatchAI`. Antes era o nome do projeto em maiúsculas, e a aba sem
+  projeto legível caía no rótulo da tty (`PTS/9`, `PTS/10`) — que não diz nada
+  sobre de qual sessão se trata. Caminho fundo demais é cortado pela esquerda
+  (`…/CIENTISTA DE DADOS/Videos`), porque o pedaço que identifica está no fim.
+  O `~` da home passou a sair inteiro: `relative_to` produzia `~/.`.
+- O **nome curto** (EVENT STREAM, modo compacto) continua sendo o projeto ou o
+  terminal: ali a coluna tem oito casas, e um caminho cortado não diria nada.
+
 ### Corrigido
 - **Sessão do Antigravity CLI não aparecia.** O registro esperava os nomes
   `antigravity`/`antigravity-cli`, mas o CLI instala o executável como **`agy`**

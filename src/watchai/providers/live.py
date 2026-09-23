@@ -53,12 +53,34 @@ def _projeto(cwd: str | None) -> str:
 
 
 def _encurtar(caminho: str | None) -> str:
+    """O caminho como você o escreveria: `~`, `~/Projetos/WatchAI`.
+
+    A home inteira vira `~` — `relative_to` devolve `.` ali, e `~/.` não é
+    como ninguém escreve o próprio diretório. As barras saem no formato posix
+    para o título ficar igual nos três sistemas.
+    """
     if not caminho:
         return ""
     try:
-        return "~/" + str(Path(caminho).relative_to(Path.home()))
+        relativo = Path(caminho).relative_to(Path.home())
     except ValueError:
         return caminho
+    return "~" if str(relativo) == "." else "~/" + relativo.as_posix()
+
+
+# Quantos segmentos do caminho cabem no título do card sem virar sopa de
+# letrinhas. `~/Projetos/WatchAI` passa inteiro; um caminho de mount fundo vira
+# `…/CIENTISTA DE DADOS/Videos`, que é justamente o pedaço que identifica.
+SEGMENTOS_TITULO = 3
+
+
+def _titulo(caminho: str) -> str:
+    """O caminho encolhido para caber na borda do card, cortado pela esquerda:
+    num caminho, o que diz de que projeto se trata está no fim."""
+    partes = [parte for parte in caminho.split("/") if parte]
+    if len(partes) <= SEGMENTOS_TITULO:
+        return caminho
+    return "…/" + "/".join(partes[-(SEGMENTOS_TITULO - 1):])
 
 
 class LiveProvider:
@@ -164,17 +186,27 @@ class LiveProvider:
                     return leitura.cwd
         return next((o.cwd for o in grupo if o.cwd), None)
 
-    def _rotulos(self, grupo: list[ProcObs]) -> tuple[str, str, str]:
-        """(título do card, projeto, diretório). O título é o projeto — é o que
-        você reconhece de longe; sem projeto legível, é o terminal."""
+    def _rotulos(self, grupo: list[ProcObs]) -> tuple[str, str, str, str]:
+        """(título do card, nome curto, projeto, diretório).
+
+        O título é o **caminho onde a aba está aberta** — `~`,
+        `~/Projetos/WatchAI`. Vale para toda aba, inclusive a que está na home,
+        onde antes sobrava o rótulo da tty (`PTS/9`) e você não fazia ideia de
+        qual sessão era.
+
+        O curto é outra coisa, e por isso não é o mesmo texto: ele vai para a
+        coluna de oito casas do EVENT STREAM e para o modo compacto, onde um
+        caminho cortado não diria nada e o nome do projeto diz.
+        """
         cwd = self._cwd(grupo)
         projeto = _projeto(cwd)
         rotulo = grupo[0].terminal_label
-        nome = rotulo.upper() if projeto in ("", "~") else projeto.upper()
-        return nome, projeto, cwd or ""
+        curto = rotulo.upper() if projeto in ("", "~") else projeto.upper()
+        caminho = _encurtar(cwd)
+        return (_titulo(caminho) if caminho else rotulo.upper()), curto, projeto, cwd or ""
 
     def _abrir(self, key: str, grupo: list[ProcObs], snap: Snapshot, now: datetime) -> Session:
-        nome, projeto, cwd = self._rotulos(grupo)
+        nome, curto, projeto, cwd = self._rotulos(grupo)
         term = snap.terminals.get(key)
         inicio = datetime.fromtimestamp(
             term.started if term else grupo[0].terminal_started
@@ -182,7 +214,7 @@ class LiveProvider:
         sessao = Session(
             id=self._proximo_id,
             name=nome,
-            short=nome,
+            short=curto,
             status=Status.STARTING,
             project=projeto,
             directory=_encurtar(cwd),
@@ -206,9 +238,9 @@ class LiveProvider:
         return sessao
 
     def _reabrir(self, sessao: Session, grupo: list[ProcObs], snap: Snapshot, now: datetime) -> None:
-        nome, projeto, cwd = self._rotulos(grupo)
+        nome, curto, projeto, cwd = self._rotulos(grupo)
         term = snap.terminals.get(sessao.key)
-        sessao.name = sessao.short = nome
+        sessao.name, sessao.short = nome, curto
         sessao.project = projeto
         sessao.directory = _encurtar(cwd)
         sessao.started_at = datetime.fromtimestamp(
@@ -273,9 +305,9 @@ class LiveProvider:
         # O rótulo é relido a cada volta: o agente que entra num projeto depois
         # de abrir troca de diretório sem trocar de processo, e o card tem que
         # acompanhar — é a diferença entre `PTS/7` e `WATCHAI` na tela.
-        nome, projeto, cwd = self._rotulos(grupo)
-        if nome != sessao.name:
-            sessao.name = sessao.short = nome
+        nome, curto, projeto, cwd = self._rotulos(grupo)
+        if (nome, curto) != (sessao.name, sessao.short):
+            sessao.name, sessao.short = nome, curto
             mudou = True
         sessao.project, sessao.directory = projeto, _encurtar(cwd)
         return self._agregar(sessao, now) or mudou
