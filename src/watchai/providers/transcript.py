@@ -196,7 +196,7 @@ class Cabecalho:
 # O começo de um diário não muda: ele só cresce. Guardar o que já foi lido
 # evita reabrir dezenas de arquivos a cada volta — a busca do codex olha os
 # quarenta rollouts mais recentes para achar o do diretório certo.
-_CABECALHOS: dict[Path, tuple[tuple[float, int], Cabecalho]] = {}
+_CABECALHOS: dict[Path, tuple[tuple[int, int], Cabecalho]] = {}
 
 
 def _cabecalho(caminho: Path, limite: int = CABECALHO_LINHAS) -> Cabecalho:
@@ -211,7 +211,7 @@ def _cabecalho(caminho: Path, limite: int = CABECALHO_LINHAS) -> Cabecalho:
         st = caminho.stat()
     except OSError:
         return Cabecalho()
-    marca = (st.st_mtime, st.st_size)
+    marca = (st.st_mtime_ns, st.st_size)
     guardado = _CABECALHOS.get(caminho)
     if guardado is not None and guardado[0] == marca:
         return guardado[1]
@@ -354,14 +354,22 @@ class Diario:
         antigo. Plural porque duas sessões abertas na mesma pasta são dois."""
         raise NotImplementedError
 
-    def chave(self, caminho: Path) -> float:
+    def chave(self, caminho: Path) -> tuple:
         """O que faz a leitura mudar, para o cache saber quando reler.
 
-        O mtime do arquivo, em geral. O Claude Code é a exceção: enquanto um
-        sub-agente trabalha, quem cresce é o diário **dele**, e o do principal
-        fica parado — ver `ClaudeCode.chave`.
+        O carimbo **e o tamanho**. Só o carimbo não basta: a granularidade do
+        relógio de arquivo do Windows faz duas escritas próximas caírem no
+        mesmo valor, e aí a leitura velha valia para sempre. Era o que deixava
+        `test_o_card_acompanha_o_agente_que_troca_de_projeto` falhando de vez
+        em quando no CI, só lá. Diário é arquivo que só cresce, então o
+        tamanho separa as duas versões que o carimbo confundiu.
+
+        O Claude Code é a exceção da regra: enquanto um sub-agente trabalha,
+        quem cresce é o diário **dele**, e o do principal fica parado — ver
+        `ClaudeCode.chave`.
         """
-        return caminho.stat().st_mtime
+        st = caminho.stat()
+        return (st.st_mtime_ns, st.st_size)
 
 
 class ClaudeCode(Diario):
@@ -403,18 +411,25 @@ class ClaudeCode(Diario):
         """`<sessão>.jsonl` -> `<sessão>/subagents/`."""
         return caminho.parent / caminho.stem / "subagents"
 
-    def chave(self, caminho: Path) -> float:
-        """O mtime mais novo entre o diário e os dos sub-agentes dele.
+    def chave(self, caminho: Path) -> tuple:
+        """O do diário, mais o dos sub-agentes dele.
 
         Sem os sub-agentes na conta, o cache congelava: o diário do principal
         não é escrito enquanto eles trabalham, então a leitura guardada valia
         para sempre e o trabalho deles nunca aparecia.
         """
-        mtime = caminho.stat().st_mtime
+        marca = super().chave(caminho)
         pasta = self._pasta_subagentes(caminho)
         if not pasta.is_dir():
-            return mtime
-        return max([mtime, *(p.stat().st_mtime for p in pasta.glob("*.jsonl"))])
+            return marca
+        subs = []
+        for arquivo in pasta.glob("*.jsonl"):
+            try:
+                st = arquivo.stat()
+            except OSError:
+                continue
+            subs.append((st.st_mtime_ns, st.st_size))
+        return (marca, tuple(sorted(subs)))
 
     def _subagentes(self, caminho: Path) -> tuple[int, float]:
         """Quantos sub-agentes ainda têm rodada aberta, e quando escreveram.
@@ -699,7 +714,7 @@ class Transcripts:
         self.leitores = {r.kind: r for r in (ClaudeCode(raiz), Codex(raiz), OpenCode(raiz))}
         self._candidatos: dict[tuple[str, str], list[Path]] = {}
         self._faltas: dict[tuple[str, str], int] = {}  # voltas sem diário para todos
-        self._cache: dict[Path, tuple[float, Leitura | None]] = {}
+        self._cache: dict[Path, tuple[tuple, Leitura | None]] = {}
         self._cwd: dict[Path, str] = {}  # diretório por arquivo, achado uma vez
 
     def atribuir(

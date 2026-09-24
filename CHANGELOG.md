@@ -109,6 +109,12 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - **A busca de diário pelo diretório estava morta.** Lia só a primeira linha do
   arquivo, e o formato novo do Claude Code abre o diário com metadados sem
   campo nenhum (`{"type":"mode",…}`): o `cwd` só aparece na quinta linha.
+- **Reescrita no mesmo carimbo de tempo não era relida.** O cache das leituras
+  se guiava só pelo mtime, e a granularidade do relógio de arquivo do Windows
+  faz duas escritas próximas caírem no mesmo valor: a leitura velha passava a
+  valer para sempre. Aparecia como falha intermitente de um único job do CI
+  (`windows-latest`), o que é a forma mais cara de um defeito se apresentar. A
+  chave passou a incluir o tamanho — diário é arquivo que só cresce.
 - **Sessão sem agente nenhum levantava `AttributeError`** — a agregação
   apontava para um `Status.IDLE` que o enum não tem desde que o terminal vazio
   deixou de ser um estado à parte.

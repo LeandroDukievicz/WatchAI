@@ -625,6 +625,32 @@ def test_diario_que_falta_nao_vira_varredura_eterna(tmp_path):
     assert 1 < len(buscas) < voltas // 4  # espaça as tentativas, mas não desiste
 
 
+def test_diario_reescrito_no_mesmo_carimbo_ainda_e_relido(tmp_path):
+    """Duas escritas próximas podem cair no mesmo carimbo de tempo — é o que a
+    granularidade do relógio de arquivo do Windows faz. Com o cache olhando só
+    para ele, a leitura velha valia para sempre; era o que deixava o teste do
+    card que troca de projeto falhando de vez em quando no CI, só lá."""
+    casa = str(Path.home())
+    primeira = assistente({"type": "text", "text": "pronto"})
+    primeira["cwd"] = str(Path.home() / "Projetos" / "WatchAI")
+    arquivo = escreve_transcript(tmp_path, casa, [primeira])
+
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, cwd=casa))), Transcripts(tmp_path))
+    p.poll(AGORA)
+    assert store.sessions[0].name == "~/Projetos/WatchAI"
+
+    carimbo_antigo = arquivo.stat().st_mtime_ns
+    segunda = assistente({"type": "text", "text": "pronto"})
+    segunda["cwd"] = str(Path.home() / "Projetos" / "DerivaSocial")
+    escreve_transcript(tmp_path, casa, [segunda])
+    os.utime(arquivo, ns=(carimbo_antigo, carimbo_antigo))
+
+    p.transcripts.esquecer("claude", casa)
+    p.poll(AGORA + timedelta(seconds=3))
+    assert store.sessions[0].name == "~/Projetos/DerivaSocial"
+
+
 # ---- sub-agentes -----------------------------------------------------------
 
 
