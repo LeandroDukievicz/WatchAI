@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ..models import AVISO_FECHADO, REMOCAO_FECHADO, Session, SessionStore, Status, agregar
 from .source import ProcObs, ProcessSource, PsutilSource, Snapshot
-from .transcript import ERRO, FEITO, FERRAMENTA, PENSANDO, Transcripts
+from .transcript import ERRO, FEITO, FERRAMENTA, PENSANDO, Leitura, Transcripts
 
 # Quanto de CPU (segundos por segundo de relógio) separa "trabalhando" de
 # "parado". Um agente ocioso fica em zero mesmo com a TUI dele aberta.
@@ -30,6 +30,13 @@ STARTING_SEGUNDOS = 4.0
 # mais que isto, quem está esperando é você (pedido de confirmação); se acabou
 # de escrever, o agente está esperando um processo externo.
 ESPERA_HUMANA = 8.0
+
+# Com o turno já fechado, quanto tempo de CPU seguida desfaz o "terminou".
+# Um pico não é trabalho: a TUI do agente redesenha, o contador de espera do
+# limite de uso pisca, o processo arruma a casa. Sem esta confirmação o card
+# alternava entre READY e WORKING a cada varredura — zerando o contador e
+# enchendo o EVENT STREAM de linhas que não eram notícia nenhuma.
+CONFIRMA_TRABALHO = 5.0
 AVISO_SEGUNDOS = AVISO_FECHADO.total_seconds()  # o card avisa que vai sair
 REMOCAO_SEGUNDOS = REMOCAO_FECHADO.total_seconds()  # e sai dois minutos depois
 
@@ -100,7 +107,10 @@ class LiveProvider:
         self.transcripts = Transcripts() if transcripts is None else transcripts
         self.aviso = aviso
         self.remocao = remocao
-        self._cpu: dict[int, tuple[float, float]] = {}  # pid -> (cpu, epoch)
+        # pid -> (cpu da árvore, cpu do próprio agente, epoch)
+        self._cpu: dict[int, tuple[float, float, float]] = {}
+        self._ocupado_desde: dict[int, float] = {}  # pid -> início da CPU seguida
+        self._leituras: dict[int, Leitura | None] = {}  # pid -> diário, por varredura
         self._proximo_id = 1
         # Por que a última leitura veio vazia — é o que a tela mostra no lugar
         # de "nenhuma sessão" quando o problema não é ausência de sessão.
@@ -121,8 +131,10 @@ class LiveProvider:
         agora = now.timestamp()
         self.diagnostico = snap.diagnostico
         mudou = False
+        raizes = self._raizes(snap.agents)
+        self._leituras = self._diarios(raizes)
         grupos: dict[str, list[ProcObs]] = {}
-        for o in self._raizes(snap.agents):
+        for o in raizes:
             grupos.setdefault(o.terminal, []).append(o)
 
         for key, grupo in grupos.items():
@@ -140,12 +152,13 @@ class LiveProvider:
         for sessao in list(self.store.sessions):
             if sessao.key in grupos or not sessao.key:
                 continue
-            mudou |= self._sem_agentes(sessao, sessao.key in snap.terminals, now)
+            mudou |= self._sem_agentes(sessao, now)
 
         # Processos que sumiram não precisam mais de histórico de CPU.
         vivos = {o.pid for o in snap.agents}
         for pid in [p for p in self._cpu if p not in vivos]:
             del self._cpu[pid]
+            self._ocupado_desde.pop(pid, None)
         self._inventario = False
         return mudou
 
@@ -168,6 +181,25 @@ class LiveProvider:
             )
         ]
 
+    def _diarios(self, agentes: list[ProcObs]) -> dict[int, Leitura | None]:
+        """O diário de cada agente, resolvido de uma vez só.
+
+        De uma vez só porque a escolha é coletiva: duas sessões abertas na
+        mesma pasta disputam os mesmos arquivos, e quem decide de quem é cada
+        um precisa ver as duas juntas. Perguntando de uma em uma, as duas
+        recebiam o mesmo diário — e um card mostrava a atividade do outro.
+        """
+        if self.transcripts is None:
+            return {}
+        por_pasta: dict[tuple[str, str], list[tuple[int, float]]] = {}
+        for o in agentes:
+            if o.cwd:
+                por_pasta.setdefault((o.kind, o.cwd), []).append((o.pid, o.created))
+        leituras: dict[int, Leitura | None] = {}
+        for (kind, cwd), grupo in por_pasta.items():
+            leituras.update(self.transcripts.atribuir(kind, cwd, grupo))
+        return leituras
+
     # -- sessões ---------------------------------------------------------------
     def _sessao(self, key: str) -> Session | None:
         return next((s for s in self.store.sessions if s.key == key), None)
@@ -181,13 +213,10 @@ class LiveProvider:
         legível. O diário grava o diretório a cada mensagem, e é esse que diz em
         que projeto a sessão está agora.
         """
-        if self.transcripts is not None:
-            for o in grupo:
-                if not o.cwd:
-                    continue
-                leitura = self.transcripts.ler(o.kind, o.cwd)
-                if leitura is not None and leitura.cwd:
-                    return leitura.cwd
+        for o in grupo:
+            leitura = self._leituras.get(o.pid)
+            if leitura is not None and leitura.cwd:
+                return leitura.cwd
         return next((o.cwd for o in grupo if o.cwd), None)
 
     def _rotulos(self, grupo: list[ProcObs]) -> tuple[str, str, str, str]:
@@ -316,7 +345,7 @@ class LiveProvider:
         sessao.project, sessao.directory = projeto, _encurtar(cwd)
         return self._agregar(sessao, now) or mudou
 
-    def _sem_agentes(self, sessao: Session, vivo: bool, now: datetime) -> bool:
+    def _sem_agentes(self, sessao: Session, now: datetime) -> bool:
         """Sem agente rodando, a sessão acabou — e começa a contagem para sair.
 
         Vale igual para a aba fechada e para o agente encerrado com a aba ainda
@@ -357,16 +386,37 @@ class LiveProvider:
         return True
 
     # -- estado de um agente ---------------------------------------------------
-    def _ocupado(self, o: ProcObs, agora: float) -> bool:
-        """O processo está gastando CPU (dele ou de uma ferramenta filha)?"""
+    def _cpu_ativa(self, o: ProcObs, agora: float) -> tuple[bool, bool]:
+        """(a árvore gastou CPU, o próprio agente gastou CPU) desde a volta
+        anterior.
+
+        Os dois números existem porque medem coisas diferentes. A árvore
+        inclui o que a sessão abriu e não fechou — um navegador, um servidor de
+        desenvolvimento —, e esse consumo é trabalho enquanto o diário disser
+        que há rodada aberta; com o turno fechado ele é só um programa ligado,
+        e contá-lo deixava a sessão eternamente "trabalhando".
+
+        Chamar isto mais de uma vez por varredura estraga a medição: é aqui que
+        o histórico é atualizado.
+        """
         anterior = self._cpu.get(o.pid)
-        self._cpu[o.pid] = (o.cpu, agora)
-        if o.tool_children:
-            return True
+        self._cpu[o.pid] = (o.cpu, o.cpu_proprio, agora)
         if anterior is None:
-            return False
-        passou = agora - anterior[1]
-        return passou > 0 and (o.cpu - anterior[0]) / passou > CPU_OCUPADO
+            return False, False
+        passou = agora - anterior[2]
+        if passou <= 0:
+            return False, False
+        return (
+            (o.cpu - anterior[0]) / passou > CPU_OCUPADO,
+            (o.cpu_proprio - anterior[1]) / passou > CPU_OCUPADO,
+        )
+
+    def _seguido(self, pid: int, ativo: bool, agora: float) -> float | None:
+        """Desde quando este processo está ocupado sem interrupção, ou None."""
+        if not ativo:
+            self._ocupado_desde.pop(pid, None)
+            return None
+        return self._ocupado_desde.setdefault(pid, agora)
 
     def _estado(self, o: ProcObs, agora: float) -> tuple[Status, str, float | None]:
         """O estado de um agente, e desde quando.
@@ -377,11 +427,13 @@ class LiveProvider:
         "terminou" de "travou esperando você", e o diário não sabe se o que ele
         registrou por último ainda está acontecendo.
         """
-        ocupado = self._ocupado(o, agora)
+        arvore, proprio = self._cpu_ativa(o, agora)
+        ocupado = arvore or bool(o.tool_children)
+        desde_ocupado = self._seguido(o.pid, proprio, agora)
         if agora - o.created < STARTING_SEGUNDOS:
             return Status.STARTING, ATIVIDADE[Status.STARTING], o.created
 
-        leitura = self.transcripts.ler(o.kind, o.cwd) if self.transcripts else None
+        leitura = self._leituras.get(o.pid)
         if leitura is not None:
             desde = leitura.desde
             if leitura.estado == ERRO:
@@ -409,11 +461,16 @@ class LiveProvider:
                 # "pode vir buscar" com o agente no meio do trabalho.
                 return Status.WAITING, leitura.atividade, desde
             if leitura.estado == FEITO:
-                if ocupado:
+                # Turno fechado: o diário é a palavra final, e um pico de CPU
+                # não a desfaz. O que desfaz é CPU **do agente**, seguida: é
+                # assim que aparece a resposta que ele já começou a gerar e
+                # ainda não gravou — os ~19 s de silêncio entre a sua mensagem
+                # e a primeira linha dela no arquivo.
+                if desde_ocupado is not None and agora - desde_ocupado >= CONFIRMA_TRABALHO:
                     atividade = (
                         f"running {o.tool_label}" if o.tool_label else ATIVIDADE[Status.WORKING]
                     )
-                    return Status.WORKING, atividade, None
+                    return Status.WORKING, atividade, desde_ocupado
                 return Status.READY, leitura.atividade, desde
 
         if ocupado:

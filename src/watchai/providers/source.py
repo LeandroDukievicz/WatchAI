@@ -54,6 +54,10 @@ class ProcObs:
     terminal_started: float  # epoch: quando o terminal (ou o agente) nasceu
     created: float  # epoch do processo
     cpu: float  # segundos de CPU acumulados pelo agente + descendentes
+    # Só o do processo do agente. A árvore inclui o que ele abriu e não
+    # fechou — um navegador, um servidor de desenvolvimento —, e isso mede a
+    # sessão trabalhando só enquanto o diário disser que há rodada aberta.
+    cpu_proprio: float = 0.0
     cwd: str | None = None
     tool_children: int = 0  # descendentes que são ferramenta rodando agora
     tool_label: str = ""  # a ferramenta mais recente ("npm test", "rg foo")
@@ -75,9 +79,8 @@ class TermObs:
 class Snapshot:
     """Uma leitura do sistema: os agentes e os terminais que existem agora.
 
-    Os terminais vêm junto porque um terminal **sem agente** não aparece na
-    lista de agentes — e sem essa lista não dá para distinguir "aba aberta e
-    ociosa" de "aba fechada", que é a diferença entre IDLE e OFFLINE.
+    Os terminais vêm junto porque o agente não sabe a hora em que a aba abriu
+    — ele nasce depois dela — e é essa hora que o card mostra como "elapsed".
     """
 
     agents: tuple[ProcObs, ...] = field(default=())
@@ -263,7 +266,8 @@ class PsutilSource:
                 return texto[:37] + "…" if len(texto) > 38 else texto
 
             filhotes = descendentes(pid)
-            cpu = cpu_de(info) + sum(cpu_de(tabela[f]) for f in filhotes if f in tabela)
+            cpu_proprio = cpu_de(info)
+            cpu = cpu_proprio + sum(cpu_de(tabela[f]) for f in filhotes if f in tabela)
             ferramentas_vivas = [
                 f
                 for f in filhotes
@@ -298,6 +302,7 @@ class PsutilSource:
                     terminal_started=inicio_terminal,
                     created=nascimento,
                     cpu=cpu,
+                    cpu_proprio=cpu_proprio,
                     cwd=cwd,
                     tool_children=ferramentas,
                     tool_label=rotulo,

@@ -7,7 +7,9 @@ relógio é um argumento. Os transcripts são arquivos de mentira num `tmp_path`
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+import os
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from watchai.models import AVISO_FECHADO, REMOCAO_FECHADO, SessionStore, Status
@@ -183,20 +185,40 @@ def test_tty_reaproveitada_vira_sessao_nova():
 # ---- o que o agente está fazendo (transcript) ------------------------------
 
 
-def escreve_transcript(home: Path, cwd: str, entradas: list[dict]) -> Path:
+def escreve_transcript(
+    home: Path, cwd: str, entradas: list[dict], nome: str = "sessao.jsonl"
+) -> Path:
     # A mesma regra do produto, importada de lá: quando o helper tinha a dele,
     # um caminho do Windows (`C:\\Users\\voce`) virava nome de pasta inválido.
     from watchai.providers.transcript import slug
 
     pasta = home / ".claude" / "projects" / slug(cwd)
     pasta.mkdir(parents=True, exist_ok=True)
-    arquivo = pasta / "sessao.jsonl"
+    arquivo = pasta / nome
     arquivo.write_text("\n".join(json.dumps(e) for e in entradas) + "\n", encoding="utf-8")
     return arquivo
 
 
-def assistente(*blocos):
-    return {"type": "assistant", "message": {"content": list(blocos)}}
+def carimbo(quando: datetime) -> str:
+    """A hora como o diário grava: ISO-8601 em UTC, terminado em Z."""
+    texto = quando.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+    return texto.replace("+00:00", "Z")
+
+
+def abertura(quando: datetime) -> dict:
+    """A primeira mensagem da sessão — é o carimbo dela que diz quando ela
+    começou, e é isso que desempata dois diários na mesma pasta."""
+    return {"type": "user", "message": {"content": "oi"}, "timestamp": carimbo(quando)}
+
+
+def assistente(*blocos, parou="end_turn"):
+    """Uma entrada do assistente. `parou` é o `stop_reason` da mensagem:
+    `tool_use` é passagem (o turno continua), `end_turn` é entrega."""
+    return {"type": "assistant", "message": {"content": list(blocos), "stop_reason": parou}}
+
+
+def voce(texto, **kw):
+    return {"type": "user", "message": {"content": texto}, **kw}
 
 
 def test_transcript_diz_que_terminou(tmp_path):
@@ -264,6 +286,79 @@ def test_pensar_por_muito_tempo_nao_e_ter_terminado(tmp_path):
     assert agente.status.slot != "green"
 
 
+def test_texto_no_meio_da_rodada_nao_acende_o_verde(tmp_path):
+    """A causa do semáforo piscando: o Claude Code grava **um bloco por linha**,
+    e o "vou olhar o arquivo X" que vem antes de uma ferramenta é gravado
+    igualzinho ao texto final. Só o `stop_reason` separa os dois — sem ele, cada
+    ferramenta chamada rendia um verde de alguns segundos."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        assistente({"type": "text", "text": "vou olhar o arquivo"}, parou="tool_use"),
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.WORKING
+    assert agente.status.slot != "green"
+
+
+def test_texto_que_fecha_o_turno_acende_o_verde(tmp_path):
+    """E o mesmo bloco, com o turno fechado, é a entrega: aí sim é a sua vez."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        assistente({"type": "text", "text": "vou olhar o arquivo"}, parou="tool_use"),
+        assistente({"type": "text", "text": "pronto, era isso"}, parou="end_turn"),
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.READY and agente.status.slot == "green"
+
+
+def test_sua_mensagem_comeca_a_rodada_em_vez_de_terminar(tmp_path):
+    """O diário só volta a ser escrito quando o primeiro bloco da resposta
+    fecha — mediana de 19 s numa sessão real, nove em cada dez abaixo de 72 s.
+    Esse silêncio era lido como "terminou", e o verde acendia justamente no
+    instante em que o agente pegava o trabalho."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        assistente({"type": "text", "text": "pronto"}, parou="end_turn"),
+        voce("agora arruma o build"),
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.WORKING
+    assert agente.status.slot != "green"
+
+
+def test_raciocinio_e_rodada_em_aberto(tmp_path):
+    """Ninguém pensa depois de entregar."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        voce("arruma o build"),
+        assistente({"type": "thinking", "thinking": "..."}, parou="tool_use"),
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    assert store.sessions[0].agents[0].status is Status.WORKING
+
+
+def test_comando_local_nao_tira_o_verde_de_quem_ja_entregou(tmp_path):
+    """O Claude Code se anota no diário pela mesma porta das suas mensagens: o
+    eco de um `/comando` e a saída de um `!comando` entram como `user`. Tratar
+    isso como rodada nova deixaria em "trabalhando" uma sessão parada."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        assistente({"type": "text", "text": "pronto"}, parou="end_turn"),
+        voce("<local-command-caveat>Caveat: ...</local-command-caveat>", isMeta=True),
+        voce("<command-name>/clear</command-name>"),
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    assert store.sessions[0].agents[0].status is Status.READY
+
+
 def escreve_rollout_codex(home: Path, cwd: str, entradas: list[dict]) -> Path:
     pasta = home / ".codex" / "sessions" / "2026" / "09" / "22"
     pasta.mkdir(parents=True, exist_ok=True)
@@ -306,6 +401,26 @@ def test_codex_que_terminou_bem_continua_sendo_tarefa_concluida(tmp_path):
     p = provider(store, Fonte(snap(obs(10, "codex"))), Transcripts(tmp_path))
     p.poll(datetime.now())
     assert store.sessions[0].agents[0].status is Status.READY
+
+
+def test_saida_da_ferramenta_do_codex_e_trabalho_e_nao_espera(tmp_path):
+    """A varredura de trás para frente não conhecia o evento de saída: passava
+    por ele, achava a chamada e deixava o card em "esperando você" com o agente
+    já de volta ao trabalho."""
+    escreve_rollout_codex(tmp_path, "/home/eu/proj", [
+        {"timestamp": "2026-09-22T22:03:50.000Z", "type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "shell",
+            "arguments": {"command": "pytest"},
+        }},
+        {"timestamp": "2026-09-22T22:03:50.370Z", "type": "response_item", "payload": {
+            "type": "custom_tool_call_output", "output": "ok",
+        }},
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "codex"))), Transcripts(tmp_path))
+    p.poll(datetime.now() + timedelta(seconds=30))
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.WORKING
 
 
 def test_o_titulo_do_card_e_o_caminho_da_aba():
@@ -418,6 +533,233 @@ def test_transcript_ilegivel_nao_derruba_nada(tmp_path):
     p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
     p.poll(AGORA)
     assert store.sessions[0].agents[0].status is Status.READY  # caiu no sinal do processo
+
+
+# ---- de quem é cada diário -------------------------------------------------
+
+
+def test_duas_sessoes_na_mesma_pasta_nao_dividem_o_diario(tmp_path):
+    """Duas abas abertas no mesmo projeto é o caso comum de quem separa o
+    código dos testes. Casando só por diretório, as duas caíam no arquivo de
+    mtime mais alto e um card passava a mostrar a atividade do outro."""
+    cedo = AGORA - timedelta(hours=2)
+    tarde = AGORA - timedelta(minutes=20)
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        abertura(cedo),
+        assistente({"type": "text", "text": "pronto"}),
+    ], nome="cedo.jsonl")
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        abertura(tarde),
+        assistente({"type": "tool_use", "id": "t1", "name": "Bash",
+                    "input": {"command": "npm test"}}),
+    ], nome="tarde.jsonl")
+
+    store = SessionStore()
+    fonte = Fonte(snap(
+        obs(10, terminal="/dev/pts/1", created=cedo.timestamp()),
+        obs(11, terminal="/dev/pts/2", created=tarde.timestamp()),
+    ))
+    provider(store, fonte, Transcripts(tmp_path)).poll(AGORA)
+
+    atividade = {s.agents[0].pid: s.agents[0].activity for s in store.sessions}
+    assert atividade[10] == "task completed"
+    assert atividade[11] == "Bash: npm test"
+
+
+def test_diario_unico_nao_e_emprestado_para_a_sessao_vizinha(tmp_path):
+    """Com um diário só para duas sessões, a segunda fica sem — e cai nos
+    sinais de processo. Menos informação, mas informação certa: mostrar a
+    atividade da vizinha é o pior erro possível num monitor, porque parece
+    informação."""
+    cedo = AGORA - timedelta(hours=2)
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        abertura(cedo),
+        assistente({"type": "text", "text": "pronto"}),
+    ], nome="cedo.jsonl")
+
+    store = SessionStore()
+    fonte = Fonte(snap(
+        obs(10, terminal="/dev/pts/1", created=cedo.timestamp()),
+        obs(11, terminal="/dev/pts/2", created=(AGORA - timedelta(minutes=20)).timestamp()),
+    ))
+    provider(store, fonte, Transcripts(tmp_path)).poll(AGORA)
+
+    atividade = {s.agents[0].pid: s.agents[0].activity for s in store.sessions}
+    assert atividade[10] == "task completed"
+    assert atividade[11] == "idle"
+
+
+def test_acha_o_diario_pelo_cwd_quando_a_pasta_do_slug_nao_bate(tmp_path):
+    """A reserva do casamento por `cwd` lia só a primeira linha, e o formato
+    novo do Claude Code abre o arquivo com metadados (`mode`,
+    `permission-mode`) que não têm campo nenhum: ela casava com arquivo nenhum
+    e virou código morto sem ninguém notar."""
+    entrada = assistente({"type": "text", "text": "pronto"})
+    entrada["cwd"] = "/home/eu/proj"
+    escreve_transcript(tmp_path, "/outro/lugar", [
+        {"type": "mode", "mode": "normal", "sessionId": "abc"},
+        {"type": "permission-mode", "permissionMode": "default", "sessionId": "abc"},
+        entrada,
+    ])
+    store = SessionStore()
+    provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path)).poll(AGORA)
+    assert store.sessions[0].agents[0].activity == "task completed"
+
+
+def test_diario_que_falta_nao_vira_varredura_eterna(tmp_path):
+    """Agente sem diário é normal nos primeiros instantes — e permanente numa
+    pasta onde nunca houve um. Procurar de novo a cada volta custa uma
+    varredura de disco a cada dois segundos, o dia inteiro."""
+    from watchai.providers.transcript import Transcripts as T
+
+    t = T(tmp_path)
+    buscas = []
+    leitor = t.leitores["claude"]
+    original = leitor.arquivos
+    leitor.arquivos = lambda cwd: (buscas.append(cwd), original(cwd))[1]
+
+    voltas = 200
+    for _ in range(voltas):
+        assert t.atribuir("claude", "/home/eu/proj", [(10, 0.0)]) == {10: None}
+
+    assert 1 < len(buscas) < voltas // 4  # espaça as tentativas, mas não desiste
+
+
+# ---- sub-agentes -----------------------------------------------------------
+
+
+def dispara_subagentes(tmp_path, *estados) -> Path:
+    """Uma sessão que lançou sub-agentes: o turno dela fecha na hora, porque a
+    ferramenta `Agent` é assíncrona e responde "launched" em um décimo de
+    segundo. Cada `estado` vira o diário de um sub-agente."""
+    arquivo = escreve_transcript(tmp_path, "/home/eu/proj", [
+        assistente({"type": "tool_use", "id": "t1", "name": "Agent",
+                    "input": {"description": "revisar"}}, parou="tool_use"),
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1",
+             "content": "Async agent launched successfully."}]}},
+        assistente({"type": "text", "text": "disparei os agentes"}),
+    ])
+    pasta = arquivo.parent / arquivo.stem / "subagents"
+    pasta.mkdir(parents=True)
+    for i, entrada in enumerate(estados):
+        (pasta / f"agent-{i}.jsonl").write_text(json.dumps(entrada) + "\n", encoding="utf-8")
+    return pasta
+
+
+def test_subagente_trabalhando_segura_a_sessao(tmp_path):
+    """O diário do principal para de crescer enquanto os sub-agentes rodam, e
+    a última linha dele é um `end_turn`: lido sozinho, o card ficava verde —
+    "pode vir buscar" — com quatro agentes no meio do trabalho."""
+    dispara_subagentes(
+        tmp_path,
+        assistente({"type": "tool_use", "id": "s1", "name": "Read",
+                    "input": {"file_path": "a.py"}}, parou="tool_use"),
+        assistente({"type": "thinking", "thinking": "..."}, parou="tool_use"),
+    )
+    store = SessionStore()
+    provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path)).poll(datetime.now())
+    assert store.sessions[0].status is Status.WORKING
+    assert store.sessions[0].activity == "2 subagents"
+
+
+def test_subagente_que_terminou_devolve_a_sessao(tmp_path):
+    """Todos entregues, o principal volta a mandar: quem terminou é a sessão."""
+    dispara_subagentes(tmp_path, assistente({"type": "text", "text": "feito"}))
+    store = SessionStore()
+    provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path)).poll(datetime.now())
+    assert store.sessions[0].status is Status.READY
+    assert store.sessions[0].activity == "task completed"
+
+
+def test_o_cache_nao_congela_quando_so_o_subagente_escreve(tmp_path):
+    """Enquanto os sub-agentes trabalham, o diário do principal não cresce.
+    Com o cache olhando só o mtime dele, a leitura guardada valia para sempre
+    e o trabalho deles nunca chegava à tela."""
+    pasta = dispara_subagentes(tmp_path, assistente({"type": "text", "text": "feito"}))
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path))
+    p.poll(datetime.now())
+    assert store.sessions[0].status is Status.READY
+
+    # outro sub-agente entra em cena; o diário do principal não muda em nada
+    (pasta / "agent-9.jsonl").write_text(json.dumps(assistente(
+        {"type": "tool_use", "id": "s9", "name": "Read", "input": {"file_path": "b.py"}},
+        parou="tool_use")) + "\n", encoding="utf-8")
+    p.poll(datetime.now())
+    assert store.sessions[0].status is Status.WORKING
+    assert store.sessions[0].activity == "1 subagent"
+
+
+def test_subagente_parado_nao_anuncia_entrega(tmp_path):
+    """Uma corrida interrompida deixa o diário do sub-agente congelado no meio
+    da rodada. É o relógio dele que vale, não o do principal: parado, o card
+    cai em WAITING — amarelo, sem alarme — em vez de anunciar um "terminou"
+    que ninguém entregou."""
+    pasta = dispara_subagentes(tmp_path, assistente(
+        {"type": "tool_use", "id": "s1", "name": "Read", "input": {"file_path": "a.py"}},
+        parou="tool_use",
+    ))
+    parado = time.time() - 600
+    os.utime(pasta / "agent-0.jsonl", (parado, parado))
+
+    store = SessionStore()
+    provider(store, Fonte(snap(obs(10))), Transcripts(tmp_path)).poll(datetime.now())
+    assert store.sessions[0].status is Status.WAITING
+
+
+# ---- CPU: pico x trabalho --------------------------------------------------
+
+
+def test_pico_de_cpu_nao_desfaz_o_terminou(tmp_path):
+    """Uma varredura com CPU alta não é trabalho: a TUI redesenha, o contador
+    de espera do limite de uso pisca. Sem confirmação, o card alternava entre
+    READY e WORKING a cada volta, zerando o contador e enchendo o EVENT
+    STREAM."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [assistente({"type": "text", "text": "ok"})])
+    store = SessionStore()
+    fonte = Fonte(snap(obs(10, cpu=10.0, cpu_proprio=10.0)))
+    p = provider(store, fonte, Transcripts(tmp_path))
+    p.poll(AGORA)
+
+    fonte.s = snap(obs(10, cpu=12.0, cpu_proprio=12.0))
+    p.poll(AGORA + timedelta(seconds=2))
+    assert store.sessions[0].status is Status.READY
+
+    # seguindo ocupado além da confirmação, aí sim é a resposta sendo gerada
+    fonte.s = snap(obs(10, cpu=20.0, cpu_proprio=20.0))
+    p.poll(AGORA + timedelta(seconds=8))
+    assert store.sessions[0].status is Status.WORKING
+
+
+def test_navegador_que_a_sessao_deixou_aberto_nao_e_trabalho(tmp_path):
+    """A CPU somada da árvore inclui o que o agente abriu e não fechou. Um
+    navegador aberto por uma ferramenta gasta CPU para sempre e tem filhos
+    para sempre — e prendia a sessão em WORKING mesmo com o turno fechado."""
+    escreve_transcript(tmp_path, "/home/eu/proj", [assistente({"type": "text", "text": "ok"})])
+    store = SessionStore()
+
+    def com_navegador(cpu):
+        return snap(obs(10, cpu=cpu, cpu_proprio=5.0, tool_children=11, tool_label="chrome"))
+
+    fonte = Fonte(com_navegador(10.0))
+    p = provider(store, fonte, Transcripts(tmp_path))
+    p.poll(AGORA)
+    for volta, gasto in enumerate((40.0, 80.0, 120.0), start=1):
+        fonte.s = com_navegador(gasto)
+        p.poll(AGORA + timedelta(seconds=2 * volta))
+
+    assert store.sessions[0].status is Status.READY
+    assert store.sessions[0].activity == "task completed"
+
+
+def test_sessao_sem_agente_nenhum_responde_offline():
+    """`agregar([])` apontava para um `Status.IDLE` que o enum não tem desde
+    que o terminal vazio deixou de ser um estado à parte: em vez de responder,
+    levantava `AttributeError`."""
+    from watchai.models import agregar
+
+    assert agregar([]) is Status.OFFLINE
 
 
 def test_a_varredura_diz_por_que_veio_vazia(monkeypatch):

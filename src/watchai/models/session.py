@@ -77,10 +77,16 @@ PRIORIDADE = (
 
 
 def agregar(estados) -> Status:
-    """O estado que representa um conjunto de agentes."""
+    """O estado que representa um conjunto de agentes.
+
+    Sem agente nenhum a sessão acabou: o card fica OFFLINE até sair da tela.
+    (Aqui havia `Status.IDLE`, de uma versão em que o terminal vazio era um
+    estado à parte; o enum não tem esse nome desde então, e a lista vazia
+    levantava `AttributeError` em vez de responder.)
+    """
     estados = set(estados)
     if not estados:
-        return Status.IDLE
+        return Status.OFFLINE
     return next(s for s in PRIORIDADE if s in estados)
 
 

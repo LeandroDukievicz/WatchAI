@@ -161,7 +161,7 @@ SessionCard.-compact TrafficLight {
 
 /* O card veste a cor da LÂMPADA — ele é o semáforo em tamanho grande.
    Vermelha: ERROR. Amarela: WORKING, WAITING, STARTING e INPUT. Verde: READY.
-   IDLE e OFFLINE não acendem lâmpada nenhuma e ficam neutros. */
+   OFFLINE não acende lâmpada nenhuma e fica neutro. */
 SessionCard.-working  { border: round $aw-yellow; background: $aw-tint-yellow; }
 SessionCard.-starting { border: round $aw-yellow; background: $aw-tint-yellow; }
 SessionCard.-waiting  { border: round $aw-yellow; background: $aw-tint-yellow; }
