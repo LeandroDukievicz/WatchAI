@@ -1,0 +1,53 @@
+<!doctype html>
+<!-- Gerador do card de compartilhamento (og:image), não uma página do site.
+
+     Para refazer `og-card.png` depois de trocar a captura:
+         python3 -m http.server 8778 --directory docs
+         # e um screenshot de 1200x630 desta página, ex.:
+         # npx playwright screenshot --viewport-size=1200,630 \
+         #     http://127.0.0.1:8778/og-card.source.html docs/og-card.png
+
+     A caixa mostra só o alto de screenshot.png de propósito: é onde estão os
+     cards. O resto da imagem é área vazia, que num card de 1200x630 vira
+     buraco. Se a captura mudar de proporção, é a altura de `.shot` que ajusta. -->
+<html lang="pt-BR"><head><meta charset="utf-8">
+<style>
+  *{box-sizing:border-box;margin:0}
+  html,body{width:1200px;height:630px;overflow:hidden}
+  body{background:#0b111b;color:#edf5fb;
+       font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+       padding:52px 58px;position:relative;display:flex;flex-direction:column}
+  body:before{content:"";position:absolute;left:-12%;top:-35%;width:75%;height:115%;
+              background:radial-gradient(circle at 42% 46%,#1648603d 0,#0e253400 63%)}
+  .lockup{display:flex;align-items:center;gap:20px;position:relative}
+  .lockup img{width:84px;height:63px;flex:none}
+  .wordmark{font-size:62px;font-weight:800;letter-spacing:-.05em;line-height:1}
+  .wordmark span{color:#3dd7f5}
+  .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.14em;font-weight:700}
+  .signature{margin-top:17px;color:#9ab0c4;font-size:15px;
+             display:flex;align-items:center;gap:12px;position:relative}
+  .dot{width:9px;height:9px;border-radius:50%;background:#3dd7f5;
+       box-shadow:0 0 0 6px #3dd7f518,0 0 22px #3dd7f5}
+  /* A caixa mostra só o alto da captura: é onde estão os cards. O resto da
+     imagem é área vazia, que num card de 1200×630 vira buraco. */
+  .shot{position:relative;margin-top:34px;height:300px;border:1px solid #395165;
+        border-radius:13px;overflow:hidden;box-shadow:0 24px 64px #000a}
+  .shot img{width:100%;display:block}
+  .states{margin-top:auto;padding-top:26px;display:flex;gap:34px;color:#8fa9bc;font-size:15px;
+          position:relative}
+  .states b{font-weight:700}
+  .s-ready{color:#37e5a9}.s-working{color:#3dd7f5}.s-input{color:#f268c1}
+</style></head>
+<body>
+  <p class="lockup">
+    <img src="brand/watchai-mark.svg" alt="">
+    <span class="wordmark">Watch<span>AI</span></span>
+  </p>
+  <p class="signature mono"><span class="dot"></span> AI SESSIONS UNDER OBSERVATION</p>
+  <div class="shot"><img src="screenshot.png" alt=""></div>
+  <p class="states mono">
+    <span><b class="s-ready">●</b> QUEM TERMINOU</span>
+    <span><b class="s-working">◐</b> QUEM ESTÁ TRABALHANDO</span>
+    <span><b class="s-input">◆</b> QUEM PRECISA DE VOCÊ</span>
+  </p>
+</body></html>

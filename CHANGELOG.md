@@ -36,6 +36,15 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   para o ícone do lançador. O que faltava no cabeçalho não era o semáforo, que
   já estava desenhado em CSS, e sim as **ondas de sinal** dos dois lados — é
   delas que a marca vive, e sem elas aquilo era um semáforo qualquer.
+- **O logotipo abre o hero**, acima do título, com a assinatura da marca
+  ("AI SESSIONS UNDER OBSERVATION") no lugar do olho-d'água que repetia o nome
+  do projeto. O farol animado da direita continua onde estava.
+- **Card de compartilhamento próprio** (`docs/og-card.png`, 1200×630): o
+  logotipo com a captura do app abaixo, em vez da captura sozinha. Quem via o
+  link numa timeline não tinha como saber de que projeto se tratava. O gerador
+  fica versionado ao lado (`og-card.source.html`), porque a captura vai mudar e
+  o card precisa ser refeito junto. Entraram também `og:image:width/height` e
+  `twitter:card`, que faltavam.
 
 ### Mudado
 - A keybar passou para o inglês onde ainda não estava: `MUDO` virou `MUTED` e
