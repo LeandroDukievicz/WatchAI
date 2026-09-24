@@ -28,6 +28,14 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   para o movimento ser o menor possível, e a seleção segue a **sessão**, não a
   posição: reordenar debaixo do cursor não troca o card selecionado. A escolha
   fica salva entre execuções.
+- **O logotipo entrou no site, no favicon e no ícone do aplicativo.** A marca
+  existia só como prancha de apresentação (`docs/brand/watchai.png`, 1 MB, com
+  as quatro variantes lado a lado) — não dava para usar em lugar nenhum. O
+  símbolo virou SVG de verdade, na paleta do site: `watchai-mark.svg` para o
+  cabeçalho e o rodapé da landing page, `watchai-icon.svg` para o favicon e
+  para o ícone do lançador. O que faltava no cabeçalho não era o semáforo, que
+  já estava desenhado em CSS, e sim as **ondas de sinal** dos dois lados — é
+  delas que a marca vive, e sem elas aquilo era um semáforo qualquer.
 
 ### Mudado
 - A keybar passou para o inglês onde ainda não estava: `MUDO` virou `MUTED` e
@@ -65,6 +73,36 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - **Codex: a saída da ferramenta encerra a pendência.** A varredura de trás para
   frente não conhecia `*_call_output`: passava por ela, achava a chamada e
   deixava o card em "esperando você" com o agente já de volta ao trabalho.
+- **O card mostrava a atividade da sessão vizinha.** O casamento entre processo
+  e diário era por `cwd`, e `cwd` não identifica sessão: duas abas abertas no
+  mesmo projeto — o caso comum de quem separa o código dos testes — caíam as
+  duas no arquivo de mtime mais alto. Medido com processos reais, dois pids em
+  `~/Projetos` apontavam para o mesmo `.jsonl`. Agora a escolha é coletiva e
+  cada diário vai para um agente só; o desempate é o relógio, porque a sessão
+  grava a primeira mensagem segundos depois de o processo nascer enquanto a
+  distância até o diário vizinho é de minutos. Quem sobra sem diário cai nos
+  sinais de processo: menos informação, mas informação certa.
+- **Sub-agente era invisível.** A ferramenta `Agent` é assíncrona — responde
+  "Async agent launched successfully" em ~125 ms, o turno do principal fecha
+  com `end_turn` e o diário dele **para de crescer**. O trabalho vai para
+  `<sessão>/subagents/agent-*.jsonl`, que ninguém lia: o card ficava verde,
+  "pode vir buscar", com quatro agentes trabalhando. O card agora conta quantos
+  estão em rodada aberta (`2 subagents`). O cache também mudou de chave, senão
+  congelava justamente durante a corrida.
+- **Navegador aberto pela sessão prendia o card em WORKING.** O sinal de
+  "ocupado" valia por existir processo filho, sem olhar CPU, e a CPU era somada
+  com a da árvore inteira — um Chrome deixado aberto por uma ferramenta tem
+  filhos e gasta CPU para sempre. Com o turno fechado, só a CPU do próprio
+  agente conta.
+- **O card piscava entre READY e WORKING** a cada varredura, zerando o contador
+  e enchendo o EVENT STREAM de linhas que não eram notícia. Um pico de CPU de
+  uma volta desfazia o "terminou"; agora é preciso CPU seguida.
+- **A busca de diário pelo diretório estava morta.** Lia só a primeira linha do
+  arquivo, e o formato novo do Claude Code abre o diário com metadados sem
+  campo nenhum (`{"type":"mode",…}`): o `cwd` só aparece na quinta linha.
+- **Sessão sem agente nenhum levantava `AttributeError`** — a agregação
+  apontava para um `Status.IDLE` que o enum não tem desde que o terminal vazio
+  deixou de ser um estado à parte.
 
 ## [1.2.0] — 2026-09-23
 
