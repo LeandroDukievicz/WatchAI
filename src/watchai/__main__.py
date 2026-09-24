@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from . import __version__
+from . import __version__, termtitle
 from .app import WatchAIApp
 
 
@@ -30,7 +30,12 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse(argv)
-    WatchAIApp(mock=args.mock, theme_key=args.theme).run()
+    # A janela passa a se chamar WatchAI enquanto o app está no ar, e volta ao
+    # nome de antes na saída. Fica aqui, e não dentro do app, para não disputar
+    # a saída com o Textual: a troca acontece antes de ele assumir a tela e
+    # depois de ele devolvê-la.
+    with termtitle.window():
+        WatchAIApp(mock=args.mock, theme_key=args.theme).run()
 
 
 if __name__ == "__main__":

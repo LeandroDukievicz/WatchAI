@@ -79,6 +79,10 @@ na área de trabalho. Tudo fica em `~/.local`, sem `sudo`. Desfaz com
 `./scripts/install-linux.sh --uninstall`. Esse script é uma alternativa para
 integração com o desktop; a instalação comum nos três sistemas é a do `pipx`.
 
+Aberto por qualquer um desses caminhos, o terminal onde o WatchAI roda passa a
+se chamar **WatchAI** — na barra de título, no alt-tab e na barra de tarefas —,
+e volta ao nome anterior quando você sai.
+
 ## Uso
 
 ```bash

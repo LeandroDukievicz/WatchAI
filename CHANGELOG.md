@@ -33,6 +33,39 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 - A keybar passou para o inglês onde ainda não estava: `MUDO` virou `MUTED` e
   `BIP` virou `BEEP`.
 
+### Corrigido
+- **A janela do terminal não dizia que ali estava o WatchAI.** Aberta pelo
+  ícone da área de trabalho ela se chamava "Terminal", e num terminal já aberto
+  ficava com o que o shell tinha escrito por último (`usuário@host: ~/projeto`)
+  — nada no alt-tab nem na barra de tarefas permitia achar o monitor entre as
+  outras janelas. Agora o app escreve o próprio nome na tty ao subir (OSC 0, o
+  mesmo canal que o `⇧A` já usava para marcar a janela das outras sessões) e
+  devolve o título de antes ao sair, pela pilha de títulos do terminal. Saída
+  redirecionada não recebe sequência nenhuma, que ali viraria lixo no meio do
+  texto.
+- **O verde piscava com o agente no meio do trabalho.** O Claude Code grava o
+  diário **um bloco por linha**, e o "vou olhar o arquivo X" que antecede uma
+  ferramenta sai idêntico ao texto final da resposta — o leitor chamava os dois
+  de "terminou". Numa amostra real desta máquina, 403 dos 468 blocos de texto
+  eram de passagem: sete em cada oito verdes eram falsos. Agora quem decide é o
+  `stop_reason` da mensagem, que vem em toda entrada: `tool_use` é passagem,
+  qualquer outro motivo é entrega. Replayando transcripts reais entrada por
+  entrada, os 20 "terminou" que apareciam antes da entrega viraram zero, e a
+  entrega de verdade continua sendo lida como tal.
+- **Sua própria mensagem acendia o verde.** Ela entra no diário como texto
+  solto, e o leitor a contava como tarefa concluída. Como o arquivo só volta a
+  ser escrito quando o primeiro bloco da resposta fecha — mediana de 19 s numa
+  sessão real, nove em cada dez abaixo de 72 s —, o card ficava verde justamente
+  durante o intervalo em que o agente pegava o trabalho. Agora uma mensagem sua
+  abre a rodada; o que o próprio Claude Code se anota (eco de `/comando`, saída
+  de `!comando`, aviso de interrupção) continua não abrindo nada.
+- **Bloco de raciocínio agora conta como rodada em aberto** — ninguém pensa
+  depois de entregar. Era o buraco que deixava a primeira leva de um turno sem
+  sinal nenhum do diário.
+- **Codex: a saída da ferramenta encerra a pendência.** A varredura de trás para
+  frente não conhecia `*_call_output`: passava por ela, achava a chamada e
+  deixava o card em "esperando você" com o agente já de volta ao trabalho.
+
 ## [1.2.0] — 2026-09-23
 
 ### Adicionado

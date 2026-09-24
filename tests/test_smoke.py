@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import re
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -734,3 +736,86 @@ def test_o_bip_do_windows_tem_plano_b_quando_falta_o_system_media():
     assert f"[Console]::Beep({hz}, {ms})" in script
     # Um timbre por estado também no plano B: três avisos distinguíveis.
     assert len({sound.WINDOWS_BEEP[k] for k in sound.KINDS}) == len(sound.KINDS)
+
+
+class _Tty(io.StringIO):
+    """Saída que se diz (ou não) um terminal — o que decide se o título sai."""
+
+    def __init__(self, tty: bool = True) -> None:
+        super().__init__()
+        self._tty = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+
+def test_a_janela_do_terminal_passa_a_se_chamar_watchai():
+    """Aberto pelo ícone, o terminal se chama "Terminal"; num terminal já
+    aberto, `usuário@host: ~/projeto`. Nenhum dos dois diz que ali está o
+    WatchAI — e é o programa em execução quem troca esse nome, com um OSC."""
+    from watchai import termtitle
+
+    saida = _Tty()
+    with termtitle.window(stream=saida) as trocado:
+        assert trocado
+        durante = saida.getvalue()
+        assert "\033]0;WatchAI\007" in durante
+        # O título de antes vai para a pilha do terminal **antes** da troca:
+        # é só dali que dá para trazê-lo de volta na saída.
+        assert durante.index("\033[22;0t") < durante.index("\033]0;WatchAI\007")
+        assert "\033[23;0t" not in durante
+
+    # E volta ao sair — inclusive quando o terminal sobrevive ao processo.
+    assert saida.getvalue().endswith("\033[23;0t")
+
+
+def test_o_titulo_volta_mesmo_quando_o_app_quebra():
+    from watchai import termtitle
+
+    saida = _Tty()
+    try:
+        with termtitle.window(stream=saida):
+            raise RuntimeError("app morreu no meio")
+    except RuntimeError:
+        pass
+    assert saida.getvalue().endswith("\033[23;0t")
+
+
+def test_saida_que_nao_e_terminal_nao_recebe_sequencia_nenhuma():
+    """Com `watchai > arquivo.txt` não há janela para nomear, e a sequência
+    viraria lixo no meio do texto."""
+    from watchai import termtitle
+
+    saida = _Tty(tty=False)
+    with termtitle.window(stream=saida) as trocado:
+        assert trocado is False
+    assert saida.getvalue() == ""
+
+
+def test_titulo_nao_escapa_do_proprio_osc():
+    from watchai import termtitle
+
+    saida = _Tty()
+    termtitle.apply("Watch\007AI\033]0;outro", stream=saida)
+    assert saida.getvalue().count("\007") == 1
+    assert saida.getvalue().endswith("\033]0;WatchAI]0;outro\007")
+
+
+def test_o_comando_troca_o_titulo_enquanto_o_app_roda(monkeypatch):
+    """A troca tem que valer para quem abre pelo ícone, que chama o comando —
+    e tem que acontecer fora do Textual, para não disputar a saída com ele."""
+    from watchai.__main__ import main
+
+    saida = _Tty()
+    monkeypatch.setattr(sys, "__stdout__", saida)
+    visto = {}
+
+    def run(self, *a, **k):
+        visto["durante"] = saida.getvalue()
+
+    monkeypatch.setattr(WatchAIApp, "run", run)
+    main(["--mock"])
+
+    assert "\033]0;WatchAI\007" in visto["durante"]
+    assert "\033[23;0t" not in visto["durante"]  # só depois que o app sai
+    assert saida.getvalue().endswith("\033[23;0t")
