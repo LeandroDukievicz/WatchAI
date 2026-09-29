@@ -307,6 +307,27 @@ def _tail(caminho: Path, limite: int = CAUDA_BYTES) -> list[dict]:
     return saida
 
 
+def _por_mtime(caminhos, limite: int | None = None) -> list[Path]:
+    """Do mais recente ao mais antigo.
+
+    O `sorted(..., key=lambda p: p.stat().st_mtime)` que estava espalhado pelos
+    leitores levanta quando um arquivo some no meio da ordenação — e sumir é
+    rotina: a pasta de rollouts do codex é limpa, uma sessão é apagada. A
+    exceção subia até `atribuir`, que devolvia `None` para **todos** os agentes
+    daquele tipo: um apagamento em outra pasta apagava o estado da sua sessão
+    por um ciclo. Quem sumiu simplesmente não entra na lista.
+    """
+    com_hora = []
+    for caminho in caminhos:
+        try:
+            com_hora.append((caminho.stat().st_mtime, caminho))
+        except OSError:
+            continue
+    com_hora.sort(key=lambda par: par[0], reverse=True)
+    ordenados = [caminho for _, caminho in com_hora]
+    return ordenados[:limite] if limite is not None else ordenados
+
+
 def slug(cwd: str) -> str:
     """O nome da pasta que o Claude Code dá ao projeto: o caminho com os
     separadores virados em `-`.
@@ -362,9 +383,25 @@ class Diario:
     """O que todo leitor de diário faz igual: achar os candidatos e dizer ao
     cache quando vale reler."""
 
+    # Quantos diários recentes vale a pena considerar quando não há pasta para
+    # filtrar. Uma máquina junta milhares ao longo dos meses; os que podem ser
+    # de uma sessão **aberta agora** são os que mudaram por último.
+    RECENTES_MAX = 40
+
     def arquivos(self, cwd: str) -> list[Path]:
         """Os diários que podem ser deste diretório, do mais recente ao mais
         antigo. Plural porque duas sessões abertas na mesma pasta são dois."""
+        raise NotImplementedError
+
+    def recentes(self) -> list[Path]:
+        """Os diários que mudaram por último, de qualquer pasta.
+
+        É o que resta quando o sistema **não deixa** ler o diretório do
+        processo: sob confinamento de snap a interface `system-observe` libera
+        `cmdline`, `stat` e `status`, mas não `cwd`; no macOS o `cwd` pode ser
+        negado. Sem pasta não há filtro forte, e quem decide de quem é cada
+        diário passa a ser o relógio — ver `Transcripts._parear`.
+        """
         raise NotImplementedError
 
     def chave(self, caminho: Path) -> tuple:
@@ -402,6 +439,11 @@ class ClaudeCode(Diario):
         self.raiz = home / ".claude" / "projects"
         self._vivos: dict[Path, tuple[float, bool]] = {}  # sub-agente -> rodada aberta?
 
+    def recentes(self) -> list[Path]:
+        if not self.raiz.is_dir():
+            return []
+        return _por_mtime(self.raiz.glob("*/*.jsonl"), self.RECENTES_MAX)
+
     def arquivos(self, cwd: str) -> list[Path]:
         if not self.raiz.is_dir():
             return []
@@ -409,15 +451,10 @@ class ClaudeCode(Diario):
         # arquivo grava.
         direto = self.raiz / slug(cwd)
         if direto.is_dir():
-            candidatos = sorted(
-                direto.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
-            )
+            candidatos = _por_mtime(direto.glob("*.jsonl"))
             if candidatos:
                 return candidatos
-        todos = sorted(
-            self.raiz.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
-        )[:40]
-        return [p for p in todos if _cabecalho(p).cwd == cwd]
+        return [p for p in self.recentes() if _cabecalho(p).cwd == cwd]
 
     @staticmethod
     def _pasta_subagentes(caminho: Path) -> Path:
@@ -596,15 +633,13 @@ class Codex(Diario):
     def __init__(self, home: Path) -> None:
         self.raiz = home / ".codex" / "sessions"
 
-    def arquivos(self, cwd: str) -> list[Path]:
+    def recentes(self) -> list[Path]:
         if not self.raiz.is_dir():
             return []
-        recentes = sorted(
-            self.raiz.glob("*/*/*/rollout-*.jsonl"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )[:40]
-        return [p for p in recentes if _cabecalho(p).cwd == cwd]
+        return _por_mtime(self.raiz.glob("*/*/*/rollout-*.jsonl"), self.RECENTES_MAX)
+
+    def arquivos(self, cwd: str) -> list[Path]:
+        return [p for p in self.recentes() if _cabecalho(p).cwd == cwd]
 
     def ler(self, caminho: Path) -> Leitura | None:
         entradas = _tail(caminho)
@@ -659,16 +694,18 @@ class OpenCode(Diario):
     def _info(self) -> Path:
         return self.raiz / "info"
 
-    def arquivos(self, cwd: str) -> list[Path]:
+    def recentes(self) -> list[Path]:
         pasta = self._info()
         if not pasta.is_dir():
             return []
-        candidatos = sorted(pasta.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        return _por_mtime(pasta.glob("*.json"), self.RECENTES_MAX)
+
+    def arquivos(self, cwd: str) -> list[Path]:
         # O campo do diretório já se chamou "directory" e "cwd"; aceitamos os
         # dois para não quebrar na próxima versão.
         return [
             caminho
-            for caminho in candidatos[:40]
+            for caminho in self.recentes()
             if (dados := _primeira_linha(caminho) or {}).get("directory") == cwd
             or dados.get("cwd") == cwd
         ]
@@ -732,9 +769,9 @@ class Transcripts:
         self._varrido: dict[tuple[str, str], float] = {}  # quando o disco foi lido
 
     def atribuir(
-        self, kind: str, cwd: str | None, agentes: list[tuple[int, float]]
+        self, kind: str, agentes: list[tuple[int, float, str]]
     ) -> dict[int, Leitura | None]:
-        """Qual diário é de qual agente. `agentes` é `[(pid, nascimento)]`.
+        """Qual diário é de qual agente. `agentes` é `[(pid, nascimento, cwd)]`.
 
         Casar só por diretório não distingue duas sessões abertas na mesma
         pasta — e duas sessões na mesma pasta é o caso comum de quem abre uma
@@ -747,18 +784,54 @@ class Transcripts:
         enquanto a distância até o diário da sessão vizinha é de minutos. Quem
         sobra sem diário cai nos sinais de processo — menos informação, mas
         informação certa.
+
+        **O `cwd` pode vir vazio**, e esse é o ponto do desenho: nem todo
+        sistema deixa lê-lo. Sob confinamento de snap a interface
+        `system-observe` libera `cmdline`, `stat` e `status` de outros
+        processos, mas não `cwd`; no macOS ele pode ser negado. Sem pasta, o
+        relógio decide sozinho — o filtro forte some, o monitor não.
         """
         leitor = self.leitores.get(kind)
-        if leitor is None or not cwd:
-            return {pid: None for pid, _ in agentes}
+        if leitor is None:
+            return {pid: None for pid, _, _ in agentes}
         try:
-            escolha = self._parear(agentes, self._opcoes(leitor, kind, cwd, len(agentes)))
+            escolha = self._parear(agentes, self._possiveis(leitor, kind, agentes))
             return {
                 pid: (self._do_arquivo(leitor, caminho) if caminho else None)
                 for pid, caminho in escolha.items()
             }
         except OSError:
-            return {pid: None for pid, _ in agentes}
+            return {pid: None for pid, _, _ in agentes}
+
+    def _possiveis(
+        self, leitor, kind: str, agentes: list[tuple[int, float, str]]
+    ) -> dict[int, list[Path]]:
+        """Os diários que podem ser de cada agente.
+
+        Com pasta, ela é o filtro: forte, barato e exato. Sem pasta, sobra a
+        lista dos diários que mudaram por último — e dela saem os que já
+        **têm dono**, isto é, os que foram gravados numa pasta que algum outro
+        agente desta volta declarou. Sem esse corte, um agente cego roubaria o
+        diário do vizinho que sabe onde está.
+        """
+        conhecidas = {cwd for _, _, cwd in agentes if cwd}
+        por_pid: dict[int, list[Path]] = {}
+        for pasta in conhecidas:
+            quantos = sum(1 for _, _, cwd in agentes if cwd == pasta)
+            achados = self._opcoes(leitor, kind, pasta, quantos)
+            for pid, _, cwd in agentes:
+                if cwd == pasta:
+                    por_pid[pid] = achados
+        cegos = [pid for pid, _, cwd in agentes if not cwd]
+        if cegos:
+            livres = [
+                caminho
+                for caminho in self._opcoes(leitor, kind, "", len(cegos))
+                if _cabecalho(caminho).cwd not in conhecidas
+            ]
+            for pid in cegos:
+                por_pid[pid] = livres
+        return por_pid
 
     def _opcoes(self, leitor, kind: str, cwd: str, quantos: int) -> list[Path]:
         """Os diários possíveis deste diretório, guardados entre voltas.
@@ -787,7 +860,7 @@ class Transcripts:
         """Varre o disco atrás dos diários e zera a contagem **se achou para
         todos**: zerar em toda procura fazia `_insistir` ver sempre a primeira
         tentativa, e o espaçamento não espaçava nada."""
-        achados = leitor.arquivos(cwd)
+        achados = leitor.arquivos(cwd) if cwd else leitor.recentes()
         self._candidatos[chave] = achados
         self._varrido[chave] = time.monotonic()
         if len(achados) >= quantos:
@@ -810,20 +883,23 @@ class Transcripts:
             return 0.0
 
     def _parear(
-        self, agentes: list[tuple[int, float]], candidatos: list[Path]
+        self, agentes: list[tuple[int, float, str]], por_pid: dict[int, list[Path]]
     ) -> dict[int, Path | None]:
         """O emparelhamento propriamente dito: um diário por agente."""
-        if not candidatos:
-            return {pid: None for pid, _ in agentes}
-
         # Um diário parado desde **antes** de o processo nascer não pode ser
         # dele: é a sessão de ontem, na mesma pasta. Emprestá-lo acendia o
         # verde com "terminou" numa sessão que ainda não tinha dito nada — e,
-        # como a escolha ficava guardada, ela não voltava atrás.
-        escrito = {c: self._escrito(c) for c in candidatos}
+        # como a escolha ficava guardada, ela não voltava atrás. Sem pasta para
+        # filtrar, este corte deixa de ser um detalhe e passa a ser a metade do
+        # casamento: é ele que separa a sessão de agora das centenas que já
+        # foram.
         possiveis = {
-            pid: [c for c in candidatos if escrito[c] >= nascimento - TOLERANCIA_RELOGIO]
-            for pid, nascimento in agentes
+            pid: [
+                caminho
+                for caminho in por_pid.get(pid, ())
+                if self._escrito(caminho) >= nascimento - TOLERANCIA_RELOGIO
+            ]
+            for pid, nascimento, _ in agentes
         }
         if len(agentes) == 1:
             pid = agentes[0][0]
@@ -832,7 +908,7 @@ class Transcripts:
 
         distancias = sorted(
             (abs(comeco - nascimento), pid, caminho)
-            for pid, nascimento in agentes
+            for pid, nascimento, _ in agentes
             for caminho in possiveis[pid]
             if (comeco := _cabecalho(caminho).inicio) is not None
         )
@@ -846,14 +922,13 @@ class Transcripts:
 
         # Diário sem carimbo de hora (formato antigo, arquivo truncado) não
         # entra no desempate: sobra para quem ainda não tem, na ordem de mtime.
-        sobrando = [c for c in candidatos if c not in usados]
-        for pid, _ in sorted(agentes, key=lambda a: a[1], reverse=True):
+        for pid, _, _ in sorted(agentes, key=lambda a: a[1], reverse=True):
             if pid in escolha:
                 continue
-            meus = [c for c in sobrando if c in possiveis[pid]]
-            escolha[pid] = meus[0] if meus else None
-            if meus:
-                sobrando.remove(meus[0])
+            sobrando = [c for c in possiveis[pid] if c not in usados]
+            escolha[pid] = sobrando[0] if sobrando else None
+            if sobrando:
+                usados.add(sobrando[0])
         return escolha
 
     def _do_arquivo(self, leitor, caminho: Path) -> Leitura | None:

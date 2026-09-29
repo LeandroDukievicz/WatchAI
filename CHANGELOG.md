@@ -47,6 +47,20 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   `twitter:card`, que faltavam.
 
 ### Mudado
+- **O `cwd` do processo virou atalho, e deixou de ser requisito.** O diário era
+  achado por (tipo, pasta), e agente sem pasta era descartado antes de qualquer
+  pergunta — o card perdia o nome do projeto e, com ele, todo o estado que só o
+  diário sabe: READY, INPUT, ERROR, "task completed". Sobrava um `PTS/1` com
+  estado de CPU. E ficar sem pasta não é hipótese: sob confinamento de snap a
+  interface `system-observe` libera `cmdline`, `stat` e `status` de outros
+  processos mas **não** `cwd` (conferido nos perfis AppArmor instalados), e no
+  macOS ele pode ser negado. Agora o casamento é por **tipo**: quem tem pasta
+  continua usando ela como filtro; quem não tem escolhe entre os diários que
+  mudaram por último, desempatados pelo relógio — a mesma regra que já separava
+  duas sessões na mesma pasta. Um diário gravado numa pasta que outro agente da
+  mesma volta declarou já tem dono e sai da lista, para o agente cego não roubar
+  o do vizinho. Verificado lado a lado contra a máquina real: com e sem `cwd`, a
+  leitura é idêntica.
 - A keybar passou para o inglês onde ainda não estava: `MUDO` virou `MUTED` e
   `BIP` virou `BEEP`.
 - O aviso do `N` também: era a única frase de tela que tinha ficado em
@@ -84,6 +98,12 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   está desligada. Valia também para o ←→ dentro dos detalhes e para a volta ao
   painel, que devolvia o cursor para outro card. As quatro leituras agora saem
   do mesmo lugar (`sessions_ordenadas`), que é o que o `⇧A` já fazia.
+- **Um diário apagado no meio da ordenação apagava a sessão por um ciclo.**
+  Ordenar por mtime chamava `stat()` em cada arquivo, e arquivo que some no meio
+  disso levanta — sumir é rotina: a pasta de rollouts do codex é limpa, uma
+  sessão é apagada. A exceção subia até `atribuir`, que devolvia `None` para
+  **todos** os agentes daquele tipo. Um apagamento em outra pasta apagava o
+  estado da sua sessão.
 - **Um agente que saía no meio da varredura congelava a tela por um ciclo.**
   `psutil.Process(pid)` levanta quando o processo morreu entre a listagem e a
   pergunta seguinte — e um agente que termina durante a varredura é rotina. A

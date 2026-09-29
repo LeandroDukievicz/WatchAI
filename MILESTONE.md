@@ -285,8 +285,9 @@ máquina Windows ou macOS de verdade — isso continua sendo a pendência númer
   recente; o segundo cai na camada de processos.
 - INPUT é inferido: ferramenta pendente + processo parado há 8 s. Uma ferramenta
   lenta que não gasta CPU aparece como INPUT.
-- `cwd` pode ser negado no macOS para processos que não são seus — sem
-  diretório, o título do card cai para o rótulo do terminal.
+- `cwd` pode ser negado no macOS para processos que não são seus. Deixou de
+  ser limitante: sem pasta, o diário é achado pelo relógio e o projeto sai de
+  dentro dele. Quem fica sem diário é só quem não tem diário nenhum.
 - **Duas abas no mesmo projeto têm o mesmo título**, já que o título é o
   caminho. Quem as distingue é o terminal no canto do card (`pts/4` contra
   `pts/7`) — foi o que deu função a ele.

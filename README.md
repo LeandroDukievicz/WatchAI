@@ -111,7 +111,7 @@ A detecção tem duas camadas, e é a combinação que faz sentido:
 
 | Camada | De onde vem | O que responde |
 |---|---|---|
-| **Processos** | varredura da tabela de processos (`psutil`), a cada 2 s | quem existe, em que terminal, desde quando — e se está gastando CPU. O `cwd` daqui é onde a sessão **abriu**, que serve de plano B para o projeto |
+| **Processos** | varredura da tabela de processos (`psutil`), a cada 2 s | quem existe, em que terminal, desde quando — e se está gastando CPU. O `cwd` daqui é onde a sessão **abriu**: serve de atalho para achar o diário, e o WatchAI funciona sem ele |
 | **Diário** | o `.jsonl` que o próprio agente grava (`~/.claude/projects/…`, `~/.codex/sessions/…`) | **o que** ele está fazendo agora, se terminou ou se travou esperando você — e **em que projeto está**, que o processo não sabe quando o agente troca de pasta |
 
 Nenhuma das duas sozinha resolve. O processo não distingue **READY** ("terminou,
@@ -197,9 +197,14 @@ mande um PR para a tabela — ela está em
 | Sinal | Linux | macOS | Windows |
 |---|:--:|:--:|:--:|
 | PID, linha de comando, início, CPU, filhos | ✅ | ✅ | ✅ |
-| `cwd` (o projeto do card) | ✅ | ⚠️ processos seus | ✅ |
+| `cwd` do processo (plano B do projeto) | ✅ | ⚠️ processos seus | ✅ |
 | diário local dos agentes | ✅ | ✅ | ✅ |
 | tty como identidade do terminal | ✅ | ✅ | ❌ não existe |
+
+O `cwd` do processo é atalho, não requisito: quando ele falta — confinamento de
+snap, que não libera `cwd` de outros processos, ou negativa do macOS — o diário
+é achado entre os mais recentes e casado pelo relógio, e o projeto sai de dentro
+dele. O que se perde é o filtro barato, não a informação.
 
 Sem tty (Windows), a identidade do terminal passa a ser o **shell ancestral** —
 que é o análogo certo, porque cada aba do Windows Terminal abre o seu próprio

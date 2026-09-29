@@ -779,6 +779,109 @@ def test_o_diario_de_ontem_nao_e_emprestado_para_a_sessao_de_hoje(tmp_path, monk
     assert store.sessions[0].agents[0].activity == "Bash: pytest"
 
 
+def _diario(tmp_path, cwd, *entradas, nome="sessao.jsonl", comeco=None):
+    """Um diário com o diretório carimbado em toda entrada, como o Claude Code
+    faz — é dele que o card tira o projeto quando o processo não tem cwd."""
+    linhas = [abertura(comeco or AGORA)] if comeco is not None else []
+    linhas += list(entradas)
+    for linha in linhas:
+        linha["cwd"] = cwd
+    return escreve_transcript(tmp_path, cwd, linhas, nome=nome)
+
+
+def test_sem_cwd_do_processo_o_diario_ainda_acha_a_sessao(tmp_path):
+    """O `cwd` do processo não está sempre disponível, e o WatchAI parava sem
+    ele.
+
+    Sob confinamento de snap a interface `system-observe` libera `cmdline`,
+    `stat` e `status` de outros processos, mas **não** `cwd`; no macOS ele pode
+    ser negado. O casamento de diário era por (tipo, pasta) e descartava esses
+    agentes antes de perguntar qualquer coisa: o card perdia o nome do projeto
+    e, junto com ele, todo o estado que só o diário sabe — READY, INPUT, ERROR,
+    "task completed". Sobrava um `PTS/1` com estado de CPU.
+    """
+    _diario(tmp_path, "/home/eu/proj",
+            assistente({"type": "text", "text": "pronto"}), comeco=AGORA - timedelta(hours=1))
+
+    store = SessionStore()
+    provider(store, Fonte(snap(obs(10, cwd=None))), Transcripts(tmp_path)).poll(AGORA)
+
+    sessao = store.sessions[0]
+    assert sessao.agents[0].status is Status.READY
+    assert sessao.agents[0].activity == "task completed"
+    # e o projeto veio do diário, já que o processo não soube dizer
+    assert sessao.name == "/home/eu/proj"
+    assert sessao.short == "PROJ"
+
+
+def test_agente_sem_cwd_nao_rouba_o_diario_de_quem_sabe_onde_esta(tmp_path):
+    """Sem pasta, o agente cego escolhe entre os diários recentes — e o mais
+    recente pode ser justamente o do vizinho que **sabe** em que pasta está.
+    Um diário gravado numa pasta que outro agente desta volta declarou já tem
+    dono e sai da lista."""
+    _diario(tmp_path, "/home/eu/a",
+            assistente({"type": "text", "text": "pronto"}),
+            nome="a.jsonl", comeco=AGORA - timedelta(hours=2))
+    _diario(tmp_path, "/home/eu/b",
+            assistente({"type": "tool_use", "id": "t1", "name": "Bash",
+                        "input": {"command": "pytest"}}, parou="tool_use"),
+            nome="b.jsonl", comeco=AGORA - timedelta(minutes=30))
+
+    store = SessionStore()
+    provider(store, Fonte(snap(
+        obs(10, terminal="/dev/pts/1", cwd="/home/eu/a",
+            created=(AGORA - timedelta(hours=2)).timestamp()),
+        obs(11, terminal="/dev/pts/2", cwd=None,
+            created=(AGORA - timedelta(minutes=30)).timestamp()),
+    )), Transcripts(tmp_path)).poll(AGORA)
+
+    atividade = {s.agents[0].pid: s.agents[0].activity for s in store.sessions}
+    assert atividade[10] == "task completed"
+    assert atividade[11] == "Bash: pytest"
+
+
+def test_dois_agentes_cegos_sao_desempatados_pelo_relogio(tmp_path):
+    """Com dois sem pasta, o filtro forte some e sobra o relógio: uma sessão
+    grava a primeira mensagem segundos depois de o processo nascer, e a
+    distância até o diário da vizinha é de horas."""
+    _diario(tmp_path, "/home/eu/antiga",
+            assistente({"type": "text", "text": "pronto"}),
+            nome="antiga.jsonl", comeco=AGORA - timedelta(hours=3))
+    _diario(tmp_path, "/home/eu/nova",
+            assistente({"type": "tool_use", "id": "t1", "name": "Bash",
+                        "input": {"command": "pytest"}}, parou="tool_use"),
+            nome="nova.jsonl", comeco=AGORA - timedelta(minutes=5))
+
+    store = SessionStore()
+    provider(store, Fonte(snap(
+        obs(10, terminal="/dev/pts/1", cwd=None,
+            created=(AGORA - timedelta(hours=3, seconds=4)).timestamp()),
+        obs(11, terminal="/dev/pts/2", cwd=None,
+            created=(AGORA - timedelta(minutes=5, seconds=4)).timestamp()),
+    )), Transcripts(tmp_path)).poll(AGORA)
+
+    por_pid = {s.agents[0].pid: s for s in store.sessions}
+    assert por_pid[10].agents[0].activity == "task completed"
+    assert por_pid[10].name == "/home/eu/antiga"
+    assert por_pid[11].agents[0].activity == "Bash: pytest"
+    assert por_pid[11].name == "/home/eu/nova"
+
+
+def test_diario_apagado_no_meio_da_ordenacao_nao_apaga_a_sessao(tmp_path):
+    """Ordenar por mtime chamava `stat()` em cada arquivo, e um arquivo que
+    some no meio disso levanta — sumir é rotina (a pasta de rollouts é limpa,
+    uma sessão é apagada). A exceção subia até `atribuir`, que devolvia `None`
+    para **todos** os agentes daquele tipo: um apagamento em outra pasta
+    apagava o estado da sua sessão por um ciclo."""
+    from watchai.providers.transcript import _por_mtime
+
+    vivo = _diario(tmp_path, "/home/eu/proj",
+                   assistente({"type": "text", "text": "pronto"}), comeco=AGORA)
+    fantasma = vivo.parent / "sumiu.jsonl"
+    assert _por_mtime([fantasma, vivo]) == [vivo]
+    assert _por_mtime([fantasma]) == []
+
+
 def test_acha_o_diario_pelo_cwd_quando_a_pasta_do_slug_nao_bate(tmp_path):
     """A reserva do casamento por `cwd` lia só a primeira linha, e o formato
     novo do Claude Code abre o arquivo com metadados (`mode`,
@@ -810,7 +913,7 @@ def test_diario_que_falta_nao_vira_varredura_eterna(tmp_path):
 
     voltas = 200
     for _ in range(voltas):
-        assert t.atribuir("claude", "/home/eu/proj", [(10, 0.0)]) == {10: None}
+        assert t.atribuir("claude", [(10, 0.0, "/home/eu/proj")]) == {10: None}
 
     assert 1 < len(buscas) < voltas // 4  # espaça as tentativas, mas não desiste
 

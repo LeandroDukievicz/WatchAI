@@ -182,22 +182,29 @@ class LiveProvider:
         ]
 
     def _diarios(self, agentes: list[ProcObs]) -> dict[int, Leitura | None]:
-        """O diário de cada agente, resolvido de uma vez só.
+        """O diário de cada agente, resolvido de uma vez só **por tipo**.
 
         De uma vez só porque a escolha é coletiva: duas sessões abertas na
         mesma pasta disputam os mesmos arquivos, e quem decide de quem é cada
         um precisa ver as duas juntas. Perguntando de uma em uma, as duas
         recebiam o mesmo diário — e um card mostrava a atividade do outro.
+
+        Por tipo, e não por pasta, porque **o agente pode não ter pasta**: sob
+        confinamento de snap a tabela de processos vem sem `cwd`, e no macOS
+        ele pode ser negado. Agrupar por pasta descartava esses agentes antes
+        de perguntar qualquer coisa — sem diário, o card perdia o nome do
+        projeto e todo o estado que vem dele (READY, INPUT, ERROR). Agora eles
+        entram na mesma rodada de casamento, e quem tem pasta continua usando
+        ela como filtro.
         """
         if self.transcripts is None:
             return {}
-        por_pasta: dict[tuple[str, str], list[tuple[int, float]]] = {}
+        por_tipo: dict[str, list[tuple[int, float, str]]] = {}
         for o in agentes:
-            if o.cwd:
-                por_pasta.setdefault((o.kind, o.cwd), []).append((o.pid, o.created))
+            por_tipo.setdefault(o.kind, []).append((o.pid, o.created, o.cwd or ""))
         leituras: dict[int, Leitura | None] = {}
-        for (kind, cwd), grupo in por_pasta.items():
-            leituras.update(self.transcripts.atribuir(kind, cwd, grupo))
+        for kind, grupo in por_tipo.items():
+            leituras.update(self.transcripts.atribuir(kind, grupo))
         return leituras
 
     # -- sessões ---------------------------------------------------------------
