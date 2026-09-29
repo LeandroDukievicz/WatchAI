@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -59,6 +60,18 @@ CABECALHO_LINHAS = 40
 # de tempos em tempos.
 TENTATIVAS_SEGUIDAS = 8
 ESPACO_TENTATIVAS = 30
+
+# Mesmo com diário para todo mundo, a lista tem que ser refeita de tempos em
+# tempos: a sessão que abre numa pasta onde **já havia** um diário antigo
+# satisfaz a contagem no primeiro ciclo e o arquivo novo, escrito segundos
+# depois, nunca entrava na conta. O card ficava presto no diário de ontem — e
+# um diário de ontem diz "terminou".
+REVARREDURA_SEGUNDOS = 10.0
+
+# Folga para relógio de arquivo contra relógio de processo. Os dois vêm da
+# mesma máquina, mas a granularidade do mtime (e um sistema de arquivos em
+# rede) pede alguns segundos de margem.
+TOLERANCIA_RELOGIO = 5.0
 
 # Estados que o diário sabe dizer.
 FEITO = "done"
@@ -716,6 +729,7 @@ class Transcripts:
         self._faltas: dict[tuple[str, str], int] = {}  # voltas sem diário para todos
         self._cache: dict[Path, tuple[tuple, Leitura | None]] = {}
         self._cwd: dict[Path, str] = {}  # diretório por arquivo, achado uma vez
+        self._varrido: dict[tuple[str, str], float] = {}  # quando o disco foi lido
 
     def atribuir(
         self, kind: str, cwd: str | None, agentes: list[tuple[int, float]]
@@ -761,6 +775,12 @@ class Transcripts:
             return self._procurar(leitor, chave, cwd, quantos)
         if len(guardados) < quantos and self._insistir(chave):
             return self._procurar(leitor, chave, cwd, quantos)
+        # Achar diário para todos não quer dizer ter achado **o certo**: numa
+        # pasta com histórico, o diário de ontem preenche a vaga antes de a
+        # sessão de hoje escrever a primeira linha. Reler o disco de vez em
+        # quando é o que deixa o arquivo novo entrar.
+        if time.monotonic() - self._varrido.get(chave, 0.0) >= REVARREDURA_SEGUNDOS:
+            return self._procurar(leitor, chave, cwd, quantos)
         return guardados
 
     def _procurar(self, leitor, chave: tuple[str, str], cwd: str, quantos: int) -> list[Path]:
@@ -769,6 +789,7 @@ class Transcripts:
         tentativa, e o espaçamento não espaçava nada."""
         achados = leitor.arquivos(cwd)
         self._candidatos[chave] = achados
+        self._varrido[chave] = time.monotonic()
         if len(achados) >= quantos:
             self._faltas.pop(chave, None)
         return achados
@@ -779,19 +800,40 @@ class Transcripts:
         self._faltas[chave] = voltas
         return voltas <= TENTATIVAS_SEGUIDAS or voltas % ESPACO_TENTATIVAS == 0
 
+    @staticmethod
+    def _escrito(caminho: Path) -> float:
+        """Quando o diário foi escrito pela última vez. Ilegível conta como
+        antiquíssimo: não serve para agente nenhum."""
+        try:
+            return caminho.stat().st_mtime
+        except OSError:
+            return 0.0
+
     def _parear(
         self, agentes: list[tuple[int, float]], candidatos: list[Path]
     ) -> dict[int, Path | None]:
         """O emparelhamento propriamente dito: um diário por agente."""
         if not candidatos:
             return {pid: None for pid, _ in agentes}
+
+        # Um diário parado desde **antes** de o processo nascer não pode ser
+        # dele: é a sessão de ontem, na mesma pasta. Emprestá-lo acendia o
+        # verde com "terminou" numa sessão que ainda não tinha dito nada — e,
+        # como a escolha ficava guardada, ela não voltava atrás.
+        escrito = {c: self._escrito(c) for c in candidatos}
+        possiveis = {
+            pid: [c for c in candidatos if escrito[c] >= nascimento - TOLERANCIA_RELOGIO]
+            for pid, nascimento in agentes
+        }
         if len(agentes) == 1:
-            return {agentes[0][0]: candidatos[0]}
+            pid = agentes[0][0]
+            meus = possiveis[pid]
+            return {pid: meus[0] if meus else None}
 
         distancias = sorted(
             (abs(comeco - nascimento), pid, caminho)
             for pid, nascimento in agentes
-            for caminho in candidatos
+            for caminho in possiveis[pid]
             if (comeco := _cabecalho(caminho).inicio) is not None
         )
         escolha: dict[int, Path | None] = {}
@@ -808,7 +850,10 @@ class Transcripts:
         for pid, _ in sorted(agentes, key=lambda a: a[1], reverse=True):
             if pid in escolha:
                 continue
-            escolha[pid] = sobrando.pop(0) if sobrando else None
+            meus = [c for c in sobrando if c in possiveis[pid]]
+            escolha[pid] = meus[0] if meus else None
+            if meus:
+                sobrando.remove(meus[0])
         return escolha
 
     def _do_arquivo(self, leitor, caminho: Path) -> Leitura | None:
@@ -857,7 +902,9 @@ __all__ = [
     "Leitura",
     "ESPACO_TENTATIVAS",
     "PENSANDO",
+    "REVARREDURA_SEGUNDOS",
     "TENTATIVAS_SEGUIDAS",
+    "TOLERANCIA_RELOGIO",
     "TURNO_ABERTO",
     "Transcripts",
 ]

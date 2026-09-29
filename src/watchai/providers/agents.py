@@ -77,6 +77,19 @@ KINDS: tuple[AgentKind, ...] = (
 # Invocações em duas palavras: o agente é um subcomando de outro programa.
 SUBCOMANDOS = {("gh", "copilot"): "copilot"}
 
+# Subcomandos que fazem do CLI um **serviço**, não uma sessão. É o mesmo
+# executável nos dois papéis: `codex` sozinho abre a TUI, `codex app-server`
+# sobe o daemon que a IDE consulta — e esse daemon nasce com a máquina, fica
+# ligado por dias e nunca tem turno. Na tela ele virava um card verde
+# permanente anunciando "terminou, pode vir buscar" para uma sessão que nunca
+# existiu. O mesmo vale para o servidor MCP que um agente expõe a outro.
+SERVICOS = frozenset(
+    {"app-server", "mcp", "mcp-server", "mcp-serve", "serve", "server", "daemon", "lsp", "proxy"}
+)
+
+# A mesma coisa dita na bandeira em vez do subcomando.
+FLAGS_SERVICO = frozenset({"--managed-daemon", "--daemon", "--server", "--serve"})
+
 POR_CHAVE: dict[str, AgentKind] = {k.key: k for k in KINDS}
 POR_PROGRAMA: dict[str, AgentKind] = {prog: k for k in KINDS for prog in k.programas}
 
@@ -128,6 +141,42 @@ def _basename(arg: str) -> str:
     return nome
 
 
+def _subcomando(argv: list[str]) -> str:
+    """O primeiro argumento posicional depois do programa.
+
+    É a casa do subcomando (`codex app-server`). Quando quem executa é um
+    runtime, o script é o argumento dele e o subcomando vem depois — daí o
+    deslocamento.
+    """
+    inicio = 1
+    if _basename(argv[0]) in RUNTIMES:
+        for i, arg in enumerate(argv[1:], start=1):
+            if not arg.startswith("-"):
+                inicio = i + 1
+                break
+        else:
+            return ""
+    for arg in argv[inicio:]:
+        if arg.startswith("-"):
+            continue
+        return arg.strip().lower()
+    return ""
+
+
+def servico(cmdline: list[str] | None) -> bool:
+    """Esta linha de comando sobe um serviço de fundo, e não uma sessão.
+
+    O casamento é por posição e por igualdade, nunca por "a palavra aparece na
+    linha": `claude -p "serve the build"` tem `serve` no texto e é uma sessão.
+    """
+    argv = [a for a in (cmdline or []) if a]
+    if not argv:
+        return False
+    if any(a.strip().lower() in FLAGS_SERVICO for a in argv[1:]):
+        return True
+    return _subcomando(argv) in SERVICOS
+
+
 def identify(cmdline: list[str] | None) -> AgentKind | None:
     """O agente por trás desta linha de comando, ou None se não for um.
 
@@ -171,4 +220,14 @@ def identify(cmdline: list[str] | None) -> AgentKind | None:
     return None
 
 
-__all__ = ["AgentKind", "KINDS", "POR_CHAVE", "SUBCOMANDOS", "identify", "registrar"]
+__all__ = [
+    "AgentKind",
+    "FLAGS_SERVICO",
+    "KINDS",
+    "POR_CHAVE",
+    "SERVICOS",
+    "SUBCOMANDOS",
+    "identify",
+    "registrar",
+    "servico",
+]

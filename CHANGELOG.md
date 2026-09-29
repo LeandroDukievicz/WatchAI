@@ -49,8 +49,46 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 ### Mudado
 - A keybar passou para o inglês onde ainda não estava: `MUDO` virou `MUTED` e
   `BIP` virou `BEEP`.
+- O aviso do `N` também: era a única frase de tela que tinha ficado em
+  português (`notificações ligadas`).
 
 ### Corrigido
+- **Três cards com uma sessão aberta.** O `codex` sobe dois daemons no login
+  (`codex app-server --managed-daemon` e o `pid-update-loop` dele), pendurados
+  no `systemd --user`, sem tty e sem terminal nenhum por trás. Eles casavam com
+  a assinatura do agente e viravam card — e, pior, adotavam o diário da última
+  sessão de codex daquela pasta: dois semáforos verdes permanentes anunciando
+  "terminou, pode vir buscar" para sessões que nunca existiram. Agora a
+  detecção descarta serviço de duas maneiras, porque uma só não cobre o daemon
+  que ainda não foi escrito: pelo **subcomando** (`app-server`, `mcp`, `serve`,
+  `daemon`…), casado por posição e igualdade — `claude -p "serve the build"`
+  continua sendo sessão —, e pela **linhagem**, quando o processo não tem tty e
+  está pendurado direto no supervisor sem passar por shell, emulador ou IDE. A
+  segunda regra exige o supervisor **encontrado**, não apenas a ausência de
+  anfitrião: uma linhagem que se perde no meio não pode virar motivo para
+  esconder uma sessão de verdade. Agente dentro de uma IDE, que também não tem
+  tty, continua aparecendo.
+- **A sessão aberta numa pasta com histórico nascia verde — e não saía de lá.**
+  Eram duas falhas somadas. O diário de ontem, único candidato daquela pasta,
+  preenchia a vaga antes de a sessão de hoje escrever a primeira linha; e a
+  lista de candidatos, uma vez completa, nunca mais era refeita — o arquivo
+  novo não entrava na conta nem depois de existir. O card ficava em READY,
+  "task completed", com o agente trabalhando. Agora um diário parado desde
+  antes de o processo nascer não pode ser dele (é a sessão de ontem, na mesma
+  pasta), e o disco é relido de tempos em tempos para o arquivo novo entrar.
+  Sem diário que sirva, o card cai nos sinais de processo: menos informação,
+  mas informação certa.
+- **Com o `S` ligado, o ENTER abria os detalhes do card errado.** `selected` é
+  um índice na lista **que a tela desenha**, e o ENTER lia a ordem de
+  descoberta — que só coincide com a da tela quando a ordenação por atenção
+  está desligada. Valia também para o ←→ dentro dos detalhes e para a volta ao
+  painel, que devolvia o cursor para outro card. As quatro leituras agora saem
+  do mesmo lugar (`sessions_ordenadas`), que é o que o `⇧A` já fazia.
+- **Um agente que saía no meio da varredura congelava a tela por um ciclo.**
+  `psutil.Process(pid)` levanta quando o processo morreu entre a listagem e a
+  pergunta seguinte — e um agente que termina durante a varredura é rotina. A
+  exceção subia até `snapshot()`, que devolvia leitura vazia com diagnóstico
+  "erro": a tela inteira parava, e a causa era um `exit` normal.
 - **A janela do terminal não dizia que ali estava o WatchAI.** Aberta pelo
   ícone da área de trabalho ela se chamava "Terminal", e num terminal já aberto
   ficava com o que o shell tinha escrito por último (`usuário@host: ~/projeto`)

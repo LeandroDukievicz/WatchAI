@@ -325,8 +325,8 @@ class WatchAIApp(App):
         """`N` liga e desliga a notificação do sistema, sem mexer no bip."""
         self.notify_on = not self.notify_on
         config.save_notify(self.notify_on)
-        estado = "ligadas" if self.notify_on else "desligadas"
-        self.notify(f"notificações {estado}", timeout=3)
+        estado = "on" if self.notify_on else "off"
+        self.notify(f"system notifications {estado}", timeout=3)
 
     def action_toggle_sound(self) -> None:
         """`B` liga e desliga o bip, e a escolha vale para as próximas

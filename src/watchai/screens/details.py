@@ -169,7 +169,10 @@ class DetailsScreen(ModalScreen[None]):
         self.dismiss(None)
 
     def action_step(self, delta: int) -> None:
-        sessions = self.app.store.sessions
+        # Pela ordem **da tela**: com o `S` ligado, o "próximo" na ordem de
+        # descoberta não é o próximo card, e a seta andava para um lado
+        # enquanto o cursor do dashboard ia para outro.
+        sessions = self.app.sessions_ordenadas()
         if not sessions:
             self.dismiss(None)
             return

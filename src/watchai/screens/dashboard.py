@@ -241,7 +241,10 @@ class Dashboard(Screen):
             self._reveal_selected()
 
     def select_session(self, session_id: int) -> None:
-        for i, s in enumerate(self.app.store.sessions):
+        # Pela ordem **da tela**, não pela ordem de descoberta: `selected` é um
+        # índice na lista que os widgets seguem, e as duas só coincidem com o
+        # `S` desligado.
+        for i, s in enumerate(self.app.sessions_ordenadas()):
             if s.id == session_id:
                 self.selected = i
                 return
@@ -279,7 +282,10 @@ class Dashboard(Screen):
     def action_open(self) -> None:
         if self.panel != "sessions":
             return
-        sessions = self.app.store.sessions
+        # A mesma lista que a tela desenha: com o `S` ligado, a ordem de
+        # descoberta não é a ordem dos cards, e o ENTER abria os detalhes de
+        # uma sessão que não era a selecionada.
+        sessions = self.app.sessions_ordenadas()
         # A seleção pode estar velha por um instante: entre a varredura mexer no
         # store e os widgets acertarem, uma tecla cabe no meio.
         if 0 <= self.selected < len(sessions):
@@ -291,7 +297,7 @@ class Dashboard(Screen):
                 self.query_one("#events", EventStream).scroll_events(-1 if direction == "up" else 1)
             return
 
-        n = len(self.app.store.sessions)
+        n = len(self.app.sessions_ordenadas())
         cols = self.columns
         i = self.selected
         if direction in ("left", "right"):

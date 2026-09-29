@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from ..focus import EMULADORES
-from .agents import identify
+from .agents import identify, servico
 
 # Um filho criado logo depois do agente é infraestrutura dele (servidor MCP,
 # plugin, host de ferramentas); criado bem depois, é ferramenta rodando agora.
@@ -39,6 +39,29 @@ FERRAMENTA_MAX_SEGUNDOS = 600.0
 SHELLS = frozenset(
     {"bash", "zsh", "fish", "sh", "dash", "ksh", "tcsh", "csh",
      "pwsh", "powershell", "cmd", "nu", "elvish", "xonsh"}
+)
+
+# Programas que **hospedam** uma sessão sem serem shell nem emulador: o
+# multiplexador e a IDE de onde o agente é disparado. Entram aqui porque um
+# agente dentro deles é sessão de verdade, mesmo sem tty.
+IDES = frozenset(
+    {
+        "code", "code-insiders", "codium", "vscodium", "cursor", "windsurf",
+        "positron", "zed", "nvim", "vim", "emacs", "helix", "hx", "micro", "nano",
+        "idea", "pycharm", "webstorm", "goland", "clion", "rider", "phpstorm",
+        "rubymine", "datagrip", "fleet", "sublime_text", "subl",
+        "tmux", "tmux: server", "screen", "zellij", "dtach", "abduco", "byobu",
+    }
+)
+
+# Quem hospeda uma sessão interativa, de qualquer um dos três jeitos.
+ANFITRIOES = SHELLS | EMULADORES | IDES
+
+# Os supervisores do sistema. Um agente pendurado direto num deles foi subido
+# como **serviço**: nasceu com a máquina, não veio de terminal nenhum.
+SUPERVISORES = frozenset(
+    {"systemd", "init", "launchd", "upstart", "runit", "s6-svscan",
+     "openrc", "services", "wininit", "svchost"}
 )
 
 
@@ -218,13 +241,22 @@ class PsutilSource:
             kind = identify(info.get("cmdline"))
             if kind is None:
                 continue
-            proc = psutil.Process(pid)
+            # O mesmo executável serve de sessão e de daemon: `codex` abre a
+            # TUI, `codex app-server` sobe o serviço que a IDE consulta.
+            if servico(info.get("cmdline")):
+                continue
+            # `Process(pid)` já levanta quando o processo morreu entre a
+            # listagem e agora — e um agente que sai no meio da varredura é
+            # rotina. Sem este try a exceção subia até `snapshot()`, que
+            # devolvia leitura vazia com diagnóstico "erro": a tela inteira
+            # congelava por um ciclo, e a causa era só um `exit` normal.
             try:
+                proc = psutil.Process(pid)
                 tty = proc.terminal() if hasattr(proc, "terminal") else None
             except Exception:
-                tty = None
+                proc, tty = None, None
             try:
-                cwd = proc.cwd()
+                cwd = proc.cwd() if proc is not None else None
             except Exception:
                 cwd = None  # macOS pode negar; o transcript tem o cwd de reserva
 
@@ -236,6 +268,18 @@ class PsutilSource:
             # Quem desenha a janela é o emulador, alguns níveis acima do shell:
             # é o PID que os gerenciadores de janela conhecem.
             janela_pid = next((a for a in linha if nome_de(a) in EMULADORES), None)
+            # Sem tty e pendurado no supervisor, sem passar por shell, emulador
+            # ou IDE: é serviço, não sessão. A condição pede o supervisor
+            # **encontrado**, e não apenas a ausência de anfitrião — uma
+            # linhagem que se perde no meio (processo intermediário já morto,
+            # dono diferente) não pode virar motivo para esconder uma sessão de
+            # verdade.
+            if (
+                not tty
+                and any(nome_de(a) in SUPERVISORES for a in linha)
+                and not any(nome_de(a) in ANFITRIOES for a in linha)
+            ):
+                continue
             nascimento = info.get("create_time") or 0.0
             terminal = tty or (
                 f"pid:{shell_pid}:{int(tabela[shell_pid].get('create_time') or 0)}"
@@ -324,7 +368,10 @@ class PsutilSource:
 
 
 __all__ = [
+    "ANFITRIOES",
     "FERRAMENTA_MAX_SEGUNDOS",
+    "IDES",
+    "SUPERVISORES",
     "INFRA_SEGUNDOS",
     "ProcObs",
     "ProcessSource",

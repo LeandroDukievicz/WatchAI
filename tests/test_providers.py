@@ -78,6 +78,150 @@ def test_reconhece_o_programa_e_ignora_o_caminho_parecido():
     assert identify(None) is None
 
 
+def test_daemon_do_agente_nao_e_sessao():
+    """O mesmo executável abre a TUI e sobe o serviço que a IDE consulta.
+
+    O `codex app-server` nasce com a máquina, fica ligado por dias e não tem
+    turno nenhum: na tela ele virava um card verde permanente anunciando
+    "terminou, pode vir buscar" para uma sessão que nunca existiu.
+    """
+    from watchai.providers.agents import servico
+
+    assert servico(["/home/eu/.codex/.../codex", "app-server", "--managed-daemon"])
+    assert servico(["codex", "app-server", "daemon", "pid-update-loop"])
+    assert servico(["claude", "mcp", "serve"])
+    assert servico(["node", "/opt/npm/@openai/codex/cli.js", "mcp-server"])
+    # e o que É sessão continua sendo
+    assert not servico(["claude"])
+    assert not servico(["claude", "--dangerously-skip-permissions"])
+    assert not servico(["codex", "--yolo"])
+    assert not servico(["codex", "exec", "arruma o build"])
+    # "serve" dentro do texto do pedido não é subcomando nenhum
+    assert not servico(["claude", "-p", "serve the build"])
+    assert not servico([])
+
+
+def _psutil_de(processos: list[dict]):
+    """Um psutil de mentira: a tabela de processos vem escrita no teste."""
+
+    class Falso:
+        class _Visto:
+            def __init__(self, info):
+                self.info = info
+
+        @staticmethod
+        def process_iter(campos):
+            return [Falso._Visto(p) for p in processos]
+
+        @staticmethod
+        def Process(pid=None):
+            achado = next((p for p in processos if p.get("pid") == pid), {})
+
+            class P:
+                @staticmethod
+                def username():
+                    return "eu"
+
+                @staticmethod
+                def terminal():
+                    return achado.get("tty")
+
+                @staticmethod
+                def cwd():
+                    return achado.get("cwd")
+
+            return P()
+
+    return Falso
+
+
+def test_servico_pendurado_no_systemd_nao_vira_card():
+    """A regra geral, para o daemon que ainda não existe: sem tty e pendurado
+    no supervisor, sem passar por shell, emulador ou IDE, é serviço.
+
+    E a contraprova na mesma tabela: o agente dentro de uma IDE também não tem
+    tty, e esse **é** sessão."""
+    from watchai.providers.source import PsutilSource
+
+    nascimento = (AGORA - timedelta(hours=1)).timestamp()
+
+    def proc(pid, ppid, name, cmdline=None, tty=None, cwd=None):
+        return {
+            "pid": pid, "ppid": ppid, "name": name,
+            "cmdline": cmdline or [name], "create_time": nascimento,
+            "cpu_times": None, "cwd": cwd, "tty": tty,
+        }
+
+    tabela = [
+        proc(100, 1, "systemd", ["/usr/lib/systemd/systemd", "--user"]),
+        proc(200, 100, "gnome-terminal-server"),
+        proc(300, 200, "bash", tty="/dev/pts/1"),
+        proc(400, 300, "claude", ["claude"], tty="/dev/pts/1", cwd="/home/eu/proj"),
+        # os dois daemons do codex, direto no systemd
+        proc(500, 100, "codex", ["/home/eu/.codex/bin/codex", "app-server", "--managed-daemon"]),
+        proc(501, 100, "codex", ["/home/eu/.codex/bin/codex", "app-server", "daemon"]),
+        # e um serviço futuro, sem subcomando que o denuncie
+        proc(502, 100, "codex", ["/home/eu/.codex/bin/codex"]),
+        # dentro de uma IDE não há tty, e isto é sessão de verdade
+        proc(700, 100, "code"),
+        proc(600, 700, "claude", ["claude"], cwd="/home/eu/ide"),
+        proc(800, 100, "pipewire"),
+        proc(801, 100, "gvfsd"),
+    ]
+
+    lido = PsutilSource()._varrer(_psutil_de(tabela))
+    assert lido.diagnostico == ""  # tabela plausível: a leitura foi normal
+    assert sorted(o.pid for o in lido.agents) == [400, 600]
+    porta = {o.pid: o.terminal for o in lido.agents}
+    assert porta[400] == "/dev/pts/1"
+    assert porta[600].startswith("pid:600:")  # a IDE não dá tty: vale o processo
+
+
+def test_agente_que_sai_no_meio_da_varredura_nao_congela_a_tela():
+    """Um agente que termina entre listar os processos e perguntar o tty dele é
+    rotina — e derrubava a varredura inteira: `Process(pid)` levanta, a exceção
+    subia até `snapshot()` e a leitura voltava vazia, com diagnóstico de erro.
+    A tela congelava por um ciclo por causa de um `exit` normal."""
+    from watchai.providers.source import PsutilSource
+
+    nascimento = (AGORA - timedelta(hours=1)).timestamp()
+    tabela = [
+        {"pid": 100, "ppid": 1, "name": "systemd", "cmdline": ["systemd", "--user"],
+         "create_time": nascimento, "cpu_times": None},
+        {"pid": 200, "ppid": 100, "name": "gnome-terminal-server",
+         "cmdline": ["gnome-terminal-server"], "create_time": nascimento, "cpu_times": None},
+        {"pid": 300, "ppid": 200, "name": "bash", "cmdline": ["bash"],
+         "create_time": nascimento, "cpu_times": None, "tty": "/dev/pts/1"},
+        {"pid": 400, "ppid": 300, "name": "claude", "cmdline": ["claude"],
+         "create_time": nascimento, "cpu_times": None, "tty": "/dev/pts/1",
+         "cwd": "/home/eu/proj"},
+        {"pid": 401, "ppid": 300, "name": "codex", "cmdline": ["codex"],
+         "create_time": nascimento, "cpu_times": None, "tty": "/dev/pts/2",
+         "cwd": "/home/eu/outro", "morreu": True},
+        {"pid": 800, "ppid": 100, "name": "pipewire", "cmdline": ["pipewire"],
+         "create_time": nascimento, "cpu_times": None},
+        {"pid": 801, "ppid": 100, "name": "gvfsd", "cmdline": ["gvfsd"],
+         "create_time": nascimento, "cpu_times": None},
+        {"pid": 802, "ppid": 100, "name": "tracker", "cmdline": ["tracker"],
+         "create_time": nascimento, "cpu_times": None},
+    ]
+    falso = _psutil_de(tabela)
+    original = falso.Process
+
+    def Process(pid=None):
+        if any(p.get("pid") == pid and p.get("morreu") for p in tabela):
+            raise RuntimeError("no such process")
+        return original(pid)
+
+    falso.Process = Process
+
+    lido = PsutilSource()._varrer(falso)
+    assert lido.diagnostico == ""  # a varredura terminou: não é erro
+    # quem morreu some, quem ficou continua na tela
+    assert sorted(o.pid for o in lido.agents) == [400, 401]
+    assert {o.pid: o.cwd for o in lido.agents}[401] is None  # sem cwd, mas presente
+
+
 # ---- terminais e agentes ---------------------------------------------------
 
 
@@ -587,6 +731,52 @@ def test_diario_unico_nao_e_emprestado_para_a_sessao_vizinha(tmp_path):
     atividade = {s.agents[0].pid: s.agents[0].activity for s in store.sessions}
     assert atividade[10] == "task completed"
     assert atividade[11] == "idle"
+
+
+def test_o_diario_de_ontem_nao_e_emprestado_para_a_sessao_de_hoje(tmp_path, monkeypatch):
+    """Abrir uma sessão numa pasta que **já tem** histórico acendia o verde na
+    hora, com a atividade de ontem, e não saía mais de lá.
+
+    Eram duas falhas juntas: o diário velho preenchia a vaga antes de a sessão
+    de hoje escrever a primeira linha, e a lista de candidatos, uma vez
+    completa, nunca era refeita — o arquivo novo não entrava nem depois de
+    existir. O card ficava em READY, "task completed", com o agente
+    trabalhando: o pior erro possível num monitor, porque parece informação.
+    """
+    import watchai.providers.transcript as tr
+
+    relogio = [1000.0]
+    monkeypatch.setattr(tr.time, "monotonic", lambda: relogio[0])
+
+    nascimento = AGORA - timedelta(minutes=1)  # a sessão acabou de abrir
+    ontem = escreve_transcript(tmp_path, "/home/eu/proj", [
+        abertura(AGORA - timedelta(days=1)),
+        assistente({"type": "text", "text": "pronto ontem"}),
+    ], nome="ontem.jsonl")
+    velho = (AGORA - timedelta(days=1)).timestamp()
+    os.utime(ontem, (velho, velho))
+
+    store = SessionStore()
+    p = provider(
+        store,
+        Fonte(snap(obs(10, created=nascimento.timestamp()))),
+        Transcripts(tmp_path),
+    )
+    p.poll(AGORA)
+    agente = store.sessions[0].agents[0]
+    # sem diário que possa ser dele: cai nos sinais de processo
+    assert agente.activity == "idle"
+
+    # agora a sessão de hoje grava o diário dela, com uma ferramenta rodando
+    escreve_transcript(tmp_path, "/home/eu/proj", [
+        abertura(nascimento),
+        assistente({"type": "tool_use", "id": "t1", "name": "Bash",
+                    "input": {"command": "pytest"}}, parou="tool_use"),
+    ], nome="hoje.jsonl")
+
+    relogio[0] += tr.REVARREDURA_SEGUNDOS  # passou o tempo de reler o disco
+    p.poll(AGORA)
+    assert store.sessions[0].agents[0].activity == "Bash: pytest"
 
 
 def test_acha_o_diario_pelo_cwd_quando_a_pasta_do_slug_nao_bate(tmp_path):
@@ -1817,6 +2007,53 @@ def test_a_tecla_de_ordenar_reordena_os_cards_sem_perder_a_selecao():
             assert [c.session.id for c in app.screen.query(SessionCard)] == [
                 sessoes[0].id, sessoes[1].id
             ]
+
+    asyncio.run(main())
+
+
+def test_enter_abre_os_detalhes_do_card_selecionado_com_a_ordem_por_atencao():
+    """`selected` é um índice na lista **que a tela desenha**. O ENTER lia a
+    ordem de descoberta, e com o `S` ligado as duas não são a mesma: abriam-se
+    os detalhes de uma sessão que não era a selecionada — e o mesmo desencontro
+    valia para a volta dos detalhes, que devolvia o cursor para o card errado.
+    """
+    import asyncio
+
+    from watchai.app import WatchAIApp
+    from watchai.notify import Notifier
+    from watchai.screens.details import DetailsScreen
+    from watchai.widgets import SessionCard
+
+    async def main():
+        fonte = Fonte(snap(
+            obs(10, "claude", "/dev/pts/1", cwd="/home/eu/a"),
+            obs(20, "claude", "/dev/pts/2", cwd="/home/eu/b"),
+        ))
+        app = WatchAIApp(mock=False, source=fonte, theme_key="watchai", notifier=Notifier(None))
+        async with app.run_test(size=(150, 36)) as pilot:
+            app.scan()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+
+            primeira, segunda = app.store.sessions
+            primeira.status, segunda.status = Status.WORKING, Status.ERROR
+            await pilot.press("s")  # o ERROR sobe para o topo
+            await pilot.pause()
+            assert [c.session.id for c in app.screen.query(SessionCard)] == [
+                segunda.id, primeira.id
+            ]
+
+            dash = app.screen
+            dash.selected = 0  # o card de cima: a sessão em ERROR
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, DetailsScreen)
+            assert app.screen.session_id == segunda.id
+
+            await pilot.press("escape")
+            await pilot.pause()
+            # de volta ao painel, o cursor continua no mesmo card
+            assert app.selected_session().id == segunda.id
 
     asyncio.run(main())
 
