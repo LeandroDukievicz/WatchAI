@@ -838,15 +838,18 @@ O plano completo, com o porquê de cada item e onde mexer, está em
 [MILESTONE.md](https://github.com/LeandroDukievicz/WatchAI/blob/main/MILESTONE.md). O resumo do que ainda não existe, em ordem:
 
 1. **Publicar no PyPI**, para instalar com `pipx install watchai` sem clonar.
-2. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
+2. **Medir o consumo**: quanto já foi gasto das janelas de 5 h e semanal do
+   codex e do Claude Code — os dois gravam o número localmente, cada um do seu
+   jeito.
+3. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
    suíte nos três, mas ninguém abriu o app num Windows ou num Mac de verdade —
    é código testado, não software verificado. Até lá, o sistema anunciado é
    Linux.
-3. **Enviar o snap para a loja**, em confinamento `strict` — viável desde que o
+4. **Enviar o snap para a loja**, em confinamento `strict` — viável desde que o
    diário deixou de depender do `cwd` do processo.
-4. **Extensão do VS Code**, alimentada por um `watchai --json` que ainda não
+5. **Extensão do VS Code**, alimentada por um `watchai --json` que ainda não
    existe.
-5. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
+6. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
    verificar o formato.
 
 ## Licença
