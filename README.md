@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/brand/watchai.png" alt="WatchAI" width="620">
+<img src="https://raw.githubusercontent.com/LeandroDukievicz/WatchAI/main/docs/brand/watchai.png" alt="WatchAI" width="620">
 
 **Monitor de sessões de IA no terminal.**
 Claude Code, Codex, Gemini, OpenCode, Aider, Copilot — todas numa tela só.
@@ -13,7 +13,7 @@ Claude Code, Codex, Gemini, OpenCode, Aider, Copilot — todas numa tela só.
 
 </div>
 
-![WatchAI em 150×36](docs/screenshot.png)
+![WatchAI em 150×36](https://raw.githubusercontent.com/LeandroDukievicz/WatchAI/main/docs/screenshot.png)
 
 ---
 
@@ -190,7 +190,7 @@ O ecossistema ganha CLI nova toda semana. No `~/.config/watchai/config.json`:
 Chave nova cria um tipo; chave já conhecida vira apelido do mesmo agente. Vale
 desde a primeira varredura da próxima abertura. E se for um agente conhecido,
 mande um PR para a tabela — ela está em
-[`providers/agents.py`](src/watchai/providers/agents.py).
+[`providers/agents.py`](https://github.com/LeandroDukievicz/WatchAI/blob/main/src/watchai/providers/agents.py).
 
 ## O que é multiplataforma e o que degrada
 
@@ -516,7 +516,7 @@ lado do octógono. Em janelas apertadas entram as versões menores: a **pequena*
 linhas) e, no limite, a **deitada** — as três lâmpadas numa linha só (`● ● ●`),
 sem carcaça, porque nesse tamanho ela só roubaria colunas do nome.
 
-É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](assets/watchai.svg))
+É **o mesmo semáforo do ícone do app** ([`assets/watchai.svg`](https://github.com/LeandroDukievicz/WatchAI/blob/main/assets/watchai.svg))
 desenhado em texto: carcaça de contorno cyan, **sem fundo próprio** — o card
 aparece através dela — e três lâmpadas.
 
@@ -575,7 +575,7 @@ stream de áudio normal toca independente de foco.
 - Ordem de preferência: `pw-play` → `paplay` → `ffplay`, tocando um bip do tema do
   sistema. Sem nenhum deles, tenta `canberra-gtk-play`; em último caso, o bell do terminal.
 - Para mudar quais estados avisam, é o mapa `ALERT_SOUND`
-  ([`src/watchai/app.py`](src/watchai/app.py)).
+  ([`src/watchai/app.py`](https://github.com/LeandroDukievicz/WatchAI/blob/main/src/watchai/app.py)).
 
 ## Temas (`T`)
 
@@ -609,7 +609,7 @@ Oito paletas, trocáveis com o app rodando:
 | **Steampunk** | sépia e latão, com verdete no lugar do cyan |
 | **Grey** | sem matiz nenhum: os estados se separam só por brilho |
 
-![Os oito temas do WatchAI: WatchAI, Light, Dark, Night Owl, Vampire, Cyberpunk, Steampunk e Grey](docs/themes.png)
+![Os oito temas do WatchAI: WatchAI, Light, Dark, Night Owl, Vampire, Cyberpunk, Steampunk e Grey](https://raw.githubusercontent.com/LeandroDukievicz/WatchAI/main/docs/themes.png)
 
 - **Mover a seleção aplica o tema na hora** — o dashboard inteiro atrás do modal
   troca de cor, então dá para comparar antes de decidir. `ENTER` confirma,
@@ -835,7 +835,7 @@ CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 ## Roadmap
 
 O plano completo, com o porquê de cada item e onde mexer, está em
-[MILESTONE.md](MILESTONE.md). O resumo do que ainda não existe, em ordem:
+[MILESTONE.md](https://github.com/LeandroDukievicz/WatchAI/blob/main/MILESTONE.md). O resumo do que ainda não existe, em ordem:
 
 1. **Publicar no PyPI**, para instalar com `pipx install watchai` sem clonar.
 2. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
@@ -851,4 +851,4 @@ O plano completo, com o porquê de cada item e onde mexer, está em
 
 ## Licença
 
-[MIT](LICENSE) © Leandro Dukievicz
+[MIT](https://github.com/LeandroDukievicz/WatchAI/blob/main/LICENSE) © Leandro Dukievicz
