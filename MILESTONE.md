@@ -3,7 +3,7 @@
 Onde o WatchAI está e o que falta. Cada item diz **o que é**, **por que importa**
 e **onde mexer** — para dar para pegar um e fazer sem redescobrir o contexto.
 
-Atualizado em 2026-09-23.
+Atualizado em 2026-09-28.
 
 ---
 
@@ -235,28 +235,212 @@ máquina Windows ou macOS de verdade — isso continua sendo a pendência númer
       notificação ficariam de fora do sandbox — falta só o envio à loja, que
       pede conta e revisão manual
 
+      ⚠️ **Metade dessa justificativa não se sustenta** (apurado em 2026-09-28,
+      ver item 3 de "O que ainda falta"): a notificação **atravessa** o strict,
+      basta `libnotify-bin` em `stage-packages` e a interface `desktop`, que é
+      auto-conectada. O comentário no `snapcraft.yaml` precisa ser corrigido
+
+---
+
+### M13 — a varredura só vê sessão, e o diário não depende da pasta
+
+- [x] **Serviço não é sessão.** O `codex` sobe dois daemons no login
+      (`app-server --managed-daemon` e o `pid-update-loop` dele), pendurados no
+      `systemd --user`, sem tty e sem terminal por trás. Eles casavam com a
+      assinatura do agente, viravam card e ainda adotavam o diário da última
+      sessão daquela pasta: dois verdes permanentes anunciando "terminou" para
+      sessões que nunca existiram. Descarte por **subcomando**
+      (`agents.servico`, casado por posição e igualdade — `claude -p "serve the
+      build"` continua sendo sessão) e por **linhagem** (`source._varrer`: sem
+      tty e pendurado no supervisor sem passar por shell, emulador ou IDE).
+      Agente dentro de IDE, que também não tem tty, continua aparecendo
+- [x] **O diário de ontem não é emprestado para a sessão de hoje.** Abrir numa
+      pasta com histórico acendia o verde na hora, com a atividade de ontem, e
+      não saía mais de lá — a lista de candidatos, uma vez completa, nunca era
+      refeita. Corte por mtime (`transcript._parear`) mais revarredura periódica
+- [x] **Com o `S` ligado, o ENTER abria os detalhes do card errado.** `selected`
+      é índice na ordem **da tela**, e quatro leituras liam a ordem de
+      descoberta (`dashboard.action_open`, `select_session`, `action_move`,
+      `details.action_step`)
+- [x] **O `cwd` do processo virou atalho, e deixou de ser requisito**
+      (`transcript.atribuir` casa por tipo, não por pasta). Sem ele — snap
+      strict, negativa do macOS — o diário é achado entre os recentes e casado
+      pelo relógio, e o projeto sai de dentro dele. É o que destrava o
+      confinamento strict
+- [x] Dois congelamentos de um ciclo: agente que sai no meio da varredura
+      (`psutil.Process` levanta e a leitura inteira virava diagnóstico "erro") e
+      diário apagado no meio da ordenação por mtime (levava `None` para **todos**
+      os agentes daquele tipo)
+
 ---
 
 ## O que ainda falta
 
-- [ ] **Validar Windows e macOS na prática.** É a maior dívida do projeto, e ela
-      **cresceu** no M10: além da identidade de terminal pelo shell e do agente
-      reconhecido pelo caminho do pacote, agora há o `⇧A` reescrito nos dois —
-      P/Invoke no Windows para restaurar a janela minimizada e conferir quem
-      está em primeiro plano, AppleScript no macOS com `AXRaise` e
-      `AXMinimized`. O M11 tratou o resto do que dava para tratar sem a máquina
-      (toast, bip e config), mas **nenhum job de CI abre janela nem mostra
-      notificação**: a suíte passar nos três sistemas não diz nada sobre isso. Três perguntas resolvem: janela
-      minimizada volta? Com várias janelas do mesmo terminal, vai para a certa?
-      Quando falha, o recado diz `refused` em vez de `window raised`? Até lá, é
-      código testado, não software verificado. O toast do Windows, em especial,
-      falha em silêncio.
+Em ordem de prioridade. Cada item diz **de quem é a vez** — o que depende de
+você e o que é código.
 
-- [ ] **Publicar no PyPI** (`pipx install watchai`). O workflow já existe e
-      empacota; falta **você** criar o projeto no PyPI, apontar o *trusted
-      publisher* para este repositório (workflow `publish.yml`, ambiente `pypi`)
-      e definir a variável `PYPI_READY=true`. Enquanto isso, o caminho é
-      `pipx install git+https://github.com/LeandroDukievicz/WatchAI.git`.
+---
+
+### 1. Publicar no PyPI — sua vez, e destrava o resto
+
+O workflow `publish.yml` já existe e empacota. Falta:
+
+1. criar o projeto `watchai` no PyPI (o nome está **livre**, conferido em
+   2026-09-28);
+2. em *Trusted Publishers*, apontar para este repositório, o workflow
+   `publish.yml` e o ambiente `pypi`;
+3. definir a variável de repositório `PYPI_READY=true`.
+
+Enquanto isso, o caminho é
+`pipx install git+https://github.com/LeandroDukievicz/WatchAI.git`.
+
+**Por que é o primeiro:** `pipx install watchai` é a distribuição natural de uma
+TUI em Python — três sistemas, zero revisão, zero sandbox. E a extensão do VS
+Code (item 4) precisa de um comando que ela possa mandar o usuário instalar.
+
+---
+
+### 2. Verificar macOS e Windows — a maior dívida, e dá para atacar de Linux
+
+O CI roda a suíte nos três sistemas, mas **ninguém nunca abriu o app** num Mac
+ou num Windows. Suíte verde não diz nada sobre janela levantando nem sobre
+notificação aparecendo. Os riscos concretos, por ordem de probabilidade:
+
+- **Windows não tem tty nenhuma.** A identidade do terminal depende inteiramente
+  de achar o shell ancestral — e o descarte de daemon do M13 depende dos mesmos
+  dois sinais. Testado com tabela de processos injetada, nunca contra a tabela
+  real do Windows.
+- **O toast do Windows falha em silêncio.** Se o AUMID não estiver registrado, o
+  toast é criado, não dá erro e não aparece — está documentado em `notify.py`.
+- **macOS**: o `⇧A` usa `AXRaise`/`AXMinimized` via System Events, que exige
+  permissão de acessibilidade concedida à mão.
+
+**Como testar tendo só Linux.** Em três faixas, da mais barata para a mais cara:
+
+- [ ] **(a) Fazer o CI provar muito mais do que prova hoje — é onde está o maior
+      retorno, e é só código.** Hoje **nenhum teste toca a tabela de processos
+      real**: todos injetam uma fonte falsa. Dá para mudar isso e roda igual nos
+      três sistemas: suba um processo cuja linha de comando o `identify` casa —
+      `sys.executable /tmp/…/claude`, porque `python` é runtime e o
+      `_basename(argv[1])` vira `claude` — e rode uma `PsutilSource().snapshot()`
+      de verdade, conferindo que ele aparece com a identidade de terminal certa.
+      Isso testa o caminho do shell ancestral **no Windows real**, que é o risco
+      número um. Junto: invocar o script do toast no runner e conferir que o tipo
+      WinRT carrega (é exatamente a falha silenciosa), e anexar um
+      `app.export_screenshot()` por sistema como artefato do CI, para dar para
+      olhar a renderização de cada um.
+- [ ] **(b) VM de Windows local, grátis e legal.** ISO de avaliação de 90 dias da
+      Microsoft em QEMU/KVM (ou no LXD, que você já tem). Cobre o que o CI nunca
+      vai cobrir: janela minimizada voltando, `AppActivate` indo para a janela
+      certa com várias abertas, e o toast aparecendo de fato.
+- [ ] **(c) macOS não tem caminho bom a partir do Linux.** VM de macOS em
+      hardware não-Apple esbarra na licença da Apple — não recomendo. Sobram
+      três opções honestas: pedir emprestado um Mac por uma hora, alugar um Mac
+      na nuvem (as instâncias `mac` da AWS têm mínimo de 24 h, então é uma
+      despesa real), ou **recrutar um testador**: abrir uma issue "Verificação em
+      macOS" com um roteiro de cinco passos e linkar do README. É como projeto
+      pequeno resolve isso, e as três perguntas que importam cabem num
+      checklist: janela minimizada volta? Com várias janelas do mesmo terminal,
+      vai para a certa? Quando falha, o recado diz `refused` em vez de
+      `window raised`?
+
+**Até (b) e (c) acontecerem, o README e a loja devem dizer "Linux".** Anunciar
+suporte a três sistemas com dois nunca abertos é prometer o que não se verificou.
+
+---
+
+### 3. Snap Store — a análise de 2026-09-28 mudou a recomendação
+
+**O que já está pronto:** conta na loja ativa (`ldukie`, com `package_register`),
+nome `watchai` livre, e o CI constrói o snap, instala e roda o binário.
+
+**Três achados que mudam o plano:**
+
+1. **A justificativa escrita para `classic` está meio errada.** O comentário do
+   `snapcraft.yaml` diz que a notificação não atravessa o sandbox. Atravessa:
+   `libnotify-bin` em `stage-packages` mais a interface `desktop`
+   (auto-conectada) e o `notify-send` funciona.
+2. **Mas havia um bloqueio maior, e real.** Nos perfis AppArmor instalados nesta
+   máquina, o que a `system-observe` libera de `/proc` de outros processos é
+   `cmdline, comm, exe, stat, status, statm, io, cgroup, auxv, fdinfo/*,
+   oom_score, schedstat, smaps_rollup, autogroup, attr/current`. **`cwd` não está
+   na lista.** Num snap strict o `proc.cwd()` devolvia `None` para tudo, e o
+   WatchAI perdia o projeto e todo o estado de diário. **Resolvido no M13** — é
+   o que torna o strict viável.
+3. **`classic` provavelmente seria recusado.** A lista oficial de categorias
+   aceitas é compiladores, IDEs, linguagens, emuladores de terminal /
+   multiplexadores / shells, agentes de nuvem e ferramentas de workspace —
+   WatchAI não é nenhum. E dois itens da lista de **negados** batem direto: "pede
+   acesso a dotfiles sem explorar alternativas" (`~/.claude`, `~/.codex`) e
+   "extensões do GNOME shell" (o `⇧A` fala com a Window Calls). A revisão começa
+   em ~2 semanas e escala para revisor sênior + arquiteto fora das categorias.
+
+**O caminho recomendado, agora que o M13 existe:**
+
+- [ ] Migrar o `snap/snapcraft.yaml` para **`confinement: strict`**, com
+      `system-observe` (conexão manual), `audio-playback`, `desktop` +
+      `libnotify-bin`, e `personal-files` de **leitura** em
+      `$HOME/.claude/projects` e `$HOME/.codex/sessions`. Só o `personal-files`
+      pede revisão, e é do tipo rotineiro.
+- [ ] **Helper de "home real".** Num snap strict o `HOME` aponta para a pasta
+      privada do pacote. São quatro chamadas a corrigir via `SNAP_REAL_HOME`:
+      `transcript.py:726`, `config.py:39`, `live.py:57` e `live.py:72` — as duas
+      últimas só encurtam caminho para `~`, mas mostrariam caminho errado.
+      (No `classic` o `HOME` é o real: conferido com
+      `snap run --shell snapcraft`. Isto é dívida só do strict.)
+- [ ] Aceitar a perda do `⇧A` sob strict: ele degrada para o sino na tty e a
+      marcação de título, que já são o caminho de fallback. É o único preço.
+- [ ] Registrar o nome e publicar em `edge` primeiro.
+- [ ] Corrigir `docs/publicacao-snap.html`, que descreve um `snapcraft.yaml`
+      strict que não é mais o do repositório e ainda manda editar o
+      `Transcripts.__init__` à mão.
+
+**Nota de escopo que ajuda a decidir:** a Snap Store só distribui Linux — que é
+justamente a parte verificada. O risco de plataforma ali é baixo; o bloqueio era
+burocrático, e o M13 o derrubou.
+
+---
+
+### 4. Extensão do VS Code
+
+Viável, e tem uma peça que **só ela** consegue entregar: dentro do VS Code o
+agente roda no terminal integrado, e a extensão tem `terminal.show()`. Casando
+`Terminal.processId` com o `window_pid`/tty da sessão, o "me leve até lá" vira
+exato nos três sistemas, sem D-Bus — resolvendo justamente o caso em que o `⇧A`
+hoje não consegue prometer nada (Wayland sem a extensão Window Calls).
+
+Três desenhos foram considerados; o escolhido é o terceiro:
+
+| | o que é | esforço | veredito |
+|---|---|---|---|
+| A | comando que abre o `watchai` num terminal integrado | ~1 dia | ganho quase nulo: já dá para digitar `watchai` |
+| B | reimplementar a detecção em TypeScript | semanas | duplica ~1.500 linhas de lógica |
+| **C** | **núcleo Python emite JSON, extensão desenha** | ~1 semana | **o certo** |
+
+- [ ] **`watchai --json`** (lado Python, e útil sozinho): imprime o snapshot de
+      sessões como NDJSON. Reaproveita o `LiveProvider` inteiro — hoje não existe
+      nenhuma saída que não seja a TUI. ~100–150 linhas. Serve também para
+      scripts, barra do waybar/i3 e teste de integração.
+- [ ] **Extensão** (TypeScript): `TreeView` na barra lateral com um item por
+      sessão e o semáforo como ícone, `StatusBarItem` com o resumo (`◐2 ●1`),
+      clique revelando o terminal, notificação nativa em READY/INPUT/ERROR.
+- [ ] Armadilhas de publicação já levantadas: o nome `watchai.watchai` está livre
+      no Marketplace; **o ícone do `package.json` não pode ser SVG** (o
+      `docs/brand/watchai-icon.svg` precisa virar PNG 128×128, e imagens do
+      README precisam ser URLs https não-SVG); e **a partir de 1º/12/2026 os PATs
+      globais do Azure DevOps são aposentados** — a publicação automatizada tem
+      que nascer em Microsoft Entra ID.
+- [ ] Atrito honesto: a extensão é Node e o núcleo é Python. Ela procura
+      `watchai` no PATH e, se não achar, oferece `pipx install watchai` — **o que
+      só funciona depois do item 1**.
+
+---
+
+### 5. Miudezas
+
+- [ ] **O `--help` da linha de comando ainda está em português**, ao contrário da
+      tela, que é toda em inglês. Não é bug, é decisão de produto — mas se o app
+      vai para loja e Marketplace, vale alinhar (`__main__.py`).
 
 ---
 

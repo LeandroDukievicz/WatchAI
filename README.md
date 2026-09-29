@@ -834,16 +834,20 @@ CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 
 ## Roadmap
 
-O plano completo, com checkpoints, está em [MILESTONE.md](MILESTONE.md). O
-resumo do que ainda não existe:
+O plano completo, com o porquê de cada item e onde mexer, está em
+[MILESTONE.md](MILESTONE.md). O resumo do que ainda não existe, em ordem:
 
-1. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
+1. **Publicar no PyPI**, para instalar com `pipx install watchai` sem clonar.
+2. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
    suíte nos três, mas ninguém abriu o app num Windows ou num Mac de verdade —
-   é código testado, não software verificado.
-2. **Confirmar o leitor do OpenCode** contra uma sessão real.
-3. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
+   é código testado, não software verificado. Até lá, o sistema anunciado é
+   Linux.
+3. **Enviar o snap para a loja**, em confinamento `strict` — viável desde que o
+   diário deixou de depender do `cwd` do processo.
+4. **Extensão do VS Code**, alimentada por um `watchai --json` que ainda não
+   existe.
+5. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
    verificar o formato.
-4. **Publicar no PyPI**, para instalar com `pipx install watchai` sem clonar.
 
 ## Licença
 
