@@ -1,8 +1,9 @@
 """Dados SIMULADOS. Nada aqui detecta processos reais.
 
 `build_store()` cria 6 sessões (uma em cada estado principal) e um histórico
-de eventos plausível. `MockSimulator` muda o estado de uma sessão aleatória
-a cada 5–12 s, só para avaliarmos a interface em movimento.
+de eventos plausível, e `build_limits()` inventa o consumo das duas janelas de
+limite. `MockSimulator` muda o estado de uma sessão aleatória a cada 5–12 s, só
+para avaliarmos a interface em movimento.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import random
 from datetime import datetime, timedelta
 
 from ..models import Session, SessionStore, Status
+from ..providers.limits import Consumo, Janela
 
 S = timedelta(seconds=1)
 
@@ -180,3 +182,28 @@ class MockSimulator:
             self.step(now)
             changed = True
         return changed
+
+
+def build_limits() -> list[Consumo]:
+    """Limites SIMULADOS, para avaliar as barras sem depender do seu consumo.
+
+    Números fixos e plausíveis: um agente tranquilo e um apertando, que são as
+    duas cores que a barra tem para mostrar. Só no `--mock`; na detecção real o
+    número vem do disco ou não vem.
+    """
+    agora = datetime.now().timestamp()
+    return [
+        Consumo(
+            kind="codex",
+            curta=Janela(usado=16.0, minutos=300, zera_em=agora + 2 * 3600 + 840),
+            longa=Janela(usado=18.0, minutos=10080, zera_em=agora + 4 * 86400 + 12 * 3600),
+            medido=agora,
+            plano="plus",
+        ),
+        Consumo(
+            kind="claude",
+            curta=Janela(usado=78.0, minutos=300, zera_em=agora + 3720),
+            longa=Janela(usado=31.0, minutos=10080, zera_em=agora + 2 * 86400 + 3 * 3600),
+            medido=agora,
+        ),
+    ]

@@ -15,7 +15,7 @@ from textual.events import Resize
 from textual.reactive import reactive
 from textual.screen import Screen
 
-from ..layout import CardMode, card_mode, Layout, layout_for, sessions_max_height
+from ..layout import CardMode, HEADER_ROWS, card_mode, Layout, layout_for, sessions_max_height
 from ..widgets import (
     AppHeader,
     EventStream,
@@ -66,6 +66,9 @@ class Dashboard(Screen):
     view: reactive[str] = reactive("cards")  # "cards" | "list"
     layout_mode: Layout = Layout.LARGE
     card_mode: CardMode = CardMode.FULL
+    # Altura do header agora. Cresce quando aparece barra de limite, e entra na
+    # conta do teto da área de sessões.
+    header_rows: int = HEADER_ROWS
 
     # -- composição ----------------------------------------------------------
     def compose(self):
@@ -77,7 +80,12 @@ class Dashboard(Screen):
         self._ids = [s.id for s in sessions]
         yield AppHeader(id="header")
         yield PanelTitle(id="sessions-title")
-        with VerticalScroll(id="sessions-area"):
+        # A área rola, mas **não recebe foco**: as setas são do Dashboard, que
+        # anda de card em card e traz o escolhido para a tela por conta própria.
+        # Focável, ela ficava com o `↓` para si assim que o conteúdo passava do
+        # teto — e a seleção parava de andar num terminal baixo, sem nada na tela
+        # explicando por quê.
+        with VerticalScroll(id="sessions-area", can_focus=False):
             with Grid(id="cards"):
                 for s in sessions:
                     yield SessionCard(s)
@@ -192,7 +200,19 @@ class Dashboard(Screen):
 
     # -- responsividade ------------------------------------------------------
     def on_resize(self, event: Resize) -> None:
-        width, height = event.size
+        self.relayout(*event.size)
+
+    def on_app_header_grew(self, message: AppHeader.Grew) -> None:
+        """O header ganhou (ou perdeu) linhas de limite: a conta do teto muda.
+
+        Sem isto, a área de sessões continuaria com o teto de um header de 3
+        linhas e o EVENT STREAM encolheria em silêncio para pagar a diferença.
+        """
+        message.stop()
+        self.header_rows = message.rows
+        self.relayout(*self.size)
+
+    def relayout(self, width: int, height: int) -> None:
         mode = layout_for(width)
         self.layout_mode = mode
         for m in Layout:
@@ -200,7 +220,7 @@ class Dashboard(Screen):
         self.query_one("#cards", Grid).styles.grid_size_columns = mode.columns
         # A área encolhe até o conteúdo (sem vão morto) mas nunca além deste teto,
         # senão ela empurraria o EVENT STREAM para fora da tela.
-        teto = sessions_max_height(height)
+        teto = sessions_max_height(height, self.header_rows)
         self.query_one("#sessions-area").styles.max_height = teto
         # O formato do card depende dos dois eixos: largura manda nas colunas,
         # altura manda no tamanho — um card mais alto que a área não aparece.

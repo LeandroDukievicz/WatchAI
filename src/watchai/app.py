@@ -19,10 +19,10 @@ from textual.reactive import reactive
 
 from . import config, sound
 from .focus import Focuser
-from .mock import MockSimulator, build_store
+from .mock import MockSimulator, build_limits, build_store
 from .models import PRIORIDADE, SessionStore, Status, ordenar
 from .notify import Notifier
-from .providers import LiveProvider, agents
+from .providers import Limites, LiveProvider, agents
 from .screens import Dashboard, DetailsScreen, HelpScreen, ThemeScreen
 from .sound import Alert
 from .theme import BY_KEY, DEFAULT, PALETTES, colors, use
@@ -90,6 +90,7 @@ class WatchAIApp(App):
         source=None,
         notifier: Notifier | None = None,
         focuser: Focuser | None = None,
+        limites: Limites | None = None,
     ) -> None:
         super().__init__()
         # A paleta precisa valer já no primeiro parse do TCSS, antes do on_mount.
@@ -98,10 +99,15 @@ class WatchAIApp(App):
         self.set_reactive(WatchAIApp.sound_on, config.load_alerts())
         self.set_reactive(WatchAIApp.notify_on, config.load_notify())
         self.set_reactive(WatchAIApp.sort_on, config.load_sort())
+        # Quanto já foi gasto das janelas de limite do plano. Lista vazia é
+        # resposta boa: agente sem número não ganha barra.
+        self.consumos = []
         if mock:
             self.store = build_store()
             self.simulator = MockSimulator(self.store, seed=seed)
             self.provider = None
+            self.limites = None
+            self.consumos = build_limits()
         else:
             # Agentes que o usuário acrescentou na config valem desde a
             # primeira varredura.
@@ -109,6 +115,9 @@ class WatchAIApp(App):
             self.store = SessionStore()
             self.simulator = None
             self.provider = LiveProvider(self.store, source)
+            # Os limites são lidos junto da varredura, mas no ritmo deles
+            # (~30 s): limite de plano não muda a cada dois segundos.
+            self.limites = limites if limites is not None else Limites()
             # O que aconteceu enquanto o app estava fechado continua valendo:
             # o stream abre com o histórico da execução anterior.
             self.store.load_events(config.load_events())
@@ -185,19 +194,29 @@ class WatchAIApp(App):
             snapshot = self.provider.read()
         except Exception:
             snapshot = None
-        self.call_from_thread(self._scan_done, snapshot)
-
-    def _scan_done(self, snapshot) -> None:
-        self._scanning = False
-        if snapshot is None:
-            return
+        # Junto, e na mesma thread: abrir rollout é disco, e disco não pode
+        # acontecer no laço da UI. O cache dos limites devolve o que já sabia
+        # na maioria das voltas.
         try:
-            mudou = self.provider.apply(snapshot, datetime.now())
+            consumos = self.limites.ler(monotonic()) if self.limites is not None else []
         except Exception:
-            # Um monitor que morre porque a detecção tropeçou é pior que um
-            # monitor com a tela parada por um ciclo. Segue com o que já sabia.
-            self.log.error("falha ao aplicar a varredura", exc_info=True)
-            return
+            consumos = []
+        self.call_from_thread(self._scan_done, snapshot, consumos)
+
+    def _scan_done(self, snapshot, consumos=()) -> None:
+        self._scanning = False
+        # A barra de limite não depende da varredura ter dado certo: são duas
+        # leituras independentes, e uma falhar não pode apagar a outra.
+        mudou = list(consumos) != self.consumos
+        if mudou:
+            self.consumos = list(consumos)
+        if snapshot is not None:
+            try:
+                mudou = self.provider.apply(snapshot, datetime.now()) or mudou
+            except Exception:
+                # Um monitor que morre porque a detecção tropeçou é pior que um
+                # monitor com a tela parada por um ciclo. Segue com o que já sabia.
+                self.log.error("falha ao aplicar a varredura", exc_info=True)
         if mudou:
             self.version += 1
 
@@ -348,4 +367,6 @@ class WatchAIApp(App):
             self.simulator.step(datetime.now())
             self.version += 1
         else:
+            if self.limites is not None:
+                self.limites.invalidar()  # R vai ao disco de novo, sem esperar os 30 s
             self.scan()

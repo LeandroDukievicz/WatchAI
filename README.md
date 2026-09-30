@@ -89,6 +89,8 @@ e volta ao nome anterior quando você sai.
 watchai                 # detecção real
 watchai --mock          # dados simulados, sem olhar seus processos
 watchai --theme vampire # tema só desta execução
+watchai --statusline    # não abre a interface: é o modo que o Claude Code chama
+                        # para entregar o consumo do plano (veja ① Cabeçalho)
 ```
 
 Dentro de um clone para desenvolvimento, `python main.py` e
@@ -113,6 +115,7 @@ A detecção tem duas camadas, e é a combinação que faz sentido:
 |---|---|---|
 | **Processos** | varredura da tabela de processos (`psutil`), a cada 2 s | quem existe, em que terminal, desde quando — e se está gastando CPU. O `cwd` daqui é onde a sessão **abriu**: serve de atalho para achar o diário, e o WatchAI funciona sem ele |
 | **Diário** | o `.jsonl` que o próprio agente grava (`~/.claude/projects/…`, `~/.codex/sessions/…`) | **o que** ele está fazendo agora, se terminou ou se travou esperando você — e **em que projeto está**, que o processo não sabe quando o agente troca de pasta |
+| **Limite** | o mesmo diário do codex; e, para o Claude Code, o que a statusline dele deixa em `~/.config/watchai/limits/` | quanto já foi gasto das janelas de 5 h e de 7 dias do plano — lido a cada 30 s, não a cada varredura |
 
 Nenhuma das duas sozinha resolve. O processo não distingue **READY** ("terminou,
 é a sua vez") de **INPUT** ("parou esperando você confirmar"): nos dois casos
@@ -224,6 +227,17 @@ do pacote (`@anthropic-ai/claude-code`).
   ele conta a partir do momento em que o WatchAI viu o estado.
 - INPUT é inferido, não lido: uma ferramenta lenta que não gasta CPU e não
   responde em 8 s aparece como INPUT.
+- **O percentual do plano não é verificável.** Ele é o que o servidor respondeu
+  ao agente, guardado num arquivo legível e editável — o WatchAI mostra o que
+  está escrito lá, valida a faixa (0–100%, janela e reset plausíveis) e diz a
+  idade do dado. Não há como conferir sem chamar API, e o WatchAI não chama.
+- **O número é tão fresco quanto o último uso daquele agente.** Sem sessão
+  rodando, ele envelhece: a linha diz de quando é, e a janela que já virou
+  aparece com `—` em vez de um percentual velho.
+- **O consumo do Claude Code depende da statusline dele** estar apontada para o
+  `watchai --statusline`. Sem isso não há linha do Claude — e não há estimativa
+  no lugar dela, porque o mapeamento de tokens para o limite da Anthropic não é
+  público e o número sairia inventado.
 
 ---
 
@@ -263,6 +277,67 @@ A tela tem quatro regiões fixas:
 - O cabeçalho se adapta à largura: perde o subtítulo `SESSION MONITOR` abaixo de
   48 colunas, depois troca `◐ WORKING 01` por `◐ 1`, e em último caso abandona o
   relógio para manter os chips.
+
+### Quanto já foi gasto do plano
+
+Abaixo dos chips, **uma linha por agente que tenha número de verdade**:
+
+```
+╭─ ◆ WatchAI  SESSION MONITOR ──────────────────────────────────────────────────╮
+│ ACTIVE 04 │ ◐ WORKING 02  ● READY 02  ◆ INPUT 00  ◇ WAITING 00      21:09:08  │
+│ codex    5h ▓░░░░░░░░░   7% · 4h57m   7d ▓▓░░░░░░░░  19% · 5d14h             │
+│ claude   5h ▓▓▓▓▓▓▓▓░░  78% · 1h01m   7d ▓▓▓░░░░░░░  31% · 2d02h             │
+╰───────────────────────────────────────────────────────────────────────────────╯
+```
+
+As duas janelas de limite do plano: a **curta** (5 h) e a **longa** (7 dias),
+com quanto já foi usado e em quanto tempo cada uma zera. Mora no cabeçalho, e
+não no card, porque o limite é do **plano**: num card ele repetiria o mesmo
+número uma vez por sessão.
+
+- **Cinza até 75%, amarelo a partir daí, vermelho a partir de 90%** — cor é para
+  estado, e limite no fim é um estado.
+- **Idade do dado à vista.** O número é tão fresco quanto o último uso daquele
+  agente: se ele foi medido há mais de cinco minutos, a linha diz `(3h ago)`.
+- **Janela que já virou não mostra percentual**, e sim `—`: o valor guardado é de
+  antes do reset. Acontece todo dia — você usou o codex ontem, a janela de 5 h
+  zerou de madrugada e o arquivo continua com os 18% de então.
+- Encolhendo a janela, a linha perde primeiro o "quando zera", depois a barra
+  (fica só o percentual, que é o dado); abaixo de 20 linhas de terminal ela
+  desaparece, para não tirar linhas do EVENT STREAM.
+- **Sem número, sem linha.** Nada aqui é estimado.
+
+**De onde vem cada um:**
+
+| Agente | De onde | Precisa de você? |
+|---|---|---|
+| **codex** | do mesmo `rollout-*.jsonl` que o WatchAI já lê — o codex grava ali um bloco `rate_limits` a cada resposta | **não**, funciona de saída |
+| **Claude Code** | ele **não grava** limite em arquivo nenhum, mas **empurra** o dado para scripts de statusline. Quem recebe e guarda é o `watchai --statusline` | **sim**, uma linha no `settings.json` |
+
+Para ligar a do Claude Code, em `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "watchai --statusline",
+    "padding": 0,
+    "refreshInterval": 30000
+  }
+}
+```
+
+O modo `--statusline` lê o JSON que o agente manda na entrada padrão, guarda só
+o bloco de limite em `~/.config/watchai/limits/claude.json` (escrita atômica) e
+imprime a linha de status que o Claude Code mostra:
+
+```
+~/Projetos/WatchAI · Opus 5 · 5h 8% · 7d 31% · $1.23
+```
+
+⚠️ **É a única configuração de agente que o WatchAI tem, e é opcional.** O resto
+do app não depende dela: sem ela você fica sem a linha do Claude Code e mais
+nada. Se você já tem uma statusline, ela é sua — não troque por esta sem querer.
 
 ## ② Título do painel
 
@@ -755,7 +830,7 @@ WatchAI/
 │   ├── app.py                   # App: tema, tick (0,5 s), bindings, bip de READY
 │   ├── theme.py                 # as 8 paletas + paleta ativa ($aw-* para o TCSS)
 │   ├── layout.py                # breakpoints (LARGE/MEDIUM/SMALL/TINY) + teto da área
-│   ├── format.py                # ellipsize, HH:MM:SS, mm:ss
+│   ├── format.py                # ellipsize, HH:MM:SS, mm:ss, 4d12h
 │   ├── sound.py                 # bip: um timbre por estado, player do sistema
 │   ├── notify.py                # notificação do sistema (libnotify/osascript/toast)
 │   ├── focus.py                 # `G`: levanta a janela da sessão (e toca o sino)
@@ -765,6 +840,7 @@ WatchAI/
 │   │   ├── agents.py            # quem é agente (e quem só tem o nome parecido)
 │   │   ├── source.py            # psutil: a única parte que conhece o SO
 │   │   ├── transcript.py        # lê os .jsonl que os agentes já gravam
+│   │   ├── limits.py            # consumo das janelas do plano (+ o --statusline)
 │   │   └── live.py              # reconcilia processos → terminais e agentes
 │   ├── mock/sessions.py         # 6 sessões + MockSimulator (só no --mock)
 │   ├── widgets/
@@ -773,7 +849,7 @@ WatchAI/
 │   │   ├── session_card.py      # SessionCard (normal / compacto)
 │   │   ├── session_row.py       # linha da visão LIST
 │   │   ├── event_stream.py      # EVENT STREAM
-│   │   ├── header.py            # cabeçalho + resumo global
+│   │   ├── header.py            # cabeçalho + resumo global + barras de limite
 │   │   ├── keybar.py            # rodapé de atalhos (responsivo)
 │   │   └── panel_title.py       # "▸ SESSIONS 06 ─── CARDS │ LIST"
 │   ├── screens/                 # dashboard.py · details.py · help.py · themes.py
@@ -808,10 +884,11 @@ pip install -e ".[dev]"
 pytest
 ```
 
-67 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
-a sua config e **sem olhar os processos da máquina** — a tabela de processos é
-injetada e o relógio é um argumento, então a suíte dá o mesmo resultado no seu
-computador e no CI).
+164 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
+a sua config, **sem olhar os processos da máquina** e **sem olhar o seu consumo**
+— a tabela de processos é injetada, os rollouts são arquivos de mentira e o
+relógio é um argumento, então a suíte dá o mesmo resultado no seu computador e no
+CI).
 
 `tests/test_smoke.py` cobre a camada visual: breakpoints e navegação, troca de
 visão/painel/modais, semáforo e piscar do INPUT, regras do bip, layout sem vão
@@ -830,6 +907,16 @@ pode virar contador negativo), o erro de API virando ERROR, os avisos com
 timbre por estado, a notificação que só sai com a janela fora de foco e o
 histórico que sobrevive ao fechamento.
 
+`tests/test_limits.py` cobre o consumo do plano: o bloco que o codex grava no
+próprio rollout, a queda para o arquivo anterior quando a sessão é nova demais
+para ter o número, a validação de faixa (percentual fora de 0–100%, janela
+absurda, carimbo implausível), a divergência de nome entre `used_percent` e
+`used_percentage`, a janela que já virou aparecendo com `—`, o modo
+`--statusline` de ponta a ponta (grava atômico, imprime a linha, e com lixo na
+entrada não levanta), o cache de 30 s, o header crescendo e encolhendo com o
+dado — e a interface em **95% e 100%**, exercitada escrevendo o número num
+rollout de mentira, sem gastar cota para chegar nele.
+
 CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 
 ## Roadmap
@@ -838,17 +925,16 @@ O plano completo, com o porquê de cada item e onde mexer, está em
 [MILESTONE.md](https://github.com/LeandroDukievicz/WatchAI/blob/main/MILESTONE.md). O resumo do que ainda não existe, em ordem:
 
 1. **Publicar no PyPI**, para instalar com `pipx install watchai` sem clonar.
-2. **Medir o consumo**: quanto já foi gasto das janelas de 5 h e semanal do
-   codex e do Claude Code — os dois gravam o número localmente, cada um do seu
-   jeito.
-3. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
+2. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
    suíte nos três, mas ninguém abriu o app num Windows ou num Mac de verdade —
    é código testado, não software verificado. Até lá, o sistema anunciado é
    Linux.
-4. **Enviar o snap para a loja**, em confinamento `strict` — viável desde que o
+3. **Enviar o snap para a loja**, em confinamento `strict` — viável desde que o
    diário deixou de depender do `cwd` do processo.
-5. **Extensão do VS Code**, alimentada por um `watchai --json` que ainda não
+4. **Extensão do VS Code**, alimentada por um `watchai --json` que ainda não
    existe.
+5. **Casar processo e diário do Claude Code pelo PID**, via
+   `~/.claude/sessions/<pid>.json`, no lugar da heurística de relógio.
 6. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
    verificar o formato.
 

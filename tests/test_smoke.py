@@ -81,6 +81,25 @@ def test_responsive_grid_and_navigation():
     run(main())
 
 
+def test_a_area_que_rola_nao_rouba_as_setas():
+    """Num terminal baixo os cards passam do teto e a área rola. Focável, ela
+    ficava com o `↓` para si e a seleção parava de andar — o que a barra de
+    limite, ao encurtar a área, transformou de canto em caminho comum."""
+    async def main():
+        app = WatchAIApp(seed=1, mock=True)
+        async with app.run_test(size=(150, 34)) as pilot:
+            await pilot.pause()
+            dash = app.screen
+            area = dash.query_one("#sessions-area")
+            assert area.max_scroll_y > 0, "esta altura tem que fazer a área rolar"
+            await pilot.press("right")
+            assert dash.selected == 1
+            await pilot.press("down")
+            assert dash.selected == 4
+
+    run(main())
+
+
 def test_views_panels_details_help():
     async def main():
         app = WatchAIApp(seed=1, mock=True)

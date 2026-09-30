@@ -40,3 +40,22 @@ def fmt_timer(delta: timedelta) -> str:
     if s >= 3600:
         return f"{s // 3600}:{(s % 3600) // 60:02d}:{s % 60:02d}"
     return f"{s // 60:02d}:{s % 60:02d}"
+
+
+def fmt_span(seconds: float) -> str:
+    """Duração larga, curta de ler: 45s · 7m · 1h20m · 4d12h.
+
+    Para distância no tempo (quando a janela de limite zera, que idade tem o
+    número), não para contador que anda na tela: aqui não há dois-pontos nem
+    zeros à esquerda, e só as duas unidades que importam aparecem.
+    """
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m"
+    if s < 86400:
+        horas, minutos = s // 3600, (s % 3600) // 60
+        return f"{horas}h{minutos:02d}m" if minutos else f"{horas}h"
+    dias, horas = s // 86400, (s % 86400) // 3600
+    return f"{dias}d{horas:02d}h" if horas else f"{dias}d"

@@ -81,14 +81,19 @@ def layout_for(width: int) -> Layout:
     return Layout.TINY
 
 
-# Linhas que nunca pertencem à área de sessões: header (3) + título (1) + keybar (1).
-CHROME_ROWS = 5
+# Linhas que nunca pertencem à área de sessões, fora o header: título (1) +
+# keybar (1). O header é 3 e **cresce**: uma linha por agente com barra de
+# limite. Quem cresce sem entrar nesta conta tira linhas do EVENT STREAM sem
+# dizer nada, que foi exatamente o risco de pôr as barras lá.
+CHROME_ROWS = 2
+HEADER_ROWS = 3
 # Piso do EVENT STREAM: borda + 6 eventos + borda. A área de sessões pode crescer
 # até o que sobrar disso — passou, ela rola em vez de empurrar o stream da tela.
 EVENTS_MIN_ROWS = 8
 SESSIONS_MIN_ROWS = 4
 
 
-def sessions_max_height(terminal_height: int) -> int:
+def sessions_max_height(terminal_height: int, header_rows: int = HEADER_ROWS) -> int:
     """Teto da área de sessões para o EVENT STREAM nunca sumir."""
-    return max(SESSIONS_MIN_ROWS, terminal_height - CHROME_ROWS - EVENTS_MIN_ROWS)
+    fora = CHROME_ROWS + max(HEADER_ROWS, header_rows)
+    return max(SESSIONS_MIN_ROWS, terminal_height - fora - EVENTS_MIN_ROWS)

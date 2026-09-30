@@ -236,7 +236,7 @@ máquina Windows ou macOS de verdade — isso continua sendo a pendência númer
       pede conta e revisão manual
 
       ⚠️ **Metade dessa justificativa não se sustenta** (apurado em 2026-09-28,
-      ver item 4 de "O que ainda falta"): a notificação **atravessa** o strict,
+      ver item 3 de "O que ainda falta"): a notificação **atravessa** o strict,
       basta `libnotify-bin` em `stage-packages` e a interface `desktop`, que é
       auto-conectada. O comentário no `snapcraft.yaml` precisa ser corrigido
 
@@ -272,6 +272,60 @@ máquina Windows ou macOS de verdade — isso continua sendo a pendência númer
       diário apagado no meio da ordenação por mtime (levava `None` para **todos**
       os agentes daquele tipo)
 
+### M14 — quanto já foi gasto do plano
+
+O que era a prioridade 2. O desenho apurado em 2026-09-28 foi implementado sem
+mudanças de rumo; o que apareceu na implementação está marcado abaixo.
+
+- [x] **`providers/limits.py`**: `Janela`, `Consumo`, o normalizador `consumo()`
+      e dois leitores defensivos. Leitura a cada **30 s** (não a cada varredura),
+      na mesma thread da varredura — abrir rollout é disco
+- [x] **Codex, sem configuração nenhuma**: o último `payload.type ==
+      "token_count"` do rollout, com `rate_limits` inteiro
+- [x] **`watchai --statusline`**: lê o JSON do agente no stdin, guarda o bloco de
+      limite em `~/.config/watchai/limits/claude.json` (tmp + rename, com o pid
+      no nome do tmp, porque duas sessões escrevem) e imprime a linha de status.
+      Nunca levanta: lixo na entrada ou pasta sem permissão viram linha vazia
+- [x] **O bloco é guardado como veio.** A normalização é na leitura, não na
+      escrita: quando o formato mudar, quem se adapta é o leitor — sem pedir a
+      você para reconfigurar nada
+- [x] **Os dois nomes valem** (`used_percent` do codex, `used_percentage` do
+      Claude Code), e a janela sem `window_minutes` é reconhecida pelo nome
+      (`primary`/`five_hour`…). Nome desconhecido **e** sem tamanho fica de fora:
+      rotular de 5 h o que pode ser de outro tamanho é inventar
+- [x] **Validação de faixa**, já que o número não é conferível: percentual em
+      [0, 100], janela positiva e plausível, reset num tempo que existe (aceita
+      milissegundos). Reset ruim custa o "zera em", não a barra
+- [x] **A idade do dado à vista**, acima de 5 minutos: `(3h ago)`
+- [x] **Achado na implementação, e não estava no plano: janela vencida.** O caso
+      comum, não o raro — você usou o codex ontem, a janela de 5 h virou de
+      madrugada e o rollout guarda os 18% de então. `Janela.vencida()` detecta
+      pelo próprio `resets_at`, e a tela mostra `—` em vez de um número morto. É
+      a mesma armadilha que o Claude Code corrigiu na 2.1.251
+- [x] **No header, não no card** (`widgets/header.py`), uma linha por agente com
+      número. Cinza até 75%, amarelo aí, vermelho em 90%. Três variantes por
+      largura, e nada abaixo de 20 linhas de terminal
+- [x] **`sessions_max_height` agora recebe a altura do header**, que deixou de
+      ser a constante 3. O header avisa que cresceu (`AppHeader.Grew`) e o
+      Dashboard refaz a conta do teto — sem isso, a barra tirava linhas do EVENT
+      STREAM caladas
+- [x] **Bug que existia antes e a barra descobriu**: `#sessions-area` era
+      focável, então assim que o conteúdo passava do teto ela ficava com o `↓`
+      para si e a seleção parava de andar. Encurtar a área tornou isso comum.
+      `can_focus=False` — as setas são do Dashboard, que já traz o card escolhido
+      para a tela
+- [x] 34 testes novos, incluindo a interface em **95% e 100%** exercitada com um
+      rollout escrito pelo teste, e uma fixture que impede a suíte de olhar o
+      consumo real de quem a roda
+- [x] **A decisão do 2.5 foi tomada**: a linha de statusline entra, estritamente
+      opcional, e o README ganhou a ressalva explícita em vez de perder a frase
+      ("não há API, hook, credencial nem configuração de agente envolvida" agora
+      diz que há **uma**, opcional, e qual)
+
+Fora do escopo do item, e continua valendo: não derivar percentual somando
+tokens, não rodar `claude -p` para perguntar, não raspar a TUI, não ler
+credencial.
+
 ---
 
 ## O que ainda falta
@@ -284,7 +338,7 @@ você e o que é código.
 ### 1. Publicar no PyPI — **prioridade 1**, e a vez é sua
 
 `pipx install watchai` é a distribuição natural de uma TUI em Python: três
-sistemas, zero revisão, zero sandbox. E a extensão do VS Code (item 5) precisa
+sistemas, zero revisão, zero sandbox. E a extensão do VS Code (item 4) precisa
 de um comando que ela possa mandar o usuário instalar.
 
 **Do lado do código, está pronto** (feito em 2026-09-28):
@@ -327,155 +381,7 @@ curto e deixar o longo no GitHub.
 
 ---
 
-### 2. Medir o consumo — **prioridade 2**
-
-Mostrar quanto já foi gasto das janelas de limite do **codex** e do **Claude
-Code**. Tudo apurado contra os arquivos reais desta máquina em 2026-09-28; esta
-seção existe para que a implementação não precise redescobrir nada.
-
-#### 2.1 O que existe no disco
-
-**Codex — entrega pronto, sem configuração nenhuma.**
-
-Em `~/.codex/sessions/AAAA/MM/DD/rollout-*.jsonl` (o mesmo arquivo que o leitor
-`Codex` já abre), numa entrada com `payload.type == "token_count"`:
-
-```json
-"rate_limits": {
-  "limit_id": "codex",
-  "primary":   { "used_percent": 16.0, "window_minutes":   300, "resets_at": 1790645999 },
-  "secondary": { "used_percent": 18.0, "window_minutes": 10080, "resets_at": 1791212898 },
-  "credits":   { "has_credits": false, "unlimited": false, "balance": "0" },
-  "plan_type": "plus"
-}
-```
-
-`300` minutos = janela de 5 h · `10080` = 7 dias. `resets_at` é epoch em
-segundos. Vale o **último** `token_count` escrito.
-
-**Claude Code — não grava limite em lugar nenhum.**
-
-Varredura completa de `~/.claude`: nenhum campo de `rate_limit`, `quota` ou
-`utilization` nos diários nem nos JSON de estado. O que existe é outra coisa:
-
-- `usage` por mensagem (tokens de entrada/saída/cache/thinking);
-- entradas `type: "cost-state"` — sempre a **última linha** do arquivo, então o
-  `_tail()` que já existe acha — com `totalCostUSD` e `modelUsage` por modelo.
-  **Escritas no fim da sessão**: a sessão viva não tem;
-- `rateLimitTier` em `~/.claude/.credentials.json` — **proibido**. Modo `600`,
-  guarda o token OAuth. O WatchAI não encosta nesse arquivo, e isto não é
-  preferência: é regra.
-
-**Mas o Claude Code empurra o dado para scripts de statusline** (v2.1.80+, do
-changelog local em `~/.claude/cache/changelog.md`):
-
-> Added `rate_limits` field to statusline scripts for displaying Claude.ai rate
-> limit usage (5-hour and 7-day windows with `used_percentage` and `resets_at`)
-
-⚠️ **Os nomes diferem entre os dois**: codex usa `used_percent`, Claude Code usa
-`used_percentage`. O normalizador tem que aceitar os dois.
-
-#### 2.2 O desenho
-
-Em vez de o WatchAI **puxar**, o Claude Code **empurra** — e o WatchAI continua
-lendo só arquivo local, que é a regra do produto:
-
-```
-Claude Code ──(JSON no stdin, a cada render)──▶ watchai --statusline
-                                                        │
-                                   grava ~/.config/watchai/limits/claude.json
-                                                        │
-                                      WatchAI lê ◀──────┘
-```
-
-- **Novo `src/watchai/providers/limits.py`**, com dois leitores defensivos (o que
-  não bater com o esperado vira `None`, como os leitores de diário), lido a cada
-  ~30 s e **não** a cada varredura.
-- **Novo `watchai --statusline`**: lê o JSON do stdin, grava a parte de
-  `rate_limits` num arquivo pequeno (escrita atômica — tmp + rename, porque a
-  statusline roda a cada render) e imprime a linha de status.
-- **Mora no header, não no card.** O limite é do *plano*, não de um terminal: um
-  card por sessão repetiria o mesmo número N vezes. Encaixar em
-  `widgets/header.py`.
-- **Barra real só onde há número real.** Esboço:
-
-```
- WATCHAI                                            ◐ 2   ● 1   ○ 1
- codex   ▓▓░░░░░░░░  18% week · resets in 4d12h   ·  5h ▓▓░░░░░░░░ 16%
- claude  ▓▓▓░░░░░░░  31% week · resets in 2d03h   ·  5h ▓░░░░░░░░░  8%
-```
-
-#### 2.3 O que **não** fazer — e por quê
-
-- **Não derivar percentual do Claude somando tokens.** O mapeamento de tokens
-  para o limite da Anthropic não é público e varia por modelo e plano: o número
-  sairia inventado. É exatamente o erro que o projeto inteiro evita — *parece*
-  informação. Sem statusline ligada, mostra-se **gasto** (`$`), rotulado como
-  gasto, ou nada.
-- **Não rodar `claude -p` para perguntar.** Gastaria cota para perguntar sobre
-  cota, e nem funcionaria: o `/usage` é do cliente, o modelo não sabe o limite.
-  Conferido: não existe subcomando de uso no CLI (`agents, attach, auth,
-  auto-mode, doctor, gateway, import, install, logs, mcp, plugin, project,
-  respawn, rm, setup-token, ultrareview, update`).
-- **Não raspar a TUI por PTY.** Está em *Fora de escopo (decidido)*, é frágil, e
-  criaria uma sessão nova que o próprio WatchAI detectaria — laço.
-- **Não ler credencial** para chamar endpoint.
-
-#### 2.4 Adulteração e validação
-
-O rollout do codex é `-rw-rw-r--`: editável com um `sed`. Isso **não dá cota** —
-o arquivo é o registro do que o servidor respondeu, não o lugar onde o limite é
-conferido; a próxima resposta reescreve por cima. As duas ferramentas marcaram a
-diferença de propósito: o que vale está em `600` (`auth.json`,
-`.credentials.json`), o que é log ficou legível.
-
-Consequência para o desenho: o WatchAI **não pode verificar** esse número sem
-chamar API, então não deve fingir que pode. A resposta certa é **rótulo honesto
-mais validação de faixa**:
-
-- `used_percent` / `used_percentage` numérico e preso em [0, 100];
-- `window_minutes` positivo;
-- `resets_at` em época plausível (nem 1970, nem ano 3000);
-- **a idade do dado à vista** — o número é tão fresco quanto o último uso
-  daquele agente. Sem isso é número velho com cara de vivo, que é o bug que o
-  M13 acabou de matar.
-
-Aproveitando: por ser editável, dá para **escrever um rollout falso e exercitar
-a interface em 95% e 100%** sem queimar cota — é assim que os estados de alerta
-devem ser testados.
-
-#### 2.5 A decisão que falta (é sua)
-
-O caminho da statusline **pede uma linha de configuração no agente**, e o README
-promete que "não há API, hook, credencial nem configuração de agente envolvida".
-Se entrar:
-
-- é **estritamente opcional** — o WatchAI funciona inteiro sem, só sem a barra
-  do Claude;
-- quem liga é você, com uma linha no `~/.claude/settings.json` (hoje sem
-  `statusLine` configurada, então não há nada para atropelar);
-- o README ganha a ressalva **explícita** em vez de perder a frase.
-
-Estimativa: 1–2 dias com testes. O leitor do codex não depende dessa decisão e
-pode ir primeiro.
-
-#### 2.6 Achado de brinde, guardado aqui para não se perder
-
-`~/.claude/sessions/<pid>.json`, indexado por **PID**:
-
-```json
-{ "pid": 63893, "sessionId": "e4e7ef65-…", "cwd": "/home/leandro-dukievicz",
-  "kind": "interactive", "status": "busy", "startedAt": …, "updatedAt": … }
-```
-
-Isso dá, para o Claude Code, o casamento **exato** processo→diário — no lugar da
-heurística de relógio do M13 —, mais o `cwd` sem depender do `proc.cwd()`, mais
-um `status` de primeira mão e um `kind: "interactive"` que separa sessão de
-não-sessão. Item próprio, mas dos bons.
-
----
-
-### 3. Verificar macOS e Windows — a maior dívida, e dá para atacar de Linux
+### 2. Verificar macOS e Windows — a maior dívida, e dá para atacar de Linux
 
 O CI roda a suíte nos três sistemas, mas **ninguém nunca abriu o app** num Mac
 ou num Windows. Suíte verde não diz nada sobre janela levantando nem sobre
@@ -524,7 +430,7 @@ suporte a três sistemas com dois nunca abertos é prometer o que não se verifi
 
 ---
 
-### 4. Snap Store — a análise de 2026-09-28 mudou a recomendação
+### 3. Snap Store — a análise de 2026-09-28 mudou a recomendação
 
 **O que já está pronto:** conta na loja ativa (`ldukie`, com `package_register`),
 nome `watchai` livre, e o CI constrói o snap, instala e roda o binário.
@@ -576,7 +482,7 @@ burocrático, e o M13 o derrubou.
 
 ---
 
-### 5. Extensão do VS Code
+### 4. Extensão do VS Code
 
 Viável, e tem uma peça que **só ela** consegue entregar: dentro do VS Code o
 agente roda no terminal integrado, e a extensão tem `terminal.show()`. Casando
@@ -608,6 +514,35 @@ Três desenhos foram considerados; o escolhido é o terceiro:
 - [ ] Atrito honesto: a extensão é Node e o núcleo é Python. Ela procura
       `watchai` no PATH e, se não achar, oferece `pipx install watchai` — **o que
       só funciona depois do item 1**.
+
+---
+
+### 5. Casar processo e diário do Claude Code pelo PID
+
+`~/.claude/sessions/<pid>.json`, indexado por **PID** — achado durante o
+levantamento do M14 e confirmado nesta máquina em 2026-09-29:
+
+```json
+{ "pid": 113747, "sessionId": "71d61609-…", "cwd": "/home/leandro-dukievicz",
+  "kind": "interactive", "entrypoint": "cli", "status": "idle",
+  "name": "leandro-dukievicz-2b", "version": "2.1.278",
+  "startedAt": 1790713132469, "updatedAt": 1790713132599,
+  "statusUpdatedAt": 1790713132599 }
+```
+
+Isso dá, para o Claude Code, o casamento **exato** processo→diário — no lugar da
+heurística de relógio do M13 —, mais o `cwd` sem depender do `proc.cwd()`, mais
+um `status` de primeira mão e um `kind: "interactive"` que separa sessão de
+não-sessão. O arquivo é `-rw-rw-r--`; o `.key` ao lado dele é `600` e não
+interessa.
+
+⚠️ Vale medir antes de trocar: a heurística de relógio do M13 está funcionando, e
+a pasta só existe para o Claude Code. O ganho é precisão num caso conhecido (duas
+sessões na mesma pasta), não um bug aberto.
+
+- [ ] `ClaudeCode.arquivos()` passa a preferir o `sessionId` do PID quando houver
+- [ ] `status` e `kind` do arquivo entram como sinal na decisão de estado
+- [ ] a heurística de relógio continua, para quem não tem esse arquivo
 
 ---
 

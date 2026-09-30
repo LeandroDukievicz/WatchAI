@@ -6,6 +6,35 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Adicionado
+- **Quanto já foi gasto do plano, no cabeçalho.** Uma linha por agente com as
+  duas janelas de limite — a curta (5 h) e a longa (7 dias) —, com barra,
+  percentual e em quanto tempo cada uma zera. Mora no header e não no card
+  porque o limite é do **plano**: num card ele repetiria o mesmo número uma vez
+  por sessão. O **codex** entrega de graça, no mesmo `rollout-*.jsonl` que o
+  leitor de diário já abre (`payload.type == "token_count"`). O **Claude Code
+  não grava limite em lugar nenhum** — varredura completa de `~/.claude` não
+  achou nem `rate_limit`, nem `quota`, nem `utilization` —, mas **empurra** o
+  dado para scripts de statusline desde a 2.1.80. Daí o desenho: em vez de
+  puxar, o agente empurra para um `watchai --statusline`, e o WatchAI segue
+  lendo só arquivo local, que é a regra do produto. Três coisas que ficaram de
+  fora **de propósito**: derivar o percentual do Claude somando tokens (o
+  mapeamento não é público e varia por modelo e plano — o número sairia
+  inventado), rodar `claude -p` para perguntar (gastaria cota para perguntar
+  sobre cota, e o modelo não sabe a resposta) e ler `~/.claude/.credentials.json`,
+  que tem um `rateLimitTier` dentro e está em modo 600.
+- **`watchai --statusline`**, o outro lado disso: lê o JSON que o Claude Code
+  manda na entrada padrão, guarda o bloco de limite em
+  `~/.config/watchai/limits/claude.json` e imprime a linha de status. Escrita
+  atômica com o pid no nome do arquivo temporário, porque isso roda a cada
+  render da tela do agente e mais de uma sessão pode estar escrevendo. E não
+  levanta nunca: lixo na entrada, versão de agente sem o campo ou pasta sem
+  permissão viram linha vazia — isto ocupa o lugar do prompt de quem está
+  trabalhando. O bloco é guardado **como veio**, e quem normaliza é a leitura:
+  quando o formato mudar, ninguém precisa reconfigurar nada.
+- **É a primeira (e única) configuração de agente que o WatchAI tem**, e é
+  estritamente opcional: sem ela falta a linha do Claude Code e mais nada. O
+  README ganhou a ressalva explícita em vez de perder a frase que prometia
+  configuração zero.
 - **Empacotamento para Snap** (`snap/snapcraft.yaml`), com job de CI que
   constrói **e instala e roda** o que construiu: snap classic de app Python
   quebra calado quando o patchelf não acerta o interpretador, e o build passa
@@ -67,6 +96,21 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   português (`notificações ligadas`).
 
 ### Corrigido
+- **A área de cards roubava o `↓` quando começava a rolar.** `#sessions-area`
+  era focável, então assim que o conteúdo passava do teto ela ficava com a seta
+  para si e a seleção parava de andar — sem nada na tela explicando por quê. Bug
+  que já existia; as barras de limite, ao encurtar a área, transformaram um canto
+  raro em caminho comum. Agora `can_focus=False`: as setas são do Dashboard, que
+  já traz o card escolhido para a tela.
+- **Percentual de janela que já virou aparecia como se fosse de agora.** O caso
+  é diário, não excepcional: você usou o codex ontem, a janela de 5 h zerou de
+  madrugada e o rollout continua guardando os 18% de então. O próprio `resets_at`
+  diz que virou, e a tela mostra `—` em vez de um número morto. Foi a mesma
+  armadilha que o Claude Code corrigiu na 2.1.251.
+- **`sessions_max_height` não conhecia a altura do header**, que era a constante
+  3 em dois lugares. Um header que cresce sem entrar nessa conta tira linhas do
+  EVENT STREAM em silêncio — agora ele avisa (`AppHeader.Grew`) e o Dashboard
+  refaz o teto.
 - **Três cards com uma sessão aberta.** O `codex` sobe dois daemons no login
   (`codex app-server --managed-daemon` e o `pid-update-loop` dele), pendurados
   no `systemd --user`, sem tty e sem terminal nenhum por trás. Eles casavam com
