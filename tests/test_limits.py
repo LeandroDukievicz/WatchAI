@@ -123,6 +123,21 @@ def test_carimbo_implausivel_perde_o_reset_mas_nao_a_barra():
         assert achado.curta.falta(AGORA) is None
 
 
+def test_reset_que_nao_cabe_na_janela_perde_o_contador():
+    """Uma janela de 5 h não zera daqui a 70 anos. Só a faixa de época deixava
+    passar um carimbo adulterado como "zera em 26755d22h" — número absurdo
+    desenhado com cara de informação. O percentual fica; o contador, não."""
+    achado = consumo("codex", {
+        "primary": {"used_percent": 23, "window_minutes": 300, "resets_at": 4_102_444_000},
+    }, medido=AGORA)
+    assert achado.curta.usado == 23.0 and achado.curta.zera_em is None
+    # E o que cabe continua valendo.
+    achado = consumo("codex", {
+        "primary": {"used_percent": 23, "window_minutes": 300, "resets_at": AGORA + 3600},
+    }, medido=AGORA)
+    assert achado.curta.zera_em == AGORA + 3600
+
+
 def test_carimbo_em_milissegundos_tambem_vale():
     achado = consumo("codex", {"primary": {"used_percent": 42, "window_minutes": 300, "resets_at": AGORA * 1000}})
     assert achado.curta.zera_em == AGORA

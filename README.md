@@ -89,8 +89,12 @@ e volta ao nome anterior quando você sai.
 watchai                 # detecção real
 watchai --mock          # dados simulados, sem olhar seus processos
 watchai --theme vampire # tema só desta execução
-watchai --statusline    # não abre a interface: é o modo que o Claude Code chama
-                        # para entregar o consumo do plano (veja ① Cabeçalho)
+
+watchai --install-statusline    # liga o consumo do Claude Code (não sobrescreve
+                                # a statusline que você já tiver)
+watchai --uninstall-statusline  # desliga, devolvendo a de antes
+watchai --statusline            # não abre a interface: é o modo que o agente
+                                # chama a cada render (veja ① Cabeçalho)
 ```
 
 Dentro de um clone para desenvolvimento, `python main.py` e
@@ -235,9 +239,12 @@ do pacote (`@anthropic-ai/claude-code`).
   rodando, ele envelhece: a linha diz de quando é, e a janela que já virou
   aparece com `—` em vez de um percentual velho.
 - **O consumo do Claude Code depende da statusline dele** estar apontada para o
-  `watchai --statusline`. Sem isso não há linha do Claude — e não há estimativa
-  no lugar dela, porque o mapeamento de tokens para o limite da Anthropic não é
-  público e o número sairia inventado.
+  `watchai --statusline` (`watchai --install-statusline` faz isso). Sem isso não
+  há linha do Claude — e não há estimativa no lugar dela, porque o mapeamento de
+  tokens para o limite da Anthropic não é público e o número sairia inventado.
+- **O consumo do Claude Code é da conta, não da sessão.** Duas contas diferentes
+  usando o mesmo computador escrevem no mesmo arquivo, e vale a última que
+  rodou.
 
 ---
 
@@ -312,32 +319,49 @@ número uma vez por sessão.
 | Agente | De onde | Precisa de você? |
 |---|---|---|
 | **codex** | do mesmo `rollout-*.jsonl` que o WatchAI já lê — o codex grava ali um bloco `rate_limits` a cada resposta | **não**, funciona de saída |
-| **Claude Code** | ele **não grava** limite em arquivo nenhum, mas **empurra** o dado para scripts de statusline. Quem recebe e guarda é o `watchai --statusline` | **sim**, uma linha no `settings.json` |
+| **Claude Code** | ele **não grava** limite em arquivo nenhum, mas **empurra** o dado para scripts de statusline. Quem recebe e guarda é o `watchai --statusline` | **sim**, um comando: `watchai --install-statusline` |
 
-Para ligar a do Claude Code, em `~/.claude/settings.json`:
+Para ligar a do Claude Code, **um comando**:
 
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "watchai --statusline",
-    "padding": 0,
-    "refreshInterval": 30000
-  }
-}
+```bash
+watchai --install-statusline     # liga
+watchai --uninstall-statusline   # desliga, e devolve o que havia antes
 ```
 
-O modo `--statusline` lê o JSON que o agente manda na entrada padrão, guarda só
-o bloco de limite em `~/.config/watchai/limits/claude.json` (escrita atômica) e
-imprime a linha de status que o Claude Code mostra:
+**Se você já tem uma statusline, ela não é perdida.** Instalar não sobrescreve a
+sua: o WatchAI passa a ser chamado no lugar dela, guarda o consumo, **executa a
+sua com a mesma entrada e mostra a saída dela**. Na prática a sua statusline
+continua exatamente como era, e a barra aparece no WatchAI. Desinstalar devolve o
+comando original, com as opções que ele tinha — e há uma cópia do arquivo em
+`settings.json.watchai.bak` de qualquer forma.
+
+O comando também resolve o que um README não consegue:
+
+- escreve **o caminho que funciona na sua máquina** — `watchai` puro para quem
+  instalou por `pipx` ou snap, o caminho do interpretador para quem roda de um
+  clone (senão o agente chamaria um comando que não existe, e a linha sairia
+  vazia sem dizer por quê);
+- escreve **no arquivo certo**: se é o seu `settings.local.json` que define a
+  `statusLine`, é nele que se mexe — e se os dois definem, ele avisa em vez de
+  adivinhar;
+- **rodar duas vezes não estraga nada** (e serve para atualizar o caminho, se
+  você mudou de instalação).
+
+Só com a statusline vazia o WatchAI imprime a linha dele:
 
 ```
 ~/Projetos/WatchAI · Opus 5 · 5h 8% · 7d 31% · $1.23
 ```
 
+E se a sua statusline travar ou falhar, a linha do WatchAI assume em 5 s, em vez
+de pendurar o prompt.
+
 ⚠️ **É a única configuração de agente que o WatchAI tem, e é opcional.** O resto
 do app não depende dela: sem ela você fica sem a linha do Claude Code e mais
-nada. Se você já tem uma statusline, ela é sua — não troque por esta sem querer.
+nada. Não existe plugin que resolva — a `statusLine` não é um componente que
+plugin do Claude Code possa trazer (são Skills, Agents, Hooks, MCP e LSP), então
+`settings.json` é o único caminho, e este comando é a forma menos invasiva de
+percorrê-lo.
 
 ## ② Título do painel
 
@@ -835,6 +859,8 @@ WatchAI/
 │   ├── notify.py                # notificação do sistema (libnotify/osascript/toast)
 │   ├── focus.py                 # `G`: levanta a janela da sessão (e toca o sino)
 │   ├── config.py                # preferências salvas (~/.config/watchai/config.json)
+│   ├── statusline.py            # liga/desliga a statusline do Claude Code sem
+│   │                            # sobrescrever a que a pessoa já tem
 │   ├── models/                  # Status, Agent, Session (= terminal), SessionStore
 │   ├── providers/               # ← a detecção real
 │   │   ├── agents.py            # quem é agente (e quem só tem o nome parecido)
@@ -884,7 +910,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-164 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
+184 testes headless (sem terminal real, **sem tocar áudio**, **sem notificar o sistema**, sem ler nem escrever
 a sua config, **sem olhar os processos da máquina** e **sem olhar o seu consumo**
 — a tabela de processos é injetada, os rollouts são arquivos de mentira e o
 relógio é um argumento, então a suíte dá o mesmo resultado no seu computador e no
@@ -916,6 +942,14 @@ absurda, carimbo implausível), a divergência de nome entre `used_percent` e
 entrada não levanta), o cache de 30 s, o header crescendo e encolhendo com o
 dado — e a interface em **95% e 100%**, exercitada escrevendo o número num
 rollout de mentira, sem gastar cota para chegar nele.
+
+`tests/test_statusline.py` cobre a única configuração de agente que existe, e
+cobre principalmente o que ela **não** pode fazer: a statusline que a pessoa já
+tinha é embrulhada e continua sendo a linha que aparece, o desinstalar devolve o
+comando original com as opções dele e sem deixar resíduo, instalar duas vezes não
+embrulha a nossa própria, o arquivo escolhido é o que o agente de fato aplica
+(`settings.local.json` tem precedência), as outras preferências do agente ficam
+intactas, e uma statusline embrulhada que trava ou falha não pendura o prompt.
 
 CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 

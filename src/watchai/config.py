@@ -22,6 +22,9 @@ ALERTS_KEY = "alerts"
 NOTIFY_KEY = "notify"
 SORT_KEY = "sort_by_attention"
 AGENTS_KEY = "agents"
+# O comando de statusline que existia no Claude Code antes de o WatchAI entrar.
+# Guardado para ser chamado no lugar do nosso e devolvido no desinstalar.
+WRAPPED_KEY = "statusline_wrapped"
 
 
 def config_dir() -> Path:
@@ -146,6 +149,21 @@ def load_agents() -> dict[str, list[str]]:
     return saida
 
 
+def load_statusline_wrapped() -> str | None:
+    """A statusline que já existia no Claude Code, se o WatchAI embrulhou uma.
+
+    Quem tinha statusline não pode perdê-la por instalar um monitor: o nosso modo
+    `--statusline` chama este comando com a mesma entrada e mostra a saída dele.
+    """
+    valor = load().get(WRAPPED_KEY)
+    return valor if isinstance(valor, str) and valor.strip() else None
+
+
+def save_statusline_wrapped(comando: str | None) -> bool:
+    """Guarda (ou esquece, com `None`) a statusline embrulhada."""
+    return save(**{WRAPPED_KEY: comando if comando else None})
+
+
 def load_notify(default: bool = False) -> bool:
     """Se a notificação do sistema está ligada — interruptor próprio, separado
     do bip.
@@ -187,10 +205,12 @@ __all__ = [
     "load_alerts",
     "load_notify",
     "load_sort",
+    "load_statusline_wrapped",
     "load_theme",
     "save",
     "save_alerts",
     "save_notify",
     "save_sort",
+    "save_statusline_wrapped",
     "save_theme",
 ]

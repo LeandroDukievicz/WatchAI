@@ -31,10 +31,26 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   permissão viram linha vazia — isto ocupa o lugar do prompt de quem está
   trabalhando. O bloco é guardado **como veio**, e quem normaliza é a leitura:
   quando o formato mudar, ninguém precisa reconfigurar nada.
+- **`watchai --install-statusline` e `watchai --uninstall-statusline`**, para
+  isso servir a qualquer instalação e não só à máquina de quem escreveu o README.
+  **Quem já tem uma statusline não perde a dela**: a original é embrulhada — o
+  WatchAI é chamado no lugar dela, guarda o consumo, executa a de antes com a
+  mesma entrada e imprime a saída dela, então na prática a statusline da pessoa
+  continua idêntica e a barra aparece no WatchAI. Desinstalar devolve o comando
+  original com as opções que ele tinha, e sem deixar chave nossa para trás.
+  O comando também resolve duas coisas que um trecho de README não resolve:
+  escreve **o caminho que funciona naquela máquina** (`watchai` puro para quem
+  instalou por pipx ou snap, caminho do interpretador para quem roda de um clone)
+  e escreve **no arquivo que o agente aplica** — se é o `settings.local.json` que
+  define a `statusLine`, é nele que se mexe, e se os dois definem ele avisa em vez
+  de adivinhar. Escrita atômica, cópia em `settings.json.watchai.bak`, idempotente,
+  e uma statusline embrulhada que trava não pendura o prompt (5 s e a nossa
+  assume).
 - **É a primeira (e única) configuração de agente que o WatchAI tem**, e é
-  estritamente opcional: sem ela falta a linha do Claude Code e mais nada. O
-  README ganhou a ressalva explícita em vez de perder a frase que prometia
-  configuração zero.
+  estritamente opcional: sem ela falta a linha do Claude Code e mais nada. Não há
+  alternativa mais elegante escondida: `statusLine` **não** é um componente que
+  plugin do Claude Code possa trazer (são Skills, Agents, Hooks, MCP e LSP), então
+  `settings.json` é o único caminho.
 - **Empacotamento para Snap** (`snap/snapcraft.yaml`), com job de CI que
   constrói **e instala e roda** o que construiu: snap classic de app Python
   quebra calado quando o patchelf não acerta o interpretador, e o build passa
@@ -107,6 +123,11 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   madrugada e o rollout continua guardando os 18% de então. O próprio `resets_at`
   diz que virou, e a tela mostra `—` em vez de um número morto. Foi a mesma
   armadilha que o Claude Code corrigiu na 2.1.251.
+- **Um `resets_at` adulterado virava "zera em 26755d22h" na tela.** A validação
+  só conferia se o carimbo era de uma época plausível (entre 2020 e 2100), o que
+  para uma janela de 5 h é frouxo demais. Agora o reset também tem de caber no
+  tamanho da própria janela; não cabendo, perde-se o contador e fica o percentual
+  — são dois dados, e só um ficou sem pé.
 - **`sessions_max_height` não conhecia a altura do header**, que era a constante
   3 em dois lugares. Um header que cresce sem entrar nessa conta tira linhas do
   EVENT STREAM em silêncio — agora ele avisa (`AppHeader.Grew`) e o Dashboard

@@ -297,6 +297,11 @@ mudanças de rumo; o que apareceu na implementação está marcado abaixo.
       [0, 100], janela positiva e plausível, reset num tempo que existe (aceita
       milissegundos). Reset ruim custa o "zera em", não a barra
 - [x] **A idade do dado à vista**, acima de 5 minutos: `(3h ago)`
+- [x] **O reset também tem de caber no tamanho da janela.** A faixa de época
+      (2020–2100) é frouxa para uma janela de 5 h: um carimbo adulterado saía como
+      `zera em 26755d22h`, absurdo desenhado com cara de informação. Achado
+      montando um usuário fictício para provar que o caminho serve a qualquer
+      instalação
 - [x] **Achado na implementação, e não estava no plano: janela vencida.** O caso
       comum, não o raro — você usou o codex ontem, a janela de 5 h virou de
       madrugada e o rollout guarda os 18% de então. `Janela.vencida()` detecta
@@ -321,6 +326,29 @@ mudanças de rumo; o que apareceu na implementação está marcado abaixo.
       opcional, e o README ganhou a ressalva explícita em vez de perder a frase
       ("não há API, hook, credencial nem configuração de agente envolvida" agora
       diz que há **uma**, opcional, e qual)
+- [x] **`watchai --install-statusline` / `--uninstall-statusline`**, porque a
+      primeira versão servia a esta máquina e não a qualquer instalação. O que o
+      README não conseguia resolver, e o comando resolve:
+      - **quem já tem statusline não perde a dela.** A original é embrulhada: o
+        WatchAI recebe o JSON, guarda o consumo, chama o comando de antes com a
+        mesma entrada e imprime a saída **dele**. O aviso do README ("não troque
+        por esta sem querer") era um pedido para a pessoa fazer o trabalho que o
+        programa tem de fazer
+      - **escreve o comando que funciona ali**: `watchai` puro para pipx/snap,
+        caminho do interpretador para quem roda de um clone
+      - **escreve no arquivo que o agente aplica**: `settings.local.json` tem
+        precedência, e se os dois definem `statusLine` o comando avisa em vez de
+        adivinhar. Instalar no arquivo errado deixaria a barra invisível sem erro
+        nenhum na tela
+      - idempotente, com cópia em `settings.json.watchai.bak`, escrita atômica, e
+        sem deixar resíduo nosso ao desinstalar (o `refreshInterval` só entra
+        quando o slot estava vazio)
+      - embrulhada que trava ou falha não pendura o prompt: 5 s de espera e a
+        nossa linha assume
+- [x] **Apurado no caminho: plugin do Claude Code não pode trazer `statusLine`.**
+      O inventário de componentes de um plugin é Skills, Agents, Hooks, MCP e LSP
+      (`claude plugin details`). Então `settings.json` é o único caminho, e não há
+      distribuição mais elegante esperando ser descoberta
 
 Fora do escopo do item, e continua valendo: não derivar percentual somando
 tokens, não rodar `claude -p` para perguntar, não raspar a TUI, não ler

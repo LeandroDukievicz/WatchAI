@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .transcript import _epoch, _por_mtime, _tail
@@ -61,6 +61,13 @@ CURTA_MAX_MINUTOS = 24 * 60
 EPOCH_MIN = 1_577_836_800.0  # 2020-01-01
 EPOCH_MAX = 4_102_444_800.0  # 2100-01-01
 JANELA_MAX_MINUTOS = 366 * 24 * 60
+RESET_MAX_JANELAS = 2
+
+# Até quanto adiante o reset pode estar para ainda fazer sentido, em múltiplos do
+# tamanho da janela. Uma janela de 5 h não zera daqui a 70 anos: só a faixa de
+# época deixava passar um `resets_at` adulterado como "zera em 26755d22h", que é
+# número absurdo desenhado com cara de informação. Dois é folga para relógio
+# torto e para o servidor contar a janela do próprio jeito.
 
 # Percentual acima disto merece cor: amarelo quando aperta, vermelho quando
 # está no fim. Quem decide a cor é o widget; o limiar mora aqui porque é
@@ -232,6 +239,20 @@ def _janela(bruto, minutos_supostos: int | None = None) -> Janela | None:
     return Janela(usado=usado, minutos=int(minutos), zera_em=zera)
 
 
+def _reset_crivel(janela: Janela, referencia: float) -> Janela:
+    """A mesma janela, sem o `resets_at` quando ele não cabe no próprio tamanho.
+
+    Perder o "zera em" e manter o percentual é a troca certa: são dois dados, e
+    só um deles ficou sem pé.
+    """
+    if janela.zera_em is None:
+        return janela
+    teto = referencia + janela.minutos * 60 * RESET_MAX_JANELAS
+    if janela.zera_em > teto:
+        return replace(janela, zera_em=None)
+    return janela
+
+
 def consumo(kind: str, bruto, medido: float | None = None) -> Consumo | None:
     """Normaliza o `rate_limits` de qualquer um dos dois agentes.
 
@@ -244,12 +265,14 @@ def consumo(kind: str, bruto, medido: float | None = None) -> Consumo | None:
         return None
     curta: Janela | None = None
     longa: Janela | None = None
+    referencia = medido if medido is not None else time.time()
     for nome, valor in bruto.items():
         if not isinstance(nome, str) or nome in NAO_JANELA:
             continue
         janela = _janela(valor, MINUTOS_POR_NOME.get(nome.lower()))
         if janela is None:
             continue
+        janela = _reset_crivel(janela, referencia)
         if janela.curta and curta is None:
             curta = janela
         elif not janela.curta and longa is None:
@@ -399,21 +422,61 @@ def _atalho_casa(caminho: str) -> str:
     return "~" + caminho[len(casa) :] if caminho.startswith(casa + os.sep) else caminho
 
 
-def statusline(texto: str, pasta: Path | None = None, agora: float | None = None) -> str:
+# Quanto esperamos pela statusline que embrulhamos. Ela roda a cada render do
+# agente; se travar, a linha do WatchAI aparece no lugar em vez de pendurar a
+# tela de quem está trabalhando.
+ESPERA_EMBRULHADA = 5.0
+
+
+def statusline(texto: str, pasta: Path | None = None, agora: float | None = None,
+               embrulhada: str | None = "") -> str:
     """O modo `watchai --statusline`: recebe o JSON do agente, guarda o limite
     e devolve a linha que ele vai mostrar.
 
     Roda dentro do Claude Code, a cada render, então **não levanta nunca** e não
     demora: JSON quebrado, disco cheio ou campo novo viram linha vazia — o
     agente mostra nada, que é melhor que mostrar erro no lugar do prompt.
+
+    `embrulhada` é a statusline que **já existia** na máquina, quando existia:
+    quem instala um monitor não pode perder a linha que já usava. `""` (o padrão)
+    significa "descubra na config"; `None`, "não há nenhuma".
     """
     try:
-        return _statusline(texto, pasta, agora if agora is not None else time.time())
+        if embrulhada == "":
+            from .. import config
+
+            embrulhada = config.load_statusline_wrapped()
+        return _statusline(texto, pasta, agora if agora is not None else time.time(), embrulhada)
     except Exception:
         return ""
 
 
-def _statusline(texto: str, pasta: Path | None, agora: float) -> str:
+def _repassar(comando: str, texto: str) -> str | None:
+    """Chama a statusline de antes com a mesma entrada e devolve a saída dela.
+
+    `shell=True` porque é exatamente assim que o Claude Code executaria esse
+    comando — ele sai do `settings.json` da própria pessoa, não da rede. Falha,
+    demora ou saída vazia devolvem `None`, e a linha do WatchAI assume: prompt
+    com informação errada é pior que prompt com informação nossa.
+    """
+    import subprocess
+
+    try:
+        saida = subprocess.run(
+            comando,
+            shell=True,
+            input=texto,
+            capture_output=True,
+            text=True,
+            timeout=ESPERA_EMBRULHADA,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    linha = (saida.stdout or "").rstrip("\n")
+    return linha if linha.strip() else None
+
+
+def _statusline(texto: str, pasta: Path | None, agora: float, embrulhada: str | None = None) -> str:
     try:
         dados = json.loads(texto)
     except ValueError:
@@ -427,6 +490,13 @@ def _statusline(texto: str, pasta: Path | None, agora: float) -> str:
             {"kind": "claude", "medido": agora, "source": "statusline", "rate_limits": limites},
             pasta,
         )
+
+    # Guardar o consumo é o que o WatchAI vinha fazer aqui; a linha impressa é de
+    # quem já tinha uma, se tinha.
+    if embrulhada:
+        repassada = _repassar(embrulhada, texto)
+        if repassada is not None:
+            return repassada
 
     partes = []
     espaco = dados.get("workspace") if isinstance(dados.get("workspace"), dict) else {}
