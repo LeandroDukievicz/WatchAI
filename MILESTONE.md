@@ -334,8 +334,12 @@ mudanças de rumo; o que apareceu na implementação está marcado abaixo.
         mesma entrada e imprime a saída **dele**. O aviso do README ("não troque
         por esta sem querer") era um pedido para a pessoa fazer o trabalho que o
         programa tem de fazer
-      - **escreve o comando que funciona ali**: `watchai` puro para pipx/snap,
-        caminho do interpretador para quem roda de um clone
+      - **escreve um comando que o agente consegue chamar**, que não é o mesmo
+        que um comando que funciona no seu terminal: o Claude Code executa a
+        statusline com o PATH **dele**. Nome puro só onde o executável está num
+        `bin` global (pipx, snap, pacote); num venv ou clone, caminho absoluto.
+        Descoberto instalando o wheel num venv de estranho: o nome puro dava
+        `sh: watchai: not found`, statusline vazia e nenhum erro na tela
       - **escreve no arquivo que o agente aplica**: `settings.local.json` tem
         precedência, e se os dois definem `statusLine` o comando avisa em vez de
         adivinhar. Instalar no arquivo errado deixaria a barra invisível sem erro

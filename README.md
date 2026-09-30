@@ -337,10 +337,12 @@ comando original, com as opções que ele tinha — e há uma cópia do arquivo 
 
 O comando também resolve o que um README não consegue:
 
-- escreve **o caminho que funciona na sua máquina** — `watchai` puro para quem
-  instalou por `pipx` ou snap, o caminho do interpretador para quem roda de um
-  clone (senão o agente chamaria um comando que não existe, e a linha sairia
-  vazia sem dizer por quê);
+- escreve **um comando que o agente consegue chamar**, que não é a mesma coisa
+  que um comando que funciona no seu terminal: o Claude Code executa a statusline
+  com o PATH **dele**. `watchai` puro só vale quando o executável está num `bin`
+  global (`pipx`, snap, gerenciador de pacote); num venv ou num clone vale o
+  caminho absoluto, senão sai `sh: watchai: not found`, statusline vazia e nenhum
+  erro na tela;
 - escreve **no arquivo certo**: se é o seu `settings.local.json` que define a
   `statusLine`, é nele que se mexe — e se os dois definem, ele avisa em vez de
   adivinhar;

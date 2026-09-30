@@ -123,6 +123,14 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   madrugada e o rollout continua guardando os 18% de então. O próprio `resets_at`
   diz que virou, e a tela mostra `—` em vez de um número morto. Foi a mesma
   armadilha que o Claude Code corrigiu na 2.1.251.
+- **A statusline instalada de dentro de um venv não funcionava — e falhava
+  calada.** O comando escrito era o nome puro, `watchai`, que existe no terminal
+  de quem ativou o venv e **não** existe quando o Claude Code chama a statusline,
+  porque ele executa com o PATH dele: `sh: watchai: not found`, statusline vazia,
+  nenhum erro na tela. Só apareceu ao montar uma instalação de estranho num venv
+  limpo. Agora o nome puro vale apenas quando o executável está num `bin` global
+  (`pipx`, snap, gerenciador de pacote); fora disso vai o caminho absoluto, que
+  não depende de PATH nenhum.
 - **Um `resets_at` adulterado virava "zera em 26755d22h" na tela.** A validação
   só conferia se o carimbo era de uma época plausível (entre 2020 e 2100), o que
   para uma janela de 5 h é frouxo demais. Agora o reset também tem de caber no

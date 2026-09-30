@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 from watchai import config, statusline
 from watchai.providers import limits
@@ -211,13 +212,31 @@ def test_os_dois_arquivos_com_statusline_viram_aviso(tmp_path):
     assert r.ok and "também define uma statusLine" in r.mensagem
 
 
-def test_o_comando_escrito_funciona_nesta_maquina(monkeypatch):
-    """`watchai` no PATH só existe para quem instalou por pipx ou snap. Quem roda
-    de um clone precisa do caminho do interpretador, senão o agente chamaria um
-    comando que não existe e a linha sairia vazia, calada."""
+def test_instalado_num_bin_global_vira_nome_puro(monkeypatch):
+    """Nome puro é legível e continua certo depois de uma atualização — mas só
+    vale onde qualquer shell acha o executável."""
     monkeypatch.setattr(statusline.shutil, "which", lambda _: "/usr/local/bin/watchai")
     assert statusline.comando() == "watchai --statusline"
+    monkeypatch.setattr(statusline.shutil, "which", lambda _: str(Path.home() / ".local/bin/watchai"))
+    assert statusline.comando() == "watchai --statusline"
 
+
+def test_instalado_num_venv_vira_caminho_absoluto(monkeypatch):
+    """O furo que só aparece na máquina de outra pessoa: `watchai` dentro de um
+    venv funciona no terminal de quem ativou o venv e **não** funciona quando o
+    Claude Code chama, porque ele executa com o PATH dele. O resultado é
+    `sh: watchai: not found`, statusline vazia e nenhum erro na tela."""
+    monkeypatch.setattr(statusline.shutil, "which", lambda _: "/home/eu/proj/.venv/bin/watchai")
+    assert statusline.comando() == "/home/eu/proj/.venv/bin/watchai --statusline"
+
+
+def test_caminho_com_espaco_e_citado(monkeypatch):
+    monkeypatch.setattr(statusline.shutil, "which", lambda _: "/home/eu/meus projetos/.venv/bin/watchai")
+    assert statusline.comando() == '"/home/eu/meus projetos/.venv/bin/watchai" --statusline'
+
+
+def test_sem_executavel_vale_o_interpretador(monkeypatch):
+    """Quem roda de um clone, por `python -m watchai`."""
     monkeypatch.setattr(statusline.shutil, "which", lambda _: None)
     gerado = statusline.comando()
     assert "-m watchai --statusline" in gerado and sys.executable in gerado

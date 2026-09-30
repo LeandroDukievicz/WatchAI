@@ -10,9 +10,12 @@ vez de um copiar-e-colar do README:
    a original: ele recebe o JSON, guarda o consumo e chama o comando de antes com
    a mesma entrada, imprimindo a saída **dele**. Quem tinha statusline continua
    com a statusline que tinha, e ganha a barra no WatchAI;
-2. **o comando escrito tem que funcionar naquela máquina.** `watchai` no PATH só
-   existe para quem instalou por `pipx`/snap; quem roda de um clone precisa do
-   caminho do próprio interpretador. Quem decide é `comando()`, não o README.
+2. **o comando escrito tem que funcionar quando o agente o chamar.** Não é a
+   mesma coisa que funcionar no seu terminal: o Claude Code executa a statusline
+   com o PATH **dele**, e um `watchai` que só existe dentro de um venv ativado
+   não está ali. `sh: watchai: not found`, statusline vazia, nenhum erro na tela.
+   Quem decide o que escrever é `comando()`, e ele só usa o nome puro quando o
+   executável mora num `bin` que qualquer shell acha sozinho.
 
 Também escrevemos no arquivo **certo**: se o `settings.local.json` é quem define
 a `statusLine`, é nele que se mexe — escrever no `settings.json` seria escrever
@@ -47,6 +50,12 @@ SUFIXO_BACKUP = ".watchai.bak"
 # a sessão parada que envelhece o dado.
 REFRESH_MS = 30_000
 
+# Diretórios cujo conteúdo um shell de login acha sem ajuda nenhuma — é onde o
+# `pipx`, o snap e os gerenciadores de pacote põem executável. Estando aqui, vale
+# escrever o nome puro, que continua certo depois de uma atualização; fora daqui
+# (venv, clone, instalação exótica) só o caminho absoluto é confiável.
+BINS_GLOBAIS = ("/usr/local/bin", "/usr/bin", "/bin", "/snap/bin", "/opt/homebrew/bin")
+
 
 @dataclass(frozen=True)
 class Resultado:
@@ -54,21 +63,48 @@ class Resultado:
     mensagem: str
 
 
+def _citar(caminho: str) -> str:
+    return f'"{caminho}"' if " " in caminho else caminho
+
+
+def _global(pasta: Path) -> bool:
+    """Se um executável nesta pasta é achado por qualquer shell, sem PATH extra."""
+    try:
+        resolvida = pasta.resolve()
+    except OSError:
+        return False
+    conhecidas = [Path(b) for b in BINS_GLOBAIS]
+    conhecidas.append(Path.home() / ".local" / "bin")  # pipx, nos três sistemas
+    for candidata in conhecidas:
+        try:
+            if resolvida == candidata.resolve():
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def comando(executavel: str | None = None) -> str:
     """O comando que vai para o `settings.json`, escolhido nesta máquina.
 
-    `watchai` puro quando existe no PATH: é legível e continua valendo depois de
-    uma atualização. Fora disso — clone, venv, `python -m watchai` — vale o
-    caminho absoluto do interpretador que está rodando agora, senão o agente
-    chamaria um comando que não existe e a statusline sairia vazia sem dizer
-    nada.
+    Três casos, e a ordem importa porque o erro é **silencioso**: comando que o
+    agente não acha produz statusline vazia, sem mensagem nenhuma.
+
+    1. instalado num `bin` global (`pipx`, snap, gerenciador de pacote) → nome
+       puro, que é legível e continua valendo depois de uma atualização;
+    2. instalado num venv ou em lugar incomum → **caminho absoluto** do próprio
+       executável. O nome puro funcionaria no seu terminal com o venv ativado e
+       falharia quando o agente chamasse, que é o pior dos dois mundos;
+    3. sem executável nenhum (rodando de um clone por `python -m watchai`) →
+       o interpretador de agora, absoluto.
     """
     achado = shutil.which("watchai") if executavel is None else executavel
     if achado and Path(achado).name.startswith("watchai"):
-        return "watchai --statusline"
-    python = sys.executable or "python3"
-    citado = f'"{python}"' if " " in python else python
-    return f"{citado} -m watchai --statusline"
+        caminho = Path(achado)
+        if _global(caminho.parent):
+            return "watchai --statusline"
+        return f"{_citar(str(caminho))} --statusline"
+    return f"{_citar(sys.executable or 'python3')} -m watchai --statusline"
 
 
 def e_nosso(valor) -> bool:
