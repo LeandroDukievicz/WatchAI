@@ -63,6 +63,20 @@ pipx upgrade watchai
 pipx uninstall watchai
 ```
 
+**Um segundo passo, só se você usa o Claude Code** (opcional, e uma vez):
+
+```bash
+watchai --install-statusline
+```
+
+É o que faz aparecer **quanto já foi gasto do plano** no cabeçalho. O codex não
+precisa de nada — o número dele já está no disco. O Claude Code é que não grava
+esse dado em arquivo nenhum: ele só o entrega a scripts de statusline, e este
+comando é quem liga essa ponta. **Se você já tem uma statusline, ela não é
+perdida** — o WatchAI passa a ser chamado no lugar dela, guarda o consumo e mostra
+a saída da sua. `watchai --uninstall-statusline` desfaz. Detalhes em
+[① Cabeçalho](#-quanto-já-foi-gasto-do-plano).
+
 **Para mexer no código:**
 
 ```bash
