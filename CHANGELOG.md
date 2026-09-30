@@ -5,6 +5,10 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+Nada ainda.
+
+## [1.3.0] — 2026-09-30
+
 ### Adicionado
 - **Quanto já foi gasto do plano, no cabeçalho.** Uma linha por agente com as
   duas janelas de limite — a curta (5 h) e a longa (7 dias) —, com barra,
@@ -545,5 +549,6 @@ detecção de processos nem integração com nenhuma IA (ver "Roadmap" no README
 - Simulador que troca os estados sozinho a cada 5–12 s para avaliar a UI em movimento.
 - Suíte de testes headless (17 testes) e CI no GitHub Actions.
 
+[1.3.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.3.0
 [1.1.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.1.0
 [1.0.0]: https://github.com/LeandroDukievicz/WatchAI/tree/v1.0.0

@@ -392,16 +392,22 @@ de um comando que ela possa mandar o usuário instalar.
        <https://pypi.org/manage/account/publishing/> com
        PyPI Project Name `watchai` · Owner `LeandroDukievicz` ·
        Repository `WatchAI` · Workflow `publish.yml` · Environment `pypi`.
-       O nome está **livre** (conferido em 2026-09-28).
-2. [ ] **Criar o environment `pypi`** em *Settings → Environments*. Sem ele o job
-       falha ao pedir o token OIDC.
-3. [ ] **Ligar `PYPI_READY=true`** em *Settings → Secrets and variables →
-       Actions → Variables*.
+       O nome está **livre** (reconferido em 2026-09-30: `pypi.org/pypi/watchai/json`
+       responde 404). **É o único passo que falta, e é o único que não dá para
+       fazer pela linha de comando** — exige sessão no pypi.org.
+2. [x] **Criar o environment `pypi`** — feito em 2026-09-30 por
+       `gh api -X PUT repos/LeandroDukievicz/WatchAI/environments/pypi`. Sem ele o
+       job falha ao pedir o token OIDC.
+3. [x] **Ligar `PYPI_READY=true`** — feito em 2026-09-30 por
+       `gh variable set PYPI_READY --body true`. Sem ela o job `pypi` fica inerte.
 
-Depois disso, publicar é criar a release `v1.2.0` no GitHub — o `publish.yml`
+Depois disso, publicar é criar a release `1.3.0` no GitHub — o `publish.yml`
 dispara sozinho e sobe por *trusted publishing*, sem token guardado.
 
-⚠️ **Versão no PyPI é irreversível**: `1.2.0` não pode ser reenviada, nem
+A **1.2.0 foi apenas etiquetada, nunca lançada**, e desde aquela tag entrou a
+medição de consumo inteira: publicar `1.2.0` mandaria código velho para o PyPI.
+
+⚠️ **Versão no PyPI é irreversível**: `1.3.0` não pode ser reenviada, nem
 apagando. Se quiser ensaiar, o mesmo *trusted publisher* aponta para o TestPyPI.
 
 Enquanto isso, o caminho é
