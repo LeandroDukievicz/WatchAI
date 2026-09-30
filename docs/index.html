@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b111b">
-    <meta name="description" content="Conheça o WatchAI: um painel local que detecta sessões de IA em execução no seu terminal. Instale com pipx e rode em Linux, macOS ou Windows.">
+    <meta name="description" content="Conheça o WatchAI: um painel local que detecta sessões de IA em execução no seu terminal e mostra quanto já foi gasto das janelas de limite do plano. Instale com pipx e rode em Linux, macOS ou Windows.">
     <meta property="og:type" content="website">
     <meta property="og:title" content="WatchAI — suas sessões de IA em uma tela">
     <meta property="og:description" content="Um painel de terminal para acompanhar sessões locais de IA. Conheça os recursos e saiba como instalar.">
@@ -29,6 +29,7 @@
         <nav aria-label="Navegação principal">
           <a href="#visao-geral">Visão geral</a>
           <a href="#recursos">Recursos</a>
+          <a href="#consumo">Consumo</a>
           <a href="#instalacao">Instalação</a>
         </nav>
         <a class="header-github" href="https://github.com/LeandroDukievicz/WatchAI" target="_blank" rel="noopener noreferrer">Ver no GitHub <span aria-hidden="true">↗</span></a>
@@ -107,12 +108,31 @@
         </div>
       </section>
 
+
+      <section class="limits-section container" id="consumo" aria-labelledby="limits-title">
+        <div class="section-heading">
+          <div><span class="section-kicker">03 / CONSUMO</span><h2 id="limits-title">Quanto já foi gasto.<br><span>Sem adivinhar.</span></h2></div>
+          <p>As duas janelas de limite do plano — 5 horas e 7 dias — no alto da tela, com quanto falta para cada uma zerar.</p>
+        </div>
+        <figure class="limits-panel">
+          <div class="preview-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>cabeçalho do watchai</span><span>NÚMERO LIDO, NÃO ESTIMADO</span></div>
+          <pre role="img" aria-label="Duas linhas de limite no cabeçalho: codex com 16 por cento da janela de 5 horas e 18 por cento da de 7 dias; claude com 78 por cento da janela de 5 horas, em amarelo, e 31 por cento da de 7 dias."><span class="l-name">codex </span>  <span class="l-win">5h</span> <span class="l-ok">▓▓</span><span class="l-trough">░░░░░░░░</span> <span class="l-ok">16%</span> <span class="l-dim">· 2h14m</span>   <span class="l-win">7d</span> <span class="l-ok">▓▓</span><span class="l-trough">░░░░░░░░</span> <span class="l-ok">18%</span> <span class="l-dim">· 4d12h</span>
+<span class="l-name">claude</span>  <span class="l-win">5h</span> <span class="l-hot">▓▓▓▓▓▓▓▓</span><span class="l-trough">░░</span> <span class="l-hot">78%</span> <span class="l-dim">· 1h01m</span>   <span class="l-win">7d</span> <span class="l-ok">▓▓▓</span><span class="l-trough">░░░░░░░</span> <span class="l-ok">31%</span> <span class="l-dim">· 2d02h</span></pre>
+          <figcaption>Cinza até 75%, amarelo a partir daí, vermelho a partir de 90% — cor é para estado, e um limite no fim é um estado.</figcaption>
+        </figure>
+        <div class="limits-points">
+          <article><span class="feature-icon green" aria-hidden="true">◆</span><h3>Codex: nada a fazer</h3><p>O número já está no seu disco — no mesmo arquivo de sessão que o WatchAI lê para saber o estado. Instalou, apareceu.</p></article>
+          <article><span class="feature-icon cyan" aria-hidden="true">›</span><h3>Claude Code: um comando</h3><p>Ele não grava esse dado em arquivo nenhum; só entrega a scripts de <em>statusline</em>. O <code>watchai --install-statusline</code> liga essa ponta — e <strong>se você já tem uma statusline, ela não é perdida</strong>: o WatchAI mostra a saída da sua.</p></article>
+          <article><span class="feature-icon amber" aria-hidden="true">!</span><h3>Sem número, sem barra</h3><p>Nada é estimado a partir de tokens. Janela que já virou aparece com um traço em vez de um percentual velho, e dado medido há horas mostra a própria idade.</p></article>
+        </div>
+      </section>
+
       <section class="install-section" id="instalacao" aria-labelledby="install-title">
         <div class="container install-layout">
-          <div class="install-copy"><span class="section-kicker">03 / EXPERIMENTE</span><h2 id="install-title">Um comando.<br><span>Está instalado.</span></h2><p>Em qualquer computador Linux, macOS ou Windows que já tenha pipx, Git e Python 3.10 ou superior, execute o primeiro comando ao lado. O pipx baixa o WatchAI, cria um ambiente isolado e disponibiliza <code>watchai</code> no terminal.</p><p class="install-caveat">Também é necessário ter acesso à internet durante a instalação e um terminal com suporte a Unicode. Se <code>watchai</code> não aparecer depois de instalar, rode <code>pipx ensurepath</code> e abra um terminal novo. Até a publicação no PyPI, o pacote é obtido diretamente deste repositório.</p></div>
+          <div class="install-copy"><span class="section-kicker">04 / EXPERIMENTE</span><h2 id="install-title">Um comando.<br><span>Está instalado.</span></h2><p>Em qualquer computador Linux, macOS ou Windows que já tenha pipx, Git e Python 3.10 ou superior, execute o primeiro comando ao lado. O pipx baixa o WatchAI, cria um ambiente isolado e disponibiliza <code>watchai</code> no terminal. O terceiro comando é opcional e só interessa a quem usa o Claude Code.</p><p class="install-caveat">Também é necessário ter acesso à internet durante a instalação e um terminal com suporte a Unicode. Se <code>watchai</code> não aparecer depois de instalar, rode <code>pipx ensurepath</code> e abra um terminal novo. Até a publicação no PyPI, o pacote é obtido diretamente deste repositório.</p></div>
           <div class="terminal" aria-label="Comandos para instalar e executar o WatchAI">
             <div class="terminal-top"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal</span><span>Linux · macOS · Windows</span></div>
-            <div class="terminal-body"><p class="step-label">01 <span>COLE ESTE ÚNICO COMANDO PARA INSTALAR</span></p><div class="command-line"><pre><code>pipx install git+https://github.com/LeandroDukievicz/WatchAI.git</code></pre><button class="copy-command" type="button" aria-label="Copiar comando de instalação" title="Copiar comando"><svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg><svg class="check-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button></div><p class="step-label">02 <span>DEPOIS, ABRA O WATCHAI</span></p><div class="command-line"><pre><code>watchai</code></pre><button class="copy-command" type="button" aria-label="Copiar comando para abrir o WatchAI" title="Copiar comando"><svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg><svg class="check-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button></div></div>
+            <div class="terminal-body"><p class="step-label">01 <span>COLE ESTE ÚNICO COMANDO PARA INSTALAR</span></p><div class="command-line"><pre><code>pipx install git+https://github.com/LeandroDukievicz/WatchAI.git</code></pre><button class="copy-command" type="button" aria-label="Copiar comando de instalação" title="Copiar comando"><svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg><svg class="check-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button></div><p class="step-label">02 <span>DEPOIS, ABRA O WATCHAI</span></p><div class="command-line"><pre><code>watchai</code></pre><button class="copy-command" type="button" aria-label="Copiar comando para abrir o WatchAI" title="Copiar comando"><svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg><svg class="check-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button></div><p class="step-label">03 <span>OPCIONAL · SÓ PARA QUEM USA O CLAUDE CODE</span></p><div class="command-line"><pre><code>watchai --install-statusline</code></pre><button class="copy-command" type="button" aria-label="Copiar comando para ligar o consumo do Claude Code" title="Copiar comando"><svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg><svg class="check-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button></div><p class="terminal-note">Liga a barra de consumo do Claude Code. Não sobrescreve a statusline que você já tiver — desfaz com <code>watchai --uninstall-statusline</code>. O codex não precisa disso.</p></div>
           </div>
         </div>
       </section>

@@ -333,7 +333,7 @@ número uma vez por sessão.
 | Agente | De onde | Precisa de você? |
 |---|---|---|
 | **codex** | do mesmo `rollout-*.jsonl` que o WatchAI já lê — o codex grava ali um bloco `rate_limits` a cada resposta | **não**, funciona de saída |
-| **Claude Code** | ele **não grava** limite em arquivo nenhum, mas **empurra** o dado para scripts de statusline. Quem recebe e guarda é o `watchai --statusline` | **sim**, um comando: `watchai --install-statusline` |
+| **Claude Code** | ele **não grava** limite em arquivo nenhum, mas **empurra** o dado para scripts de statusline (`five_hour` e `seven_day`, com `used_percentage` e `resets_at`). Quem recebe e guarda é o `watchai --statusline` | **sim**, um comando: `watchai --install-statusline` |
 
 Para ligar a do Claude Code, **um comando**:
 

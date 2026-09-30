@@ -48,17 +48,23 @@ LARGURA_COMPLETA = 96
 LARGURA_MEDIA = 58
 
 
-def barra(usado: float, largura: int = BARRA) -> str:
-    """`▓▓░░░░░░░░` — o percentual em blocos.
+def blocos(usado: float, largura: int = BARRA) -> tuple[int, int]:
+    """Quantos blocos cheios e quantos vazios, para este percentual.
 
     Qualquer uso acima de zero acende **pelo menos um** bloco: barra vazia com
     número diferente de zero ao lado é a barra mentindo. Quem dá a precisão é o
     número; a barra dá a ordem de grandeza.
     """
     if usado <= 0:
-        return VAZIO * largura
+        return 0, largura
     cheios = max(1, min(largura, round(usado / 100 * largura)))
-    return CHEIO * cheios + VAZIO * (largura - cheios)
+    return cheios, largura - cheios
+
+
+def barra(usado: float, largura: int = BARRA) -> str:
+    """`▓▓░░░░░░░░` — o percentual em blocos, como texto."""
+    cheios, vazios = blocos(usado, largura)
+    return CHEIO * cheios + VAZIO * vazios
 
 
 def cor_do_uso(usado: float) -> str:
@@ -208,7 +214,12 @@ class AppHeader(Widget):
                 continue
             cor = cor_do_uso(janela.usado)
             if largura:
-                linha.append(barra(janela.usado, largura), Style(color=cor))
+                # Cheio e vazio em cores diferentes. Só o glifo (▓ contra ░)
+                # separando os dois é distinção fraca: com a mesma cor, a barra
+                # vira um bloco só — visível na captura do README antes disto.
+                cheios, vazios = blocos(janela.usado, largura)
+                linha.append(CHEIO * cheios, Style(color=cor))
+                linha.append(VAZIO * vazios, Style(color=palette.line_hi))
                 linha.append(" ")
             linha.append(f"{janela.usado:3.0f}%", Style(color=cor, bold=janela.usado >= APERTA))
             falta = janela.falta(agora)

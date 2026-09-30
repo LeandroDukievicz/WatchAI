@@ -86,12 +86,16 @@ CAMPOS_USADO = ("used_percent", "used_percentage", "utilization", "used")
 CAMPOS_MINUTOS = ("window_minutes", "window_size_minutes", "window")
 CAMPOS_RESET = ("resets_at", "reset_at", "resets_at_seconds", "resetsAt")
 
-# Tamanho suposto quando o bloco **não** traz `window_minutes`. Quem classifica
-# é sempre o tamanho, e o codex informa o dele; isto é para o Claude Code, cujo
-# campo é novo e do qual o changelog promete só as duas janelas ("5-hour and
-# 7-day windows with `used_percentage` and `resets_at`") — se ele nomear em vez
-# de medir, o nome ainda diz qual é qual. Nome desconhecido e sem tamanho fica
-# de fora: janela que não se sabe medir não vira barra.
+# Tamanho suposto quando o bloco **não** traz `window_minutes`. Deixou de ser
+# precaução e virou o caminho principal do Claude Code: ligada a statusline nesta
+# máquina (2026-09-29, v2.1.278), o que ele manda é
+#
+#     "rate_limits": {"five_hour":  {"used_percentage": 11, "resets_at": 1790749800},
+#                     "seven_day":  {"used_percentage": 26, "resets_at": 1791201600}}
+#
+# — sem `window_minutes` nenhum. Só o codex informa o tamanho. Sem este mapa a
+# barra do Claude não existiria, e falharia calada. Nome desconhecido e sem
+# tamanho continua fora: janela que não se sabe medir não vira barra.
 MINUTOS_POR_NOME = {
     "primary": 300,
     "five_hour": 300,

@@ -293,6 +293,12 @@ mudanças de rumo; o que apareceu na implementação está marcado abaixo.
       Claude Code), e a janela sem `window_minutes` é reconhecida pelo nome
       (`primary`/`five_hour`…). Nome desconhecido **e** sem tamanho fica de fora:
       rotular de 5 h o que pode ser de outro tamanho é inventar
+- [x] **O formato do Claude Code, confirmado** em 2026-09-29 ao ligar a
+      statusline (v2.1.278) — era suposição e virou fato:
+      `{"five_hour": {"used_percentage": 11, "resets_at": …}, "seven_day": {…}}`,
+      **sem `window_minutes`**. O reconhecimento por nome deixou de ser precaução
+      e passou a ser o caminho principal: sem ele a barra do Claude não existiria,
+      e falharia calada
 - [x] **Validação de faixa**, já que o número não é conferível: percentual em
       [0, 100], janela positiva e plausível, reset num tempo que existe (aceita
       milissegundos). Reset ruim custa o "zera em", não a barra

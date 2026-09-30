@@ -170,8 +170,9 @@ def test_o_nome_do_campo_do_claude_tambem_vale():
 
 
 def test_janela_sem_tamanho_e_reconhecida_pelo_nome():
-    """O campo do Claude é novo e o changelog promete só as duas janelas. Se ele
-    nomear em vez de medir, o nome ainda diz qual é qual."""
+    """**É o formato real do Claude Code**, confirmado ao ligar a statusline na
+    v2.1.278: ele manda `five_hour`/`seven_day` sem `window_minutes` nenhum. Sem
+    reconhecer pelo nome, a barra do Claude não existiria — e falharia calada."""
     achado = consumo("claude", {
         "five_hour": {"used_percentage": 8, "resets_at": AGORA + 600},
         "seven_day": {"used_percentage": 31, "resets_at": AGORA + 86400},
@@ -312,6 +313,17 @@ def test_sem_numero_nenhum_a_lista_vem_vazia(tmp_path):
 
 
 # ---- a barra ------------------------------------------------------------------
+
+
+def test_cheio_e_vazio_sao_contados_separados():
+    """A tela pinta os dois com cores diferentes: só o glifo separando ▓ de ░ é
+    distinção fraca demais, e numa captura os dois viram o mesmo bloco."""
+    from watchai.widgets.header import blocos
+
+    assert blocos(0.0) == (0, 10)
+    assert blocos(50.0) == (5, 5)
+    assert blocos(100.0) == (10, 0)
+    assert blocos(0.4) == (1, 9)  # uso acima de zero sempre acende um
 
 
 def test_a_barra_nunca_fica_vazia_com_numero_ao_lado():
