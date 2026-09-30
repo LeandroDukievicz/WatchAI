@@ -100,10 +100,11 @@ def comando(executavel: str | None = None) -> str:
     """
     achado = shutil.which("watchai") if executavel is None else executavel
     if achado and Path(achado).name.startswith("watchai"):
-        caminho = Path(achado)
-        if _global(caminho.parent):
+        if _global(Path(achado).parent):
             return "watchai --statusline"
-        return f"{_citar(str(caminho))} --statusline"
+        # O caminho vai **como veio**: passá-lo por `str(Path(...))` normalizaria
+        # as barras, e quem abre o settings.json quer ler o que reconhece.
+        return f"{_citar(achado)} --statusline"
     return f"{_citar(sys.executable or 'python3')} -m watchai --statusline"
 
 
