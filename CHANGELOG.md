@@ -5,6 +5,10 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+Nada ainda.
+
+## [1.3.0] — 2026-10-01
+
 ### Mudado
 - **A lâmpada vermelha agora diz `STOP`, e não `ERROR`.** O estado nunca foi
   sobre uma coisa ter dado errado — teste vermelho e ferramenta que falha são
@@ -14,8 +18,6 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   que importa saber do outro lado da sala é que aquela sessão parou e depende
   de você. Só o rótulo mudou: o estado continua `Status.ERROR` no código, com a
   mesma cor, o mesmo símbolo, a mesma prioridade e o mesmo timbre de aviso.
-
-## [1.3.0] — 2026-09-30
 
 ### Adicionado
 - **Quanto já foi gasto do plano, no cabeçalho.** Uma linha por agente com as
@@ -558,5 +560,6 @@ detecção de processos nem integração com nenhuma IA (ver "Roadmap" no README
 - Suíte de testes headless (17 testes) e CI no GitHub Actions.
 
 [1.3.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.3.0
+[1.2.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.2.0
 [1.1.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.1.0
-[1.0.0]: https://github.com/LeandroDukievicz/WatchAI/tree/v1.0.0
+[1.0.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.0.0
