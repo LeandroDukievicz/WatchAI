@@ -23,7 +23,7 @@ class Status(Enum):
     WORKING = ("WORKING", "cyan", "◐", False)  # executando (símbolo animado)
     WAITING = ("WAITING", "yellow", "◇", False)  # esperando processo externo
     INPUT = ("INPUT", "magenta", "◆", True)  # esperando ação do usuário
-    ERROR = ("ERROR", "red", "▲", True)  # problema detectado
+    ERROR = ("STOP", "red", "▲", True)  # parou: erro, limite de token, etc.
     OFFLINE = ("OFFLINE", "ghost", "○", False)  # terminal fechado
     STARTING = ("STARTING", "cyan2", "◌", False)  # acabou de iniciar
 

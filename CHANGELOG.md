@@ -5,7 +5,15 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
-Nada ainda.
+### Mudado
+- **A lâmpada vermelha agora diz `STOP`, e não `ERROR`.** O estado nunca foi
+  sobre uma coisa ter dado errado — teste vermelho e ferramenta que falha são
+  trabalho normal e nem acendem a lâmpada. Ele é a sessão que **parou e não
+  volta sozinha**: limite de uso atingido, token expirado, erro de API. Ler
+  `ERROR` numa sessão que só esbarrou na cota do plano dizia a coisa errada; o
+  que importa saber do outro lado da sala é que aquela sessão parou e depende
+  de você. Só o rótulo mudou: o estado continua `Status.ERROR` no código, com a
+  mesma cor, o mesmo símbolo, a mesma prioridade e o mesmo timbre de aviso.
 
 ## [1.3.0] — 2026-09-30
 

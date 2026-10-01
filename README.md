@@ -144,7 +144,7 @@ ele está dormindo com 0% de CPU. E o diário não sabe se o que ele registrou p
 última entrada do diário     +  processo     =  estado
 ─────────────────────────────────────────────────────────
 texto do assistente             qualquer        READY     terminou
-erro de API / limite            qualquer        ERROR     parou e não volta só
+erro de API / limite            qualquer        STOP      parou e não volta só
 resultado de ferramenta         gastando CPU    WORKING   voltou a pensar
 resultado de ferramenta         diário parado   WAITING   rodada em aberto
 chamada de ferramenta           gastando CPU    WORKING   a ferramenta roda
@@ -158,7 +158,7 @@ O diário também diz **desde quando**: o `for MM:SS` do card conta a partir da
 hora real da última mudança, não de quando o WatchAI abriu. Fechar e reabrir o
 app não zera os contadores.
 
-**ERROR não é ferramenta que falhou** — teste vermelho é trabalho normal. É a
+**STOP não é ferramenta que falhou** — teste vermelho é trabalho normal. É a
 sessão que parou e não volta sozinha: limite de uso atingido, token expirado,
 erro de API.
 
@@ -284,15 +284,15 @@ A tela tem quatro regiões fixas:
 
 ```
 ╭─ ◆ WatchAI  SESSION MONITOR ──────────────────────────────────────────────────╮
-│ ACTIVE 05 │ ◐ WORKING 01  ● READY 01  ◆ INPUT 01  ◇ WAITING 01  ▲ ERROR 01  ○ OFFLINE 01   21:25:46 │
+│ ACTIVE 05 │ ◐ WORKING 01  ● READY 01  ◆ INPUT 01  ◇ WAITING 01  ▲ STOP 01  ○ OFFLINE 01   21:25:46 │
 ╰───────────────────────────────────────────────────────────────────────────────╯
 ```
 
 - **ACTIVE** — quantas sessões não estão OFFLINE.
-- **Um chip por estado**, em ordem fixa (WORKING, READY, INPUT, WAITING, ERROR,
+- **Um chip por estado**, em ordem fixa (WORKING, READY, INPUT, WAITING, STOP,
   OFFLINE), para a posição não dançar quando os números mudam. Estado com zero
   fica apagado; com contagem, acende na cor do estado. Os que pedem você
-  (READY, INPUT, ERROR) vêm em negrito.
+  (READY, INPUT, STOP) vêm em negrito.
 - **STARTING só aparece quando existe** — é transitório demais para ocupar espaço fixo.
 - **Relógio** à direita, atualizado a cada 0,5 s.
 - O cabeçalho se adapta à largura: perde o subtítulo `SESSION MONITOR` abaixo de
@@ -407,7 +407,7 @@ se o foco está no EVENT STREAM (`TAB`).
 |---|---|
 | Título na borda | O **caminho onde a aba está aberta** — `~`, `~/Projetos/WatchAI` —, segundo o diário do agente e não o `cwd` do processo: quem abre o agente na home e depois entra no projeto mantém o processo na home para sempre. Vale para toda aba, inclusive a que ficou na home. Caminho fundo demais é cortado pela esquerda (`…/CIENTISTA DE DADOS/Videos`), porque o que identifica está no fim. É relido a cada volta, então trocar de pasta troca o título. Ganha `▶` e vira cyan quando é o card selecionado |
 | `pts/10` na borda | O terminal. No Windows, o shell (`pwsh #4312`) |
-| `● READY` | Estado do terminal: o do agente que mais pede você (ERROR › INPUT › READY › WAITING › WORKING) |
+| `● READY` | Estado do terminal: o do agente que mais pede você (STOP › INPUT › READY › WAITING › WORKING) |
 | `for 04:12` | Há quanto tempo está **neste** estado (não é o tempo de sessão) |
 | `agents` | Quantos agentes rodam ali e, em cada um, o símbolo na cor do **seu** estado |
 | `activity` | O que o agente que decidiu o estado está fazendo (com o nome dele, quando há mais de um) |
@@ -416,15 +416,15 @@ se o foco está no EVENT STREAM (`TAB`).
 
 - **O card inteiro veste a cor da lâmpada** — ele é o semáforo em tamanho
   grande, e é o que se lê do outro lado da sala: moldura e fundo em **verde**
-  (READY), **vermelho** (ERROR) ou **âmbar** (WORKING, WAITING, STARTING e
+  (READY), **vermelho** (STOP) ou **âmbar** (WORKING, WAITING, STARTING e
   INPUT — os quatro estados da lâmpada amarela). OFFLINE não acende lâmpada
   nenhuma e fica neutro.
 - **Selecionado** ganha fundo levemente mais claro e título cyan — mas a moldura
   **mantém a cor do estado**: um READY selecionado continua verde.
 - Os estados dentro do âmbar continuam se distinguindo pelo **símbolo, pelo
-  label e pela lâmpada**: só o INPUT pisca, e só ele e o ERROR deixam o
+  label e pela lâmpada**: só o INPUT pisca, e só ele e o STOP deixam o
   contador em negrito depois de um minuto.
-- **`for MM:SS` fica em negrito depois de 1 minuto** em READY, INPUT e ERROR — é
+- **`for MM:SS` fica em negrito depois de 1 minuto** em READY, INPUT e STOP — é
   o "terminou há dois minutos e você ainda não voltou".
 - **Sessão sem agente é sessão encerrada.** Vale igual para a aba fechada e
   para o agente finalizado com a aba ainda aberta: o card monitora a **sessão de
@@ -460,7 +460,7 @@ selecionada ganha `▶` e nome em cyan.
 │ 21:24:26 ◐ OPENCODE WORKING  editing files                             │
 │ 21:24:04 ● CODEX    READY    task completed                            │
 │ 21:23:16 ◐ CODEX    WORKING  applying patch                            │
-│ 21:22:55 ▲ AIDER    ERROR    test suite failed (exit 1)                │
+│ 21:22:55 ▲ AIDER    STOP     test suite failed (exit 1)                │
 ╰────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -600,7 +600,7 @@ ler qualquer texto. É também a identidade do produto.
 
 ```
 ╭────────╮
-│ ▗▟██▙▖ │  vermelha · ERROR
+│ ▗▟██▙▖ │  vermelha · STOP
 │ ██████ │
 │ ▝▜██▛▘ │
 │ ▗▟██▙▖ │  amarela  · WORKING, WAITING, STARTING e INPUT
@@ -654,7 +654,7 @@ estado sem texto nenhum (ver [Responsividade](#responsividade)).
 
 ## Os avisos (bip e notificação)
 
-Quando uma sessão **entra** em READY, INPUT ou ERROR, o app avisa — a ideia é
+Quando uma sessão **entra** em READY, INPUT ou STOP, o app avisa — a ideia é
 você saber sem estar olhando. São os três estados que param o seu trabalho:
 terminou, travou esperando você, quebrou.
 
@@ -682,7 +682,7 @@ stream de áudio normal toca independente de foco.
 - `B` liga/desliga o som (`B BIP` / `B MUDO` no rodapé); religar confirma com um
   bip. `N` liga/desliga a notificação (`N NOTIF` / `N MUDO`).
 - Uma rajada do **mesmo** aviso vira um bip só (janela de 1 s), sem enfileirar
-  áudio. Mas READY seguido de ERROR são duas notícias diferentes: as duas tocam.
+  áudio. Mas READY seguido de STOP são duas notícias diferentes: as duas tocam.
 - Não avisa na abertura pelas sessões que já estavam lá — só pelo que muda
   depois que você abriu o WatchAI.
 - No máximo 3 notificações por rodada: cinco sessões mudando juntas não viram
@@ -735,7 +735,7 @@ Oito paletas, trocáveis com o app rodando:
   `~/.config/watchai/config.json`) e volta na próxima execução. Arquivo
   corrompido, disco cheio ou tema desconhecido caem no padrão, sem derrubar a TUI.
 - O tema **não muda símbolo nem label** — só cor. O **Grey** é a prova: mesmo sem
-  matiz nenhum, `◐ WORKING` e `▲ ERROR` continuam distinguíveis, que é a garantia
+  matiz nenhum, `◐ WORKING` e `▲ STOP` continuam distinguíveis, que é a garantia
   de quem não enxerga cor.
 - **Tema claro não é tema escuro invertido.** Apagar uma cor é misturá-la com o
   fundo: em fundo escuro isso escurece (e funciona), em fundo claro isso
@@ -753,13 +753,13 @@ Cor **e** símbolo **e** label — dá para ler sem depender só de cor.
 | WORKING | `◐◓◑◒` (giro lento) | cyan | **amarela** | executando | card âmbar |
 | WAITING | `◇` | amarelo | **amarela** | esperando algo que não é você: um processo externo, ou o próprio modelo pensando | card âmbar |
 | INPUT | `◆` (pulso lento) | magenta | **amarela piscando** | esperando ação do usuário | card âmbar + tempo em negrito |
-| ERROR | `▲` (estático) | vermelho | **vermelha** | problema detectado | card vermelho |
+| STOP | `▲` (estático) | vermelho | **vermelha** | problema detectado | card vermelho |
 | OFFLINE | `○` (apagado) | cinza escuro | todas apagadas | terminal fechado | quase some no fundo |
 | STARTING | `◌ ○` | cyan secundário | **amarela** | acabou de iniciar | borda apagada |
 
 Todas as animações são discretas e guiadas pelo mesmo relógio de 0,5 s: o giro do
 WORKING, o pulso lento de READY e INPUT (~4,5 s por ciclo) e o `◌ ○` alternando do
-STARTING. ERROR e OFFLINE são estáticos de propósito.
+STARTING. STOP e OFFLINE são estáticos de propósito.
 
 As cores da tabela são as do tema **WatchAI**; os outros temas remapeiam a cor de
 cada estado, nunca o símbolo nem o label.
@@ -779,7 +779,7 @@ branco suave e cinza.
 | `⇧A` | põe na frente a janela do terminal onde a sessão roda |
 | `T` | abre o seletor de temas (preview ao vivo; `ENTER` salva, `ESC` desfaz) |
 | `V` | alterna **CARDS ⇄ LIST** |
-| `S` | **ordena os cards por atenção** (ERROR › INPUT › READY › WAITING › WORKING) e volta à ordem de descoberta. Nasce desligada: a ordem estável é o que deixa você olhar direto para o card certo sem ler; ordenar compensa quando há sessões demais na tela. Dentro do mesmo estado a ordem de descoberta continua valendo, e a seleção segue a **sessão**, não a posição |
+| `S` | **ordena os cards por atenção** (STOP › INPUT › READY › WAITING › WORKING) e volta à ordem de descoberta. Nasce desligada: a ordem estável é o que deixa você olhar direto para o card certo sem ler; ordenar compensa quando há sessões demais na tela. Dentro do mesmo estado a ordem de descoberta continua valendo, e a seleção segue a **sessão**, não a posição |
 | `R` | refresh — varre os processos na hora (no `--mock`, avança a simulação) |
 | `B` | liga/desliga o bip |
 | `N` | liga/desliga a notificação do sistema |
@@ -835,7 +835,7 @@ keybar ficam sempre visíveis. Testado de 20×10 a 300×80.
 
 `python main.py --mock` troca a detecção por seis sessões de mentira: um
 simulador muda o estado de uma delas a cada **5–12 s**, seguindo transições
-plausíveis (de WORKING sai-se mais para READY do que para ERROR; de OFFLINE só
+plausíveis (de WORKING sai-se mais para READY do que para STOP; de OFFLINE só
 se volta por STARTING, que se resolve em ~4 s).
 
 Serve para avaliar a interface em movimento sem depender do que está aberto na
@@ -945,7 +945,7 @@ OFFLINE → aviso → remoção, os estados lidos do diário (terminou,
 ferramenta pendente com processo parado = INPUT, com processo ocupado =
 WORKING) a garantia de que diário corrompido ou varredura que explode não derrubam
 nada, o tempo do estado vindo do diário (inclusive carimbo no futuro, que não
-pode virar contador negativo), o erro de API virando ERROR, os avisos com
+pode virar contador negativo), o erro de API virando STOP, os avisos com
 timbre por estado, a notificação que só sai com a janela fora de foco e o
 histórico que sobrevive ao fechamento.
 
