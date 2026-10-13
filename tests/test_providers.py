@@ -1124,6 +1124,24 @@ def test_a_varredura_diz_por_que_veio_vazia(monkeypatch):
     assert PROCESSOS_PLAUSIVEIS > 1  # o limite existe e não é trivial
 
 
+def test_snapshot_com_diagnostico_preserva_sessoes_existentes(tmp_path):
+    """Uma varredura incompleta não pode parecer que todos os agentes saíram."""
+    store = SessionStore()
+    monitor = LiveProvider(store, transcripts=Transcripts(tmp_path))
+    sessao = obs(10)
+
+    assert monitor.apply(snap(sessao), AGORA)
+    atual = store.sessions[0]
+    estado = atual.status
+    eventos = list(store.events)
+
+    assert monitor.apply(Snapshot(diagnostico="erro"), AGORA + timedelta(seconds=2))
+    assert atual.status is estado
+    assert atual.closed_at is None
+    assert store.events == eventos
+    assert monitor.diagnostico == "erro"
+
+
 def test_a_tela_vazia_explica_a_causa_certa():
     """O texto que aparece quando não há card: uma frase por causa."""
     import asyncio

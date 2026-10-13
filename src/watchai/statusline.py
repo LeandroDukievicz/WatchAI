@@ -170,7 +170,12 @@ def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
     if atual is not None:
         antigo = atual.get("command") if isinstance(atual, dict) else atual
         if isinstance(antigo, str) and antigo.strip():
-            config.save_statusline_wrapped(antigo)
+            if not config.save_statusline_wrapped(antigo):
+                return Resultado(
+                    False,
+                    "não consegui guardar sua statusline anterior; "
+                    "a configuração do Claude Code não foi alterada.",
+                )
             aviso = (
                 f"\n  Você já tinha uma statusline. Ela **não** foi perdida: o WatchAI chama\n"
                 f"  `{antigo}` com a mesma entrada e mostra a saída dela.\n"

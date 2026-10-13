@@ -129,7 +129,14 @@ class LiveProvider:
     # -- reconciliação (thread da UI) -----------------------------------------
     def apply(self, snap: Snapshot, now: datetime) -> bool:
         agora = now.timestamp()
+        diagnostico_anterior = self.diagnostico
         self.diagnostico = snap.diagnostico
+        # Uma leitura incompleta não prova que as sessões desapareceram.
+        # Mantém o último estado conhecido até uma varredura completa para que
+        # um erro transitório de psutil não marque todas como OFFLINE.
+        if snap.diagnostico:
+            return diagnostico_anterior != snap.diagnostico
+
         mudou = False
         raizes = self._raizes(snap.agents)
         self._leituras = self._diarios(raizes)

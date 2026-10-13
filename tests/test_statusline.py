@@ -98,6 +98,19 @@ def test_a_statusline_que_ja_existia_nao_e_perdida(tmp_path):
     assert lido(casa)["statusLine"]["padding"] == 0
 
 
+def test_nao_substitui_statusline_se_nao_conseguir_guardar_a_anterior(tmp_path, monkeypatch):
+    casa = claude(tmp_path, statusLine={"type": "command", "command": MINHA})
+    original = lido(casa)
+    monkeypatch.setattr(config, "save_statusline_wrapped", lambda _: False)
+
+    resultado = statusline.instalar(casa, nosso="watchai --statusline")
+
+    assert not resultado.ok
+    assert "não foi alterada" in resultado.mensagem
+    assert lido(casa) == original
+    assert not (casa / ("settings.json" + statusline.SUFIXO_BACKUP)).exists()
+
+
 def test_a_linha_que_o_agente_mostra_continua_sendo_a_dela(tmp_path):
     """E o consumo é guardado do mesmo jeito: era isso que o WatchAI vinha
     fazer aqui."""
