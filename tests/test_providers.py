@@ -255,7 +255,7 @@ def test_arvore_do_mesmo_agente_conta_uma_vez():
     assert [a.pid for a in store.sessions[0].agents] == [100]
 
 
-def test_estado_do_card_e_o_do_agente_que_mais_pede_voce():
+def test_estado_do_card_so_fica_pronto_quando_todos_os_agentes_estao_prontos():
     store = SessionStore()
     fonte = Fonte(snap(
         obs(10, "claude", cpu=10.0),
@@ -268,8 +268,34 @@ def test_estado_do_card_e_o_do_agente_que_mais_pede_voce():
     p.poll(AGORA + timedelta(seconds=2))
     estados = {a.label: a.status for a in store.sessions[0].agents}
     assert estados == {"claude": Status.READY, "codex": Status.WORKING}
-    assert store.sessions[0].status is Status.READY  # "terminou" ganha de "trabalhando"
-    assert store.sessions[0].activity.startswith("claude:")  # e diz de quem é
+    assert store.sessions[0].status is Status.WORKING  # o codex ainda não liberou o terminal
+    assert store.sessions[0].activity.startswith("codex:")  # e diz de quem é
+
+
+def test_quatro_prontos_e_um_trabalhando_nao_acendem_verde():
+    store = SessionStore()
+    fonte = Fonte(snap(
+        obs(10, "claude", cpu=10.0),
+        obs(11, "codex", cpu=10.0),
+        obs(12, "gemini", cpu=10.0),
+        obs(13, "aider", cpu=10.0),
+        obs(14, "opencode", cpu=10.0),
+    ))
+    p = provider(store, fonte)
+    p.poll(AGORA)
+
+    fonte.s = snap(
+        obs(10, "claude", cpu=10.0),
+        obs(11, "codex", cpu=10.0),
+        obs(12, "gemini", cpu=10.0),
+        obs(13, "aider", cpu=10.0),
+        obs(14, "opencode", cpu=12.0),
+    )
+    p.poll(AGORA + timedelta(seconds=2))
+
+    assert [a.status for a in store.sessions[0].agents].count(Status.READY) == 4
+    assert store.sessions[0].status is Status.WORKING
+    assert store.sessions[0].activity == "opencode: working"
 
 
 # ---- ciclo de vida do terminal ---------------------------------------------
@@ -565,6 +591,92 @@ def test_saida_da_ferramenta_do_codex_e_trabalho_e_nao_espera(tmp_path):
     p.poll(datetime.now() + timedelta(seconds=30))
     agente = store.sessions[0].agents[0]
     assert agente.status is Status.WORKING
+
+
+def test_saida_de_ferramenta_gigante_nao_cega_o_diario(tmp_path):
+    """Um evento maior que a janela da cauda apagava o diário inteiro.
+
+    Caso real, colhido de uma sessão desta máquina em 2026-10-14: a saída de
+    uma ferramenta veio num **único** evento de 722 KB. A cauda lia 64 KB do
+    fim, caía no meio daquela linha, descartava o pedaço cortado — não é JSON —
+    e devolvia vazio. Vazio é lido como "não existe diário", o estado voltava a
+    sair da CPU, e um agente que espera a rede não gasta CPU: o card ficava
+    **verde com o codex trabalhando**.
+    """
+    enorme = "x" * (64 * 1024 + 1)
+    escreve_rollout_codex(tmp_path, "/home/eu/proj", [
+        {"timestamp": "2026-10-14T19:03:50.000Z", "type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "shell",
+            "arguments": {"command": "cat arquivo-grande"},
+        }},
+        {"timestamp": "2026-10-14T19:03:53.000Z", "type": "response_item", "payload": {
+            "type": "custom_tool_call_output", "output": enorme,
+        }},
+        # O ruído de contabilidade que o codex 0.162 passou a intercalar: nada
+        # aqui diz em que estado a sessão está, e é tudo o que sobrava na janela.
+        {"timestamp": "2026-10-14T19:03:53.200Z", "type": "event_msg", "payload": {
+            "type": "token_count", "info": {"total_token_usage": {"total_tokens": 1}},
+        }},
+        {"timestamp": "2026-10-14T19:04:07.900Z", "type": "event_msg", "payload": {
+            "type": "item_completed", "item": {"type": "Reasoning"},
+        }},
+    ])
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "codex", cpu=0.0))), Transcripts(tmp_path))
+    p.poll(datetime.now() + timedelta(seconds=30))
+    agente = store.sessions[0].agents[0]
+    assert agente.status is Status.WORKING
+    assert agente.status.slot != "green"
+
+
+def test_diario_que_fica_ilegivel_nao_acende_o_verde(tmp_path):
+    """Segunda camada: quando a leitura não entende nada do que mudou no
+    arquivo, vale o que o diário dizia antes — nunca o verde.
+
+    É o que sobra para o caso extremo (evento acima do teto da cauda, formato
+    novo). Perder a leitura devolvia o estado para a CPU, que é zero em quem
+    espera a rede, e o card acendia como se a tarefa tivesse acabado."""
+    from watchai.providers.transcript import FERRAMENTA, Leitura
+
+    arquivo = escreve_rollout_codex(tmp_path, "/home/eu/proj", [
+        {"timestamp": "2026-10-14T19:03:50.000Z", "type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "shell",
+            "arguments": {"command": "pytest"},
+        }},
+    ])
+    transcripts = Transcripts(tmp_path)
+    store = SessionStore()
+    p = provider(store, Fonte(snap(obs(10, "codex", cpu=0.0))), transcripts)
+    p.poll(datetime.now())
+    # ferramenta pendente com o diário recém-escrito: espera por algo externo
+    assert store.sessions[0].agents[0].status is Status.WAITING
+
+    # o arquivo cresce com algo que o leitor não entende
+    with arquivo.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"type": "sei_la_o_que", "payload": {"type": "formato_novo"}}) + "\n")
+
+    leitura = transcripts.atribuir("codex", [(10, 0.0, "/home/eu/proj")])[10]
+    assert leitura is not None, "a leitura anterior tinha de ter sido preservada"
+    assert leitura.estado == FERRAMENTA
+    assert isinstance(leitura, Leitura)
+
+
+def test_a_cauda_cresce_so_quando_precisa(tmp_path):
+    """A janela que cresce não pode virar leitura de megabytes por volta: ela
+    só cresce quando a volta anterior voltou curta."""
+    from watchai.providers.transcript import CAUDA_MINIMO, _tail
+
+    arquivo = tmp_path / "diario.jsonl"
+    # cada entrada com 1 KB de recheio: 200 delas passam dos 64 KB da janela
+    muitas = [
+        {"type": "event_msg", "payload": {"type": "token_count"}, "i": i, "pad": "p" * 1024}
+        for i in range(200)
+    ]
+    arquivo.write_text("\n".join(json.dumps(e) for e in muitas) + "\n", encoding="utf-8")
+    entradas = _tail(arquivo)
+    assert len(entradas) >= CAUDA_MINIMO
+    # não leu o arquivo todo: as primeiras entradas ficaram fora da janela
+    assert len(entradas) < len(muitas)
 
 
 def test_o_titulo_do_card_e_o_caminho_da_aba():

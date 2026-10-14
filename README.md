@@ -407,7 +407,7 @@ se o foco está no EVENT STREAM (`TAB`).
 |---|---|
 | Título na borda | O **caminho onde a aba está aberta** — `~`, `~/Projetos/WatchAI` —, segundo o diário do agente e não o `cwd` do processo: quem abre o agente na home e depois entra no projeto mantém o processo na home para sempre. Vale para toda aba, inclusive a que ficou na home. Caminho fundo demais é cortado pela esquerda (`…/CIENTISTA DE DADOS/Videos`), porque o que identifica está no fim. É relido a cada volta, então trocar de pasta troca o título. Ganha `▶` e vira cyan quando é o card selecionado |
 | `pts/10` na borda | O terminal. No Windows, o shell (`pwsh #4312`) |
-| `● READY` | Estado do terminal: o do agente que mais pede você (STOP › INPUT › READY › WAITING › WORKING) |
+| `● READY` | O terminal só fica pronto quando todos os agentes podem receber outro prompt. Se qualquer agente ainda está trabalhando, esperando ou iniciando, o card fica âmbar; STOP e INPUT mantêm suas prioridades. |
 | `for 04:12` | Há quanto tempo está **neste** estado (não é o tempo de sessão) |
 | `agents` | Quantos agentes rodam ali e, em cada um, o símbolo na cor do **seu** estado |
 | `activity` | O que o agente que decidiu o estado está fazendo (com o nome dele, quando há mais de um) |

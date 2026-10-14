@@ -5,7 +5,26 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
-Nada ainda.
+### Corrigido
+- **Verde com o agente trabalhando — a causa raiz estava na leitura do diário.**
+  Um evento sozinho pode ser maior que a janela de 64 KB que lemos do fim do
+  arquivo: numa sessão desta máquina, a saída de uma ferramenta veio num
+  **único** evento de 722 KB. A janela caía no meio daquela linha, o pedaço
+  cortado era descartado — não é JSON — e a cauda voltava vazia. Vazia é lida
+  como "não existe diário", o estado voltava a sair da CPU, e quem espera a
+  resposta da rede não gasta CPU: **o card acendia verde no meio do trabalho**.
+  Agora a janela cresce até trazer histórico suficiente, e vale para os três
+  leitores (o codex 0.162 ainda intercala uma dezena de eventos de
+  contabilidade entre dois que dizem algo, o que agravava o problema).
+- **Diário que fica ilegível não acende mais o verde.** Quando a leitura não
+  entende nada do que mudou no arquivo — evento acima do teto, formato novo —,
+  vale o que o diário dizia antes, com o carimbo de agora. Se o arquivo segue
+  crescendo, o agente segue trabalhando; se para, o próprio envelhecimento leva
+  o card para "esperando você", nunca para o verde.
+- **O card podia ficar verde enquanto outro agente ainda trabalhava.** READY de
+  um agente tinha prioridade sobre WORKING de outro no mesmo terminal. Agora o
+  terminal só fica verde quando todos os agentes estão prontos para receber um
+  novo prompt; atividade em andamento mantém o card âmbar.
 
 ## [1.3.0] — 2026-10-01
 

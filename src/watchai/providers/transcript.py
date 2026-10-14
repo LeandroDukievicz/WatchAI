@@ -36,8 +36,18 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 # Quanto lemos do fim do arquivo. Uma entrada de transcript raramente passa de
-# alguns KB; 64 KB cobrem várias com folga.
+# alguns KB; 64 KB cobrem várias com folga. "Raramente" não é "nunca", e é por
+# isso que a janela cresce em `_tail`: uma saída de ferramenta que despejou um
+# arquivo inteiro vira **um** evento de centenas de KB.
 CAUDA_BYTES = 64 * 1024
+
+# Quantas entradas a cauda tem de trazer antes de se dar por satisfeita. Uma só
+# não basta: os leitores varrem de trás para frente até achar um evento que
+# reconhecem, e o codex intercala uma dezena de eventos de contabilidade
+# (`item_completed`, `token_count`) entre dois que dizem algo. Com a linha
+# gigante ocupando a janela, sobrava uma entrada muda — bastava para a cauda
+# parar de crescer e não bastava para o leitor decidir nada.
+CAUDA_MINIMO = 16
 
 # "Pensando" há mais de dois minutos sem nada novo no arquivo não é pensar: é
 # um diário parado. Aí o processo decide.
@@ -281,30 +291,49 @@ def _texto(conteudo) -> str:
 
 
 def _tail(caminho: Path, limite: int = CAUDA_BYTES) -> list[dict]:
-    """As últimas entradas JSON do arquivo, da mais antiga para a mais nova."""
-    try:
-        with caminho.open("rb") as f:
-            f.seek(0, os.SEEK_END)
-            tamanho = f.tell()
-            f.seek(max(0, tamanho - limite))
-            bruto = f.read()
-    except OSError:
-        return []
-    linhas = bruto.split(b"\n")
-    if len(linhas) > 1 and tamanho > limite:
-        linhas = linhas[1:]  # a primeira veio cortada ao meio
-    saida = []
-    for linha in linhas:
-        linha = linha.strip()
-        if not linha:
-            continue
+    """As últimas entradas JSON do arquivo, da mais antiga para a mais nova.
+
+    A janela **cresce enquanto não trouxer nenhuma entrada inteira**, e isso é
+    o ponto da função. Um único evento pode ser maior que ela: a saída de uma
+    ferramenta que leu um arquivo grande passa de 700 KB num evento só. Quando
+    isso acontecia, a janela caía no meio da linha, o pedaço cortado era
+    descartado — ele não é JSON — e a cauda voltava **vazia**. Vazia é o pior
+    valor possível aqui: para quem chama, diário vazio é diário que não existe,
+    o estado volta a sair da CPU, e um agente esperando a resposta da rede não
+    gasta CPU. O card ficava **verde no meio do trabalho**, que é exatamente a
+    mentira que este programa não pode contar.
+    """
+    janela = limite
+    while True:
         try:
-            entrada = json.loads(linha)
-        except ValueError:
-            continue
-        if isinstance(entrada, dict):
-            saida.append(entrada)
-    return saida
+            with caminho.open("rb") as f:
+                f.seek(0, os.SEEK_END)
+                tamanho = f.tell()
+                f.seek(max(0, tamanho - janela))
+                bruto = f.read()
+        except OSError:
+            return []
+        inteiro = janela >= tamanho
+        linhas = bruto.split(b"\n")
+        if not inteiro and len(linhas) > 1:
+            linhas = linhas[1:]  # a primeira veio cortada ao meio
+        saida = []
+        for linha in linhas:
+            linha = linha.strip()
+            if not linha:
+                continue
+            try:
+                entrada = json.loads(linha)
+            except ValueError:
+                continue
+            if isinstance(entrada, dict):
+                saida.append(entrada)
+        # Já leu o arquivo todo, ou trouxe histórico bastante, ou bateu no
+        # teto: crescer de 8 em 8 chega ao teto em três passos, e o passo só
+        # acontece quando a volta anterior voltou curta.
+        if len(saida) >= CAUDA_MINIMO or inteiro or janela >= CAUDA_FUNDA:
+            return saida
+        janela = min(janela * 8, CAUDA_FUNDA)
 
 
 def _por_mtime(caminhos, limite: int | None = None) -> list[Path]:
@@ -938,6 +967,17 @@ class Transcripts:
         if anterior is not None and anterior[0] == chave:
             return anterior[1]  # nada mudou: não relê o arquivo
         leitura = self._com_diretorio(caminho, leitor.ler(caminho))
+        if leitura is None and anterior is not None and anterior[1] is not None:
+            # O arquivo mudou e a leitura não entendeu nada do que há nele —
+            # formato novo, evento gigante além do teto da cauda. Isso **não**
+            # é notícia de que a sessão terminou, e tratar como notícia acende
+            # o verde: sem diário o estado volta a sair da CPU, que é zero em
+            # quem espera a rede. Vale o que o diário dizia antes, com o
+            # carimbo de agora — se o arquivo segue crescendo, o agente segue
+            # trabalhando; se parar de crescer, o próprio envelhecimento do
+            # carimbo leva o card para "esperando você", nunca para o verde.
+            agora = self._escrito(caminho)
+            leitura = replace(anterior[1], mtime=agora) if agora else anterior[1]
         self._cache[caminho] = (chave, leitura)
         return leitura
 

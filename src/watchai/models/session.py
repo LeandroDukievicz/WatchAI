@@ -62,9 +62,9 @@ SUMMARY_ORDER = (
     Status.STARTING,
 )
 
-# Um terminal tem vários agentes: o estado do card é o do agente que mais pede
-# você. ERROR e INPUT na frente porque param o seu trabalho; READY antes de
-# WORKING porque "terminou" é a notícia, "ainda trabalhando" é o normal.
+# Prioridade para ordenar sessões quando o usuário pede a visão por atenção.
+# READY fica antes de estados de trabalho porque uma entrega concluída merece
+# destaque nessa lista.
 PRIORIDADE = (
     Status.ERROR,
     Status.INPUT,
@@ -72,6 +72,19 @@ PRIORIDADE = (
     Status.WAITING,
     Status.WORKING,
     Status.STARTING,
+    Status.OFFLINE,
+)
+
+# Estado agregado do terminal: só fica READY quando todos os agentes permitem
+# receber outro prompt. Um agente ainda trabalhando, esperando uma ferramenta
+# ou iniciando impede o verde, mesmo que outro agente já tenha terminado.
+PRIORIDADE_AGREGACAO = (
+    Status.ERROR,
+    Status.INPUT,
+    Status.WAITING,
+    Status.WORKING,
+    Status.STARTING,
+    Status.READY,
     Status.OFFLINE,
 )
 
@@ -87,7 +100,7 @@ def agregar(estados) -> Status:
     estados = set(estados)
     if not estados:
         return Status.OFFLINE
-    return next(s for s in PRIORIDADE if s in estados)
+    return next(s for s in PRIORIDADE_AGREGACAO if s in estados)
 
 
 def ordenar(sessions, por_atencao: bool) -> list["Session"]:
