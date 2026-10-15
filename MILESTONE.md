@@ -520,12 +520,48 @@ nome `watchai` livre, e o CI constrói o snap, instala e roda o binário.
       não enxerga o `/usr/bin` do host.
 - [x] Aceitar a perda do `⇧A` sob strict: ele degrada para o sino na tty e a
       marcação de título, que já são o caminho de fallback. É o único preço.
-- [ ] **Registrar o nome e publicar em `edge` primeiro** — é a sua vez. O nome
-      `watchai` não responde na loja (404 em `api.snapcraft.io`) e não está
-      entre os seus (`snapcraft names` lista `anchor-downloader` e `clinews`).
-      A credencial do `snapcraft` está válida até 2027-09-25 e já tem
-      `package_register`, então é um comando só — mas registrar nome é ato
-      público, e fica com você dizer quando.
+- [x] **Nome registrado** em 2026-10-15 (`snapcraft register watchai`): o nome
+      estava livre e agora é seu, ao lado de `anchor-downloader` e `clinews`.
+- [x] **Revisão 1 enviada** (1.3.1, amd64) com `--release=edge`.
+- [ ] **Liberar a revisão na revisão manual — é a sua vez.** O envio parou em
+      `will need manual review`, com três ocorrências de *human review required
+      due to 'allow-installation' constraint*: uma por `personal-files`. Isso
+      **não é erro**, é o fluxo: `personal-files` sempre passa por gente. A
+      revisão fica na fila e o `edge` só recebe depois do aval — por isso
+      `snapcraft status watchai` ainda diz "no released revisions".
+
+      O destrave é um tópico em <https://forum.snapcraft.io/c/store-requests>,
+      com a conta Ubuntu SSO que você já usa na loja. Texto pronto para colar:
+
+      > **Request for `personal-files` (read-only) for `watchai`**
+      >
+      > `watchai` is a terminal dashboard that shows the state of AI coding
+      > agent sessions (Claude Code, Codex, OpenCode) already running on the
+      > user's machine. It is read-only: it never launches, configures or
+      > talks to the agents.
+      >
+      > The state of each session is read from the journal files the agents
+      > themselves already write to disk. That is the whole point of the app —
+      > the process table alone cannot tell "finished" from "waiting for you",
+      > because an agent waiting on the network uses no CPU.
+      >
+      > Requested paths, all **read-only**:
+      > - `$HOME/.claude/projects`, `$HOME/.claude/settings.json`,
+      >   `$HOME/.claude/settings.local.json` (Claude Code)
+      > - `$HOME/.codex/sessions` (Codex)
+      > - `$HOME/.local/share/opencode/storage` (OpenCode)
+      >
+      > No credential file is requested: Claude Code keeps its token in
+      > `$HOME/.claude/.credentials.json` and Codex in `$HOME/.codex/auth.json`,
+      > and neither path is listed. The app's own configuration stays in
+      > `$SNAP_USER_DATA`, so no write access to `$HOME` is requested at all.
+      >
+      > Source: <https://github.com/LeandroDukievicz/WatchAI>
+
+- [ ] Depois do aval: `snapcraft release watchai 1` para o `edge`, instalar na
+      máquina e conferir o que só aparece confinado — se o painel enxerga as
+      sessões com `snap connect watchai:system-observe` ligado, e se o bip e a
+      notificação saem (os dois foram empacotados para isso, mas só o uso prova).
 - [x] Corrigir `docs/publicacao-snap.html` — a etapa 02 agora diz que está
       feita e aponta o `paths.py`; o `snapcraft.yaml` embutido ganhou o aviso
       de que é rascunho de setembro e não é mais o do repositório.
