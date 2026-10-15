@@ -502,23 +502,33 @@ nome `watchai` livre, e o CI constrói o snap, instala e roda o binário.
 
 **O caminho recomendado, agora que o M13 existe:**
 
-- [ ] Migrar o `snap/snapcraft.yaml` para **`confinement: strict`**, com
-      `system-observe` (conexão manual), `audio-playback`, `desktop` +
-      `libnotify-bin`, e `personal-files` de **leitura** em
-      `$HOME/.claude/projects` e `$HOME/.codex/sessions`. Só o `personal-files`
-      pede revisão, e é do tipo rotineiro.
-- [ ] **Helper de "home real".** Num snap strict o `HOME` aponta para a pasta
-      privada do pacote. São quatro chamadas a corrigir via `SNAP_REAL_HOME`:
-      `transcript.py:726`, `config.py:39`, `live.py:57` e `live.py:72` — as duas
-      últimas só encurtam caminho para `~`, mas mostrariam caminho errado.
-      (No `classic` o `HOME` é o real: conferido com
-      `snap run --shell snapcraft`. Isto é dívida só do strict.)
-- [ ] Aceitar a perda do `⇧A` sob strict: ele degrada para o sino na tty e a
+- [x] Migrar o `snap/snapcraft.yaml` para **`confinement: strict`** — feito em
+      2026-10-14, com `system-observe` (conexão manual), `audio-playback`,
+      `desktop` e três `personal-files` de **leitura**. Junto saiu o que só
+      existia por causa do classic: o Python embarcado, o `patchelf` e o
+      `command: bin/python3 $SNAP/bin/watchai`.
+- [x] **Helper de "home real"** — feito em `src/watchai/paths.py`
+      (`casa_do_usuario()`), com cinco testes em `tests/test_paths.py`. Eram
+      **seis** chamadas, não quatro: `transcript.py`, `limits.py` (duas),
+      `live.py` (duas) e `statusline.py` (duas). O `config.py` ficou **de fora
+      de propósito**: a config é nossa e mora na casa confinada, que já é
+      gravável — mandá-la para a casa real exigiria `personal-files` de
+      **escrita**, que é revisão bem mais dura por uma config de tema.
+- [x] Dois achados que o strict quebraria calado, e foram para dentro do
+      pacote: `paplay` + `sound-theme-freedesktop` (sem eles o bip cai no sino
+      da tty) e o `notify-send` (`libnotify-bin`). Confinado, o `shutil.which`
+      não enxerga o `/usr/bin` do host.
+- [x] Aceitar a perda do `⇧A` sob strict: ele degrada para o sino na tty e a
       marcação de título, que já são o caminho de fallback. É o único preço.
-- [ ] Registrar o nome e publicar em `edge` primeiro.
-- [ ] Corrigir `docs/publicacao-snap.html`, que descreve um `snapcraft.yaml`
-      strict que não é mais o do repositório e ainda manda editar o
-      `Transcripts.__init__` à mão.
+- [ ] **Registrar o nome e publicar em `edge` primeiro** — é a sua vez. O nome
+      `watchai` não responde na loja (404 em `api.snapcraft.io`) e não está
+      entre os seus (`snapcraft names` lista `anchor-downloader` e `clinews`).
+      A credencial do `snapcraft` está válida até 2027-09-25 e já tem
+      `package_register`, então é um comando só — mas registrar nome é ato
+      público, e fica com você dizer quando.
+- [x] Corrigir `docs/publicacao-snap.html` — a etapa 02 agora diz que está
+      feita e aponta o `paths.py`; o `snapcraft.yaml` embutido ganhou o aviso
+      de que é rascunho de setembro e não é mais o do repositório.
 
 **Nota de escopo que ajuda a decidir:** a Snap Store só distribui Linux — que é
 justamente a parte verificada. O risco de plataforma ali é baixo; o bloqueio era

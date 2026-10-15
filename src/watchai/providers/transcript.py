@@ -35,6 +35,8 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from ..paths import casa_do_usuario
+
 # Quanto lemos do fim do arquivo. Uma entrada de transcript raramente passa de
 # alguns KB; 64 KB cobrem várias com folga. "Raramente" não é "nunca", e é por
 # isso que a janela cresce em `_tail`: uma saída de ferramenta que despejou um
@@ -789,7 +791,7 @@ class Transcripts:
     """
 
     def __init__(self, home: Path | None = None) -> None:
-        raiz = home or Path.home()
+        raiz = home or casa_do_usuario()
         self.leitores = {r.kind: r for r in (ClaudeCode(raiz), Codex(raiz), OpenCode(raiz))}
         self._candidatos: dict[tuple[str, str], list[Path]] = {}
         self._faltas: dict[tuple[str, str], int] = {}  # voltas sem diário para todos

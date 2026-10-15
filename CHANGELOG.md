@@ -5,7 +5,30 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
-Nada ainda.
+### Mudado
+- **O snap passou de `classic` para `strict`.** A justificativa escrita para o
+  classic estava meio errada — a notificação **atravessa** o sandbox, com
+  `libnotify-bin` e a interface `desktop`; o que não atravessa é o `⇧A`, que
+  fala com o shell da sessão por D-Bus. E o classic provavelmente seria
+  recusado: um monitor não é nenhuma das categorias que a loja aceita. O que
+  bloqueava o strict de verdade já tinha caído, quando o diretório de cada
+  sessão passou a vir do diário em vez do `cwd` do processo.
+- **A casa do usuário virou uma decisão explícita** (`watchai/paths.py`). Num
+  snap strict o `HOME` é a pasta privada do pacote: **ler o que é do usuário**
+  (`~/.claude`, `~/.codex`, o `~` dos títulos) vai na casa de verdade, via
+  `SNAP_REAL_HOME`; **escrever o que é nosso** (tema, histórico, o recado da
+  statusline) fica na casa confinada, que já é gravável sem pedir permissão
+  nenhuma à loja. Eram seis lugares olhando para `Path.home()` — corrigir só o
+  primeiro deixava o resto mentindo lá dentro.
+- **`--install-statusline` dentro do snap agora explica.** O `~/.claude` é
+  lido e não escrito, de propósito; em vez de um erro de permissão mudo, o
+  comando entrega a linha pronta para colar e aponta o `pipx` como alternativa.
+
+### Removido
+- **O que existia só por causa do classic**: o Python embarcado
+  (`python3-venv`, `python3.12-minimal`, `libpython3.12-*`), o `patchelf` que
+  reescrevia o rpath dele e o `command: bin/python3 $SNAP/bin/watchai`. Um snap
+  strict usa o interpretador da base, e o comando voltou a ser `bin/watchai`.
 
 ## [1.3.1] — 2026-10-14
 

@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..models import AVISO_FECHADO, REMOCAO_FECHADO, Session, SessionStore, Status, agregar
+from ..paths import casa_do_usuario
 from .source import ProcObs, ProcessSource, PsutilSource, Snapshot
 from .transcript import ERRO, FEITO, FERRAMENTA, PENSANDO, Leitura, Transcripts
 
@@ -54,7 +55,7 @@ def _projeto(cwd: str | None) -> str:
     if not cwd:
         return ""
     caminho = Path(cwd)
-    if caminho == Path.home():
+    if caminho == casa_do_usuario():
         return "~"
     return caminho.name or cwd
 
@@ -69,7 +70,7 @@ def _encurtar(caminho: str | None) -> str:
     if not caminho:
         return ""
     try:
-        relativo = Path(caminho).relative_to(Path.home())
+        relativo = Path(caminho).relative_to(casa_do_usuario())
     except ValueError:
         return caminho
     return "~" if str(relativo) == "." else "~/" + relativo.as_posix()

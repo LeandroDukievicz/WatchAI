@@ -1,12 +1,12 @@
 name: snap
 
-# Constrói o snap e **prova que ele roda**: instala o que acabou de sair e
-# chama o comando. Essa segunda parte é o que importa aqui — snap classic de
-# app Python quebra calado quando o patchelf não acerta o interpretador, e o
-# build passa mesmo assim.
+# Constrói o snap e **prova que ele roda confinado**. Essa segunda parte é o
+# que importa: um snap strict quebra de um jeito que o build não vê — o
+# `HOME` lá dentro é a pasta privada do pacote, e um app que lê o disco do
+# usuário passa a não achar nada. O teste abaixo liga as interfaces como quem
+# instala vai ligar, e confere que o binário sobe.
 #
-# Não publica na loja: isso pede credencial e a revisão manual do confinamento
-# classic. O caminho está em docs/publicacao-snap.html.
+# Não publica na loja: isso é um passo com credencial, feito à parte.
 
 on:
   push:
@@ -29,10 +29,26 @@ jobs:
       - uses: snapcore/action-build@v1
         id: build
 
-      - name: Instalar e rodar
+      - name: Instalar
+        run: sudo snap install --dangerous "${{ steps.build.outputs.snap }}"
+
+      - name: Ligar as interfaces de conexão manual
         run: |
-          sudo snap install --classic --dangerous "${{ steps.build.outputs.snap }}"
-          watchai --version
+          for plug in system-observe dot-claude dot-codex dot-opencode; do
+            sudo snap connect "watchai:$plug"
+          done
+          snap connections watchai
+
+      - name: Rodar
+        run: watchai --version
+
+      - name: O confinamento é mesmo strict
+        # `--classic` num yaml strict passaria no build e só apareceria na
+        # revisão da loja; aqui aparece agora.
+        run: |
+          modo=$(snap list watchai | awk 'NR==2 {print $6}')
+          echo "confinamento: ${modo:-(vazio = strict)}"
+          test "$modo" != "classic"
 
       - uses: actions/upload-artifact@v4
         with:

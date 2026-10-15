@@ -898,7 +898,7 @@ WatchAI/
 │   └── styles/app.tcss          # todo o CSS
 ├── tests/                       # suíte headless (conftest silencia o áudio)
 ├── scripts/screenshot.py        # refaz as capturas do README e da landing
-├── snap/snapcraft.yaml          # empacotamento para a loja do Ubuntu (classic)
+├── snap/snapcraft.yaml          # empacotamento para a loja do Ubuntu (strict)
 └── docs/                        # marca e screenshot
 ```
 
@@ -979,8 +979,9 @@ O plano completo, com o porquê de cada item e onde mexer, está em
    suíte nos três, mas ninguém abriu o app num Windows ou num Mac de verdade —
    é código testado, não software verificado. Até lá, o sistema anunciado é
    Linux.
-3. **Enviar o snap para a loja**, em confinamento `strict` — viável desde que o
-   diário deixou de depender do `cwd` do processo.
+3. **Enviar o snap para a loja**, em confinamento `strict` — o empacotamento
+   já está migrado e o CI prova que o pacote confinado sobe; falta registrar o
+   nome e enviar. É o caminho de distribuição escolhido para Linux.
 4. **Extensão do VS Code**, alimentada por um `watchai --json` que ainda não
    existe.
 5. **Casar processo e diário do Claude Code pelo PID**, via

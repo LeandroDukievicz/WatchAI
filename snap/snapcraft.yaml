@@ -12,26 +12,40 @@ description: |
   leitura dos diários que os próprios agentes já gravam no seu disco. Não há
   API, hook, credencial nem configuração de agente envolvida.
 
+  Depois de instalar, ligue as duas conexões manuais:
+
+    snap connect watchai:system-observe
+    snap connect watchai:dot-claude
+    snap connect watchai:dot-codex
+
+  Sem a primeira o painel não enxerga as sessões; sem as outras ele vê os
+  processos mas não o que cada agente está fazendo.
+
 grade: stable
 license: MIT
 website: https://leandrodukievicz.github.io/WatchAI/
 source-code: https://github.com/LeandroDukievicz/WatchAI
 issues: https://github.com/LeandroDukievicz/WatchAI/issues
 
-# Por que **classic** e não strict com interfaces.
+# Por que **strict**, e não classic.
 #
-# Sob confinamento strict daria para ler a tabela de processos
-# (`system-observe`) e os diários (`personal-files`), e o app funcionaria pela
-# metade: detecção e bip. Só que as duas coisas que tiram você da tela ficam de
-# fora — o `⇧A` precisa falar com o shell da sessão gráfica pelo D-Bus (Window
-# Calls, `wmctrl`, `osascript`), e a notificação precisa do `notify-send` do
-# sistema. Nenhum dos dois atravessa o sandbox, e um monitor que avisa sem
-# conseguir levar você até a janela perde metade do motivo de existir.
+# A versão anterior deste arquivo pedia `classic` com a justificativa de que
+# notificação e `⇧A` não atravessam o sandbox. Metade disso estava errado: o
+# `notify-send` atravessa, com `libnotify-bin` em stage-packages e a interface
+# `desktop`. O que de fato não atravessa é o `⇧A` — ele fala com o shell da
+# sessão gráfica por D-Bus, e isso o `desktop` não concede. É um preço de uma
+# tecla, e o caminho de reserva (o sino da tty e a marcação de título) continua
+# valendo.
 #
-# Vale saber que os dois caminhos passam por revisão manual da loja: tanto
-# `classic` quanto `personal-files` são pedidos revisados por gente. Se um dia a
-# escolha mudar, o rascunho da versão strict está em `docs/publicacao-snap.html`.
-confinement: classic
+# E `classic` provavelmente seria **recusado**: a lista de categorias aceitas é
+# compiladores, IDEs, linguagens, emuladores de terminal, agentes de nuvem e
+# ferramentas de workspace, e um monitor não é nenhuma delas.
+#
+# O bloqueio real do strict era outro, e caiu: a `system-observe` não libera
+# `cwd` de outros processos, então `proc.cwd()` devolve `None` aqui dentro. O
+# WatchAI deixou de depender disso — o diretório de cada sessão vem do diário
+# do próprio agente.
+confinement: strict
 
 platforms:
   amd64:
@@ -39,42 +53,47 @@ platforms:
 
 apps:
   watchai:
-    # O interpretador vem escrito, não resolvido pelo PATH. O plugin deixa os
-    # scripts com `#!/usr/bin/env python3`, e num snap **classic** o PATH é o do
-    # host: esse `python3` é o da máquina de quem instalou, que não conhece o
-    # site-packages do snap — dá `ModuleNotFoundError: No module named 'watchai'`
-    # depois de instalar com sucesso. Chamando `bin/python3` do próprio snap, o
-    # interpretador acha o `pyvenv.cfg` um nível acima e monta o sys.path certo.
-    command: bin/python3 $SNAP/bin/watchai
+    command: bin/watchai
+    plugs:
+      - system-observe        # a tabela de processos: é disto que sai a detecção
+      - audio-playback        # o bip quando uma sessão fica pronta
+      - desktop               # notify-send, pela org.freedesktop.Notifications
+      - dot-claude
+      - dot-codex
+      - dot-opencode
+
+# Leitura, e só leitura, dos diários que os agentes já gravam. É o mesmo que um
+# `tail` nesses arquivos: nenhum deles guarda credencial — a do Claude Code fica
+# em `~/.claude/.credentials.json`, que **não** está listado aqui, e a do codex
+# em `~/.codex/auth.json`, que o leitor nunca abre (ele só varre
+# `sessions/**/rollout-*.jsonl`).
+plugs:
+  dot-claude:
+    interface: personal-files
+    read:
+      - $HOME/.claude/projects
+      - $HOME/.claude/settings.json
+      - $HOME/.claude/settings.local.json
+  dot-codex:
+    interface: personal-files
+    read:
+      - $HOME/.codex/sessions
+  dot-opencode:
+    interface: personal-files
+    read:
+      - $HOME/.local/share/opencode/storage
 
 parts:
   watchai:
     plugin: python
     source: .
-    # Snap classic **tem que embarcar o próprio Python**. A regra está no
-    # plugin do snapcraft, em `get_system_interpreter`: "Classic snaps, and
-    # snaps without bases, must always provision Python" — um snap strict usa o
-    # interpretador da base, o classic não tem base para usar. Sem isto o build
-    # falha em `No suitable Python interpreter found, giving up.`, que não diz
-    # o que fazer.
-    #
-    # E não basta pedir `python3-venv`: o filtro do craft-parts tira do payload
-    # **tudo que a base já tem**, exceto o que estiver listado aqui pelo nome
-    # (`filtered_packages - stage_packages`, em `_get_filtered_stage_package_names`).
-    # O `python3-venv` passa, mas quem carrega o `/usr/bin/python3.12` é a
-    # dependência dele — e dependência não escapa do filtro. Por isso os nomes
-    # vêm um a um. O `3.12` está preso ao core24, que é a base declarada acima.
     stage-packages:
-      - python3-venv
-      - python3.12-minimal      # o binário /usr/bin/python3.12
-      - libpython3.12-minimal
-      - libpython3.12-stdlib    # sem isto o interpretador é achado e não roda
-    # E, embarcado, o binário sai com o rpath do ambiente de build, que não
-    # existe na máquina de quem instala. O patchelf reescreve isso.
-    build-attributes:
-      - enable-patchelf
-    build-packages:
-      - build-essential
+      # Nada disto existe na base: confinado, o `shutil.which` não enxerga o
+      # /usr/bin do host. Sem estes três o app roda calado — a notificação
+      # some e o bip cai no sino da tty, que é o plano C e não o plano A.
+      - libnotify-bin           # notify-send, autorizado pela interface `desktop`
+      - pulseaudio-utils        # paplay, que toca pela `audio-playback`
+      - sound-theme-freedesktop # os .oga que o tocador precisa ter o que tocar
     override-pull: |
       craftctl default
       craftctl set version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)"
