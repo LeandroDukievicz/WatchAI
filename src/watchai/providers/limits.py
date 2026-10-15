@@ -40,7 +40,6 @@ import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from ..paths import casa_do_usuario
 from .transcript import _epoch, _por_mtime, _tail
 
 # Quantos rollouts recentes do codex vale abrir procurando o último
@@ -358,7 +357,7 @@ class Limites:
     """
 
     def __init__(self, home: Path | None = None, pasta: Path | None = None, leitores=None) -> None:
-        casa = home or casa_do_usuario()
+        casa = home or Path.home()
         destino = pasta if pasta is not None else limits_dir()
         self.leitores = list(leitores) if leitores is not None else [
             LeitorCodex(casa),
@@ -419,7 +418,7 @@ def gravar(dados: dict, pasta: Path | None = None, arquivo: str = ARQUIVO_CLAUDE
 
 def _atalho_casa(caminho: str) -> str:
     try:
-        casa = str(casa_do_usuario())
+        casa = str(Path.home())
     except (OSError, RuntimeError):
         return caminho
     if caminho == casa:

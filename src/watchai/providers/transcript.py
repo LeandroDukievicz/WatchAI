@@ -35,8 +35,6 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from ..paths import casa_do_usuario
-
 # Quanto lemos do fim do arquivo. Uma entrada de transcript raramente passa de
 # alguns KB; 64 KB cobrem várias com folga. "Raramente" não é "nunca", e é por
 # isso que a janela cresce em `_tail`: uma saída de ferramenta que despejou um
@@ -428,10 +426,10 @@ class Diario:
         """Os diários que mudaram por último, de qualquer pasta.
 
         É o que resta quando o sistema **não deixa** ler o diretório do
-        processo: sob confinamento de snap a interface `system-observe` libera
-        `cmdline`, `stat` e `status`, mas não `cwd`; no macOS o `cwd` pode ser
-        negado. Sem pasta não há filtro forte, e quem decide de quem é cada
-        diário passa a ser o relógio — ver `Transcripts._parear`.
+        processo: no macOS o `cwd` pode ser negado, e um processo de outro
+        usuário não o entrega em sistema nenhum. Sem pasta não há filtro
+        forte, e quem decide de quem é cada diário passa a ser o relógio —
+        ver `Transcripts._parear`.
         """
         raise NotImplementedError
 
@@ -791,7 +789,7 @@ class Transcripts:
     """
 
     def __init__(self, home: Path | None = None) -> None:
-        raiz = home or casa_do_usuario()
+        raiz = home or Path.home()
         self.leitores = {r.kind: r for r in (ClaudeCode(raiz), Codex(raiz), OpenCode(raiz))}
         self._candidatos: dict[tuple[str, str], list[Path]] = {}
         self._faltas: dict[tuple[str, str], int] = {}  # voltas sem diário para todos
@@ -817,10 +815,9 @@ class Transcripts:
         informação certa.
 
         **O `cwd` pode vir vazio**, e esse é o ponto do desenho: nem todo
-        sistema deixa lê-lo. Sob confinamento de snap a interface
-        `system-observe` libera `cmdline`, `stat` e `status` de outros
-        processos, mas não `cwd`; no macOS ele pode ser negado. Sem pasta, o
-        relógio decide sozinho — o filtro forte some, o monitor não.
+        sistema deixa lê-lo. No macOS ele pode ser negado, e processo de outro
+        usuário não o entrega em lugar nenhum. Sem pasta, o relógio decide
+        sozinho — o filtro forte some, o monitor não.
         """
         leitor = self.leitores.get(kind)
         if leitor is None:

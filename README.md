@@ -37,12 +37,19 @@ O WatchAI coloca todas numa tela só e responde de longe, sem leitura:
 
 ## Instalação
 
+O WatchAI **não está em loja nenhuma** — nem no PyPI, nem na Snap Store. Ele se
+instala a partir deste repositório, e é assim de propósito: é um programa que lê
+o seu disco para dizer o que os seus agentes estão fazendo, e instalar da fonte
+é o caminho em que você vê exatamente o que está pondo na sua máquina.
+
+Nada do que vem abaixo pede `sudo`, e nada mexe no Python do sistema.
+
 Requisitos: **Python 3.10+**, [pipx](https://pipx.pypa.io/stable/installation/),
 Git e um terminal com Unicode. A única dependência além do Textual é o
 [`psutil`](https://github.com/giampaolo/psutil), que lê a tabela de processos
 igual nos três sistemas.
 
-**O jeito mais curto, igual nos três sistemas:**
+### O jeito mais curto, igual nos três sistemas
 
 ```bash
 pipx install git+https://github.com/LeandroDukievicz/WatchAI.git
@@ -55,12 +62,18 @@ Python do sistema. Se o comando não aparecer logo após instalar, rode
 Windows**, e o CI verifica isso a cada commit: instala o pacote por `pipx` e
 roda o comando nos três.
 
-Enquanto o pacote ainda não está no PyPI, o comando acima instala a versão mais
-recente diretamente deste repositório. Para atualizar ou remover:
+O comando acima lê o repositório na hora da instalação, então você leva sempre
+o estado atual do `main`. Para atualizar depois, ou remover:
 
 ```bash
-pipx upgrade watchai
-pipx uninstall watchai
+pipx upgrade watchai     # repuxa o repositório e reinstala
+pipx uninstall watchai   # some com tudo, inclusive o ambiente isolado
+```
+
+Se quiser travar numa versão em vez de seguir o `main`, aponte para a etiqueta:
+
+```bash
+pipx install git+https://github.com/LeandroDukievicz/WatchAI.git@1.3.1
 ```
 
 **Um segundo passo, só se você usa o Claude Code** (opcional, e uma vez):
@@ -77,21 +90,33 @@ perdida** — o WatchAI passa a ser chamado no lugar dela, guarda o consumo e mo
 a saída da sua. `watchai --uninstall-statusline` desfaz. Detalhes em
 [① Cabeçalho](#-quanto-já-foi-gasto-do-plano).
 
-**Para mexer no código:**
+### Linux, com atalho no menu e na área de trabalho
+
+Se você quer abrir o WatchAI clicando num ícone, e não só digitando:
+
+```bash
+git clone https://github.com/LeandroDukievicz/WatchAI.git
+cd WatchAI
+./scripts/install-linux.sh --desktop
+```
+
+O script cria o venv, instala as dependências, põe o comando `watchai` no PATH
+e cria o lançador no menu — com `--desktop`, também na área de trabalho. Tudo
+fica em `~/.local`, sem `sudo`. Desfaz com `./scripts/install-linux.sh --uninstall`.
+
+### Para mexer no código
 
 ```bash
 git clone https://github.com/LeandroDukievicz/WatchAI.git
 cd WatchAI
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
+pytest                      # a suíte roda sem tocar em sessão de verdade
+watchai --mock              # a tela cheia de sessões falsas, para ver a UI
 ```
 
-**Atalho no desktop Linux (opcional):** depois de clonar o repositório,
-`./scripts/install-linux.sh --desktop` cria o venv, instala as dependências, põe
-o comando `watchai` no PATH e cria o lançador no menu; com `--desktop`, também
-na área de trabalho. Tudo fica em `~/.local`, sem `sudo`. Desfaz com
-`./scripts/install-linux.sh --uninstall`. Esse script é uma alternativa para
-integração com o desktop; a instalação comum nos três sistemas é a do `pipx`.
+O `-e` deixa o código vivo: editar um arquivo e rodar `watchai` de novo já
+mostra a mudança, sem reinstalar.
 
 Aberto por qualquer um desses caminhos, o terminal onde o WatchAI roda passa a
 se chamar **WatchAI** — na barra de título, no alt-tab e na barra de tarefas —,
@@ -222,8 +247,8 @@ mande um PR para a tabela — ela está em
 | diário local dos agentes | ✅ | ✅ | ✅ |
 | tty como identidade do terminal | ✅ | ✅ | ❌ não existe |
 
-O `cwd` do processo é atalho, não requisito: quando ele falta — confinamento de
-snap, que não libera `cwd` de outros processos, ou negativa do macOS — o diário
+O `cwd` do processo é atalho, não requisito: quando ele falta — negativa do
+macOS, processo de outro usuário, política do sistema — o diário
 é achado entre os mais recentes e casado pelo relógio, e o projeto sai de dentro
 dele. O que se perde é o filtro barato, não a informação.
 
@@ -354,7 +379,7 @@ O comando também resolve o que um README não consegue:
 - escreve **um comando que o agente consegue chamar**, que não é a mesma coisa
   que um comando que funciona no seu terminal: o Claude Code executa a statusline
   com o PATH **dele**. `watchai` puro só vale quando o executável está num `bin`
-  global (`pipx`, snap, gerenciador de pacote); num venv ou num clone vale o
+  global (`pipx`, gerenciador de pacote); num venv ou num clone vale o
   caminho absoluto, senão sai `sh: watchai: not found`, statusline vazia e nenhum
   erro na tela;
 - escreve **no arquivo certo**: se é o seu `settings.local.json` que define a
@@ -898,7 +923,6 @@ WatchAI/
 │   └── styles/app.tcss          # todo o CSS
 ├── tests/                       # suíte headless (conftest silencia o áudio)
 ├── scripts/screenshot.py        # refaz as capturas do README e da landing
-├── snap/snapcraft.yaml          # empacotamento para a loja do Ubuntu (strict)
 └── docs/                        # marca e screenshot
 ```
 
@@ -974,19 +998,19 @@ CI no GitHub Actions cobrindo Python 3.10, 3.11, 3.12, 3.13 e 3.14.
 O plano completo, com o porquê de cada item e onde mexer, está em
 [MILESTONE.md](https://github.com/LeandroDukievicz/WatchAI/blob/main/MILESTONE.md). O resumo do que ainda não existe, em ordem:
 
-1. **Publicar no PyPI**, para instalar com `pipx install watchai` sem clonar.
-2. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
+**Distribuir não está na lista.** O WatchAI é instalado da fonte, por quem
+clonar este repositório, e não vai para PyPI nem para a Snap Store. O que falta
+é sobre o programa, não sobre entregá-lo:
+
+1. **Validar Windows e macOS na prática.** O código trata os dois e o CI roda a
    suíte nos três, mas ninguém abriu o app num Windows ou num Mac de verdade —
-   é código testado, não software verificado. Até lá, o sistema anunciado é
-   Linux.
-3. **Enviar o snap para a loja**, em confinamento `strict` — o empacotamento
-   já está migrado e o CI prova que o pacote confinado sobe; falta registrar o
-   nome e enviar. É o caminho de distribuição escolhido para Linux.
-4. **Extensão do VS Code**, alimentada por um `watchai --json` que ainda não
-   existe.
-5. **Casar processo e diário do Claude Code pelo PID**, via
+   é código testado, não software verificado. O sistema verificado é Linux.
+2. **`watchai --json`**, imprimindo o estado das sessões como NDJSON. Hoje não
+   existe saída que não seja a TUI, e é ela que serviria a uma barra de status
+   do waybar/i3, a um script seu, ou a uma extensão de editor.
+3. **Casar processo e diário do Claude Code pelo PID**, via
    `~/.claude/sessions/<pid>.json`, no lugar da heurística de relógio.
-6. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
+4. **Diário do Aider** (`.aider.chat.history.md`) — falta uma instalação para
    verificar o formato.
 
 ## Licença

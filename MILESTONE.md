@@ -371,61 +371,14 @@ credencial.
 Em ordem de prioridade. Cada item diz **de quem é a vez** — o que depende de
 você e o que é código.
 
----
+> **Distribuir saiu da lista em 2026-10-15.** O WatchAI não vai para o PyPI nem
+> para a Snap Store: é instalado da fonte, por quem clonar o repositório, que
+> segue público. O que já tinha sido feito nessa direção foi removido junto —
+> `snap/`, os dois workflows de publicação e o `watchai/paths.py` do
+> `SNAP_REAL_HOME`. O histórico do porquê está em [Fora de
+> escopo](#fora-de-escopo-decidido).
 
-### 1. Publicar no PyPI — **prioridade 1**, e a vez é sua
-
-`pipx install watchai` é a distribuição natural de uma TUI em Python: três
-sistemas, zero revisão, zero sandbox. E a extensão do VS Code (item 4) precisa
-de um comando que ela possa mandar o usuário instalar.
-
-**Do lado do código, está pronto** (feito em 2026-09-28):
-
-- [x] `twine check` passa no sdist e no wheel
-- [x] o `app.tcss` está dentro do wheel — sem ele a tela não existe
-- [x] o wheel instalado num **venv limpo** sobe o app, carrega o CSS e detecta
-      sessão (não é o `pip install -e .` da máquina de desenvolvimento)
-- [x] as 8 referências relativas do README viraram absolutas: o PyPI renderiza o
-      `long_description` **fora** do repositório, então caminho relativo vira
-      404 na página do pacote
-- [x] licença migrada para expressão SPDX (PEP 639); os dois avisos de
-      depreciação do setuptools tinham data marcada — 2027-02-18
-
-**A sua parte, três passos:**
-
-1. [ ] **Criar o projeto no PyPI.** Não dá para pré-registrar nome vazio: cria-se
-       o *pending publisher* direto em
-       <https://pypi.org/manage/account/publishing/> com
-       PyPI Project Name `watchai` · Owner `LeandroDukievicz` ·
-       Repository `WatchAI` · Workflow `publish.yml` · Environment `pypi`.
-       O nome está **livre** (reconferido em 2026-09-30: `pypi.org/pypi/watchai/json`
-       responde 404). **É o único passo que falta, e é o único que não dá para
-       fazer pela linha de comando** — exige sessão no pypi.org.
-2. [x] **Criar o environment `pypi`** — feito em 2026-09-30 por
-       `gh api -X PUT repos/LeandroDukievicz/WatchAI/environments/pypi`. Sem ele o
-       job falha ao pedir o token OIDC.
-3. [x] **Ligar `PYPI_READY=true`** — feito em 2026-09-30 por
-       `gh variable set PYPI_READY --body true`. Sem ela o job `pypi` fica inerte.
-
-Depois disso, publicar é criar a release `1.3.0` no GitHub — o `publish.yml`
-dispara sozinho e sobe por *trusted publishing*, sem token guardado.
-
-A **1.2.0 foi apenas etiquetada, nunca lançada**, e desde aquela tag entrou a
-medição de consumo inteira: publicar `1.2.0` mandaria código velho para o PyPI.
-
-⚠️ **Versão no PyPI é irreversível**: `1.3.0` não pode ser reenviada, nem
-apagando. Se quiser ensaiar, o mesmo *trusted publisher* aponta para o TestPyPI.
-
-Enquanto isso, o caminho é
-`pipx install git+https://github.com/LeandroDukievicz/WatchAI.git`.
-
-Em aberto (decisão de conteúdo): o README tem 46 KB e vira a página inteira do
-pacote. Funciona, mas é longo para vitrine — dá para ter um `README-pypi.md`
-curto e deixar o longo no GitHub.
-
----
-
-### 2. Verificar macOS e Windows — a maior dívida, e dá para atacar de Linux
+### 1. Verificar macOS e Windows — a maior dívida, e dá para atacar de Linux
 
 O CI roda a suíte nos três sistemas, mas **ninguém nunca abriu o app** num Mac
 ou num Windows. Suíte verde não diz nada sobre janela levantando nem sobre
@@ -474,105 +427,8 @@ suporte a três sistemas com dois nunca abertos é prometer o que não se verifi
 
 ---
 
-### 3. Snap Store — a análise de 2026-09-28 mudou a recomendação
 
-**O que já está pronto:** conta na loja ativa (`ldukie`, com `package_register`),
-nome `watchai` livre, e o CI constrói o snap, instala e roda o binário.
-
-**Três achados que mudam o plano:**
-
-1. **A justificativa escrita para `classic` está meio errada.** O comentário do
-   `snapcraft.yaml` diz que a notificação não atravessa o sandbox. Atravessa:
-   `libnotify-bin` em `stage-packages` mais a interface `desktop`
-   (auto-conectada) e o `notify-send` funciona.
-2. **Mas havia um bloqueio maior, e real.** Nos perfis AppArmor instalados nesta
-   máquina, o que a `system-observe` libera de `/proc` de outros processos é
-   `cmdline, comm, exe, stat, status, statm, io, cgroup, auxv, fdinfo/*,
-   oom_score, schedstat, smaps_rollup, autogroup, attr/current`. **`cwd` não está
-   na lista.** Num snap strict o `proc.cwd()` devolvia `None` para tudo, e o
-   WatchAI perdia o projeto e todo o estado de diário. **Resolvido no M13** — é
-   o que torna o strict viável.
-3. **`classic` provavelmente seria recusado.** A lista oficial de categorias
-   aceitas é compiladores, IDEs, linguagens, emuladores de terminal /
-   multiplexadores / shells, agentes de nuvem e ferramentas de workspace —
-   WatchAI não é nenhum. E dois itens da lista de **negados** batem direto: "pede
-   acesso a dotfiles sem explorar alternativas" (`~/.claude`, `~/.codex`) e
-   "extensões do GNOME shell" (o `⇧A` fala com a Window Calls). A revisão começa
-   em ~2 semanas e escala para revisor sênior + arquiteto fora das categorias.
-
-**O caminho recomendado, agora que o M13 existe:**
-
-- [x] Migrar o `snap/snapcraft.yaml` para **`confinement: strict`** — feito em
-      2026-10-14, com `system-observe` (conexão manual), `audio-playback`,
-      `desktop` e três `personal-files` de **leitura**. Junto saiu o que só
-      existia por causa do classic: o Python embarcado, o `patchelf` e o
-      `command: bin/python3 $SNAP/bin/watchai`.
-- [x] **Helper de "home real"** — feito em `src/watchai/paths.py`
-      (`casa_do_usuario()`), com cinco testes em `tests/test_paths.py`. Eram
-      **seis** chamadas, não quatro: `transcript.py`, `limits.py` (duas),
-      `live.py` (duas) e `statusline.py` (duas). O `config.py` ficou **de fora
-      de propósito**: a config é nossa e mora na casa confinada, que já é
-      gravável — mandá-la para a casa real exigiria `personal-files` de
-      **escrita**, que é revisão bem mais dura por uma config de tema.
-- [x] Dois achados que o strict quebraria calado, e foram para dentro do
-      pacote: `paplay` + `sound-theme-freedesktop` (sem eles o bip cai no sino
-      da tty) e o `notify-send` (`libnotify-bin`). Confinado, o `shutil.which`
-      não enxerga o `/usr/bin` do host.
-- [x] Aceitar a perda do `⇧A` sob strict: ele degrada para o sino na tty e a
-      marcação de título, que já são o caminho de fallback. É o único preço.
-- [x] **Nome registrado** em 2026-10-15 (`snapcraft register watchai`): o nome
-      estava livre e agora é seu, ao lado de `anchor-downloader` e `clinews`.
-- [x] **Revisão 1 enviada** (1.3.1, amd64) com `--release=edge`.
-- [ ] **Liberar a revisão na revisão manual — é a sua vez.** O envio parou em
-      `will need manual review`, com três ocorrências de *human review required
-      due to 'allow-installation' constraint*: uma por `personal-files`. Isso
-      **não é erro**, é o fluxo: `personal-files` sempre passa por gente. A
-      revisão fica na fila e o `edge` só recebe depois do aval — por isso
-      `snapcraft status watchai` ainda diz "no released revisions".
-
-      O destrave é um tópico em <https://forum.snapcraft.io/c/store-requests>,
-      com a conta Ubuntu SSO que você já usa na loja. Texto pronto para colar:
-
-      > **Request for `personal-files` (read-only) for `watchai`**
-      >
-      > `watchai` is a terminal dashboard that shows the state of AI coding
-      > agent sessions (Claude Code, Codex, OpenCode) already running on the
-      > user's machine. It is read-only: it never launches, configures or
-      > talks to the agents.
-      >
-      > The state of each session is read from the journal files the agents
-      > themselves already write to disk. That is the whole point of the app —
-      > the process table alone cannot tell "finished" from "waiting for you",
-      > because an agent waiting on the network uses no CPU.
-      >
-      > Requested paths, all **read-only**:
-      > - `$HOME/.claude/projects`, `$HOME/.claude/settings.json`,
-      >   `$HOME/.claude/settings.local.json` (Claude Code)
-      > - `$HOME/.codex/sessions` (Codex)
-      > - `$HOME/.local/share/opencode/storage` (OpenCode)
-      >
-      > No credential file is requested: Claude Code keeps its token in
-      > `$HOME/.claude/.credentials.json` and Codex in `$HOME/.codex/auth.json`,
-      > and neither path is listed. The app's own configuration stays in
-      > `$SNAP_USER_DATA`, so no write access to `$HOME` is requested at all.
-      >
-      > Source: <https://github.com/LeandroDukievicz/WatchAI>
-
-- [ ] Depois do aval: `snapcraft release watchai 1` para o `edge`, instalar na
-      máquina e conferir o que só aparece confinado — se o painel enxerga as
-      sessões com `snap connect watchai:system-observe` ligado, e se o bip e a
-      notificação saem (os dois foram empacotados para isso, mas só o uso prova).
-- [x] Corrigir `docs/publicacao-snap.html` — a etapa 02 agora diz que está
-      feita e aponta o `paths.py`; o `snapcraft.yaml` embutido ganhou o aviso
-      de que é rascunho de setembro e não é mais o do repositório.
-
-**Nota de escopo que ajuda a decidir:** a Snap Store só distribui Linux — que é
-justamente a parte verificada. O risco de plataforma ali é baixo; o bloqueio era
-burocrático, e o M13 o derrubou.
-
----
-
-### 4. Extensão do VS Code
+### 2. Extensão do VS Code
 
 Viável, e tem uma peça que **só ela** consegue entregar: dentro do VS Code o
 agente roda no terminal integrado, e a extensão tem `terminal.show()`. Casando
@@ -602,12 +458,14 @@ Três desenhos foram considerados; o escolhido é o terceiro:
       globais do Azure DevOps são aposentados** — a publicação automatizada tem
       que nascer em Microsoft Entra ID.
 - [ ] Atrito honesto: a extensão é Node e o núcleo é Python. Ela procura
-      `watchai` no PATH e, se não achar, oferece `pipx install watchai` — **o que
-      só funciona depois do item 1**.
+      `watchai` no PATH e, se não achar, manda instalar da fonte:
+      `pipx install git+https://github.com/LeandroDukievicz/WatchAI.git`. Sem
+      pacote em loja, é esse o comando que a extensão oferece.
 
 ---
 
-### 5. Casar processo e diário do Claude Code pelo PID
+
+### 3. Casar processo e diário do Claude Code pelo PID
 
 `~/.claude/sessions/<pid>.json`, indexado por **PID** — achado durante o
 levantamento do M14 e confirmado nesta máquina em 2026-09-29:
@@ -636,7 +494,8 @@ sessões na mesma pasta), não um bug aberto.
 
 ---
 
-### 6. Miudezas
+
+### 4. Miudezas
 
 - [ ] **O `--help` da linha de comando ainda está em português**, ao contrário da
       tela, que é toda em inglês. Não é bug, é decisão de produto — mas se o app
@@ -644,7 +503,35 @@ sessões na mesma pasta), não um bug aberto.
 
 ---
 
+
 ## Fora de escopo (decidido)
+
+### Publicar em loja — decidido em 2026-10-15
+
+Nem PyPI nem Snap Store. O caminho chegou longe antes de ser cortado, e o que
+foi aprendido fica registrado para ninguém redescobrir:
+
+- **PyPI**: o pacote estava pronto (`twine check` passando no sdist e no wheel,
+  `app.tcss` dentro do wheel, wheel instalado e rodando em venv limpo). Faltava
+  só o *trusted publisher*, e o envio chegou a falhar com `invalid-publisher`
+  justamente por isso. Nada foi publicado: `pypi.org/pypi/watchai/json` continua
+  404, e a versão 1.3.1 segue livre lá.
+- **Snap Store**: o nome `watchai` **foi registrado** em 2026-10-15 e a revisão
+  1 (1.3.1, amd64) foi enviada; ela parou em revisão manual, com três
+  ocorrências de *human review required due to 'allow-installation' constraint*
+  — uma por `personal-files`. Nenhum canal foi liberado, então o pacote nunca
+  ficou instalável por ninguém. **Pontas soltas**: o nome segue registrado na
+  conta `ldukie` e a revisão segue na fila; se quiser limpar, o nome se devolve
+  pelo painel da loja e a revisão simplesmente nunca é liberada.
+- **O que a tentativa ensinou, e ficou no código**: nada. A camada de
+  confinamento (`SNAP_REAL_HOME`) foi removida porque só fazia sentido dentro
+  de um snap. O que ficou foi um conserto real achado no caminho — a terceira
+  escrita do `settings.json`, que não tinha proteção contra falha de disco.
+- **Por que não**: revisão de loja, versão irreversível no PyPI e uma promessa
+  de suporte que não corresponde ao que o projeto é — um programa pessoal que
+  lê o disco de quem o roda. Instalar da fonte é o caminho em que quem instala
+  vê o que está pondo na máquina.
+
 
 - **Validar o leitor do OpenCode e escrever um para o Antigravity.** Tirados da
   lista em 2026-09-23. A ressalva do OpenCode continua onde importa — no

@@ -37,7 +37,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import config
-from .paths import casa_do_usuario, confinado
 
 PASTA_CLAUDE = ".claude"
 # Na ordem em que o Claude Code os aplica: o `.local` é o pessoal, e é ele quem
@@ -52,10 +51,10 @@ SUFIXO_BACKUP = ".watchai.bak"
 REFRESH_MS = 30_000
 
 # Diretórios cujo conteúdo um shell de login acha sem ajuda nenhuma — é onde o
-# `pipx`, o snap e os gerenciadores de pacote põem executável. Estando aqui, vale
+# O `pipx` e os gerenciadores de pacote põem executável aqui. Estando aqui, vale
 # escrever o nome puro, que continua certo depois de uma atualização; fora daqui
 # (venv, clone, instalação exótica) só o caminho absoluto é confiável.
-BINS_GLOBAIS = ("/usr/local/bin", "/usr/bin", "/bin", "/snap/bin", "/opt/homebrew/bin")
+BINS_GLOBAIS = ("/usr/local/bin", "/usr/bin", "/bin", "/opt/homebrew/bin")
 
 
 @dataclass(frozen=True)
@@ -91,7 +90,7 @@ def comando(executavel: str | None = None) -> str:
     Três casos, e a ordem importa porque o erro é **silencioso**: comando que o
     agente não acha produz statusline vazia, sem mensagem nenhuma.
 
-    1. instalado num `bin` global (`pipx`, snap, gerenciador de pacote) → nome
+    1. instalado num `bin` global (`pipx`, gerenciador de pacote) → nome
        puro, que é legível e continua valendo depois de uma atualização;
     2. instalado num venv ou em lugar incomum → **caminho absoluto** do próprio
        executável. O nome puro funcionaria no seu terminal com o venv ativado e
@@ -136,25 +135,6 @@ def _gravar(caminho: Path, dados: dict) -> None:
 
 
 
-def _nao_consegui(caminho: Path, erro: OSError, linha: str | None = None) -> Resultado:
-    """O recado de quem não conseguiu escrever — e, no snap, o porquê.
-
-    Dentro de um snap o `~/.claude` é lido, nunca escrito: pedir escrita em
-    dotfile alheio é o tipo de permissão que a loja revisa com lupa, e a
-    statusline é opcional. Então o programa entrega a linha pronta em vez de
-    deixar um erro de permissão sem explicação.
-    """
-    recado = f"não consegui escrever em {caminho}: {erro}"
-    if confinado():
-        recado += (
-            "\n  A versão snap lê o ~/.claude, mas não escreve nele — de propósito."
-            "\n  Ligue à mão: ponha em statusLine do arquivo acima"
-        )
-        if linha:
-            recado += f'\n    {{"type": "command", "command": "{linha}"}}'
-        recado += "\n  Ou instale fora do snap: pipx install watchai"
-    return Resultado(False, recado)
-
 
 def _alvo(base: Path) -> tuple[Path, dict, Path | None]:
     """Em qual arquivo mexer, e se o outro também define uma `statusLine`."""
@@ -172,7 +152,7 @@ def _alvo(base: Path) -> tuple[Path, dict, Path | None]:
 
 def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
     """Põe (ou atualiza) a statusline do WatchAI. Rodar duas vezes não estraga."""
-    casa = base if base is not None else casa_do_usuario() / PASTA_CLAUDE
+    casa = base if base is not None else Path.home() / PASTA_CLAUDE
     if not casa.is_dir():
         return Resultado(False, f"não achei o Claude Code em {casa} — nada a fazer.")
 
@@ -186,7 +166,7 @@ def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
         try:
             _gravar(caminho, dados)
         except OSError as erro:
-            return _nao_consegui(caminho, erro, linha)
+            return Resultado(False, f"não consegui escrever em {caminho}: {erro}")
         guardada = config.load_statusline_wrapped()
         extra = f"\n  A sua statusline de antes continua embrulhada: {guardada}" if guardada else ""
         return Resultado(True, f"já estava ligada em {caminho} — comando atualizado para `{linha}`.{extra}")
@@ -228,7 +208,7 @@ def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
         caminho.parent.mkdir(parents=True, exist_ok=True)
         _gravar(caminho, dados)
     except OSError as erro:
-        return _nao_consegui(caminho, erro, linha)
+        return Resultado(False, f"não consegui escrever em {caminho}: {erro}")
 
     if conflito is not None:
         aviso += (
@@ -240,7 +220,7 @@ def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
 
 def desinstalar(base: Path | None = None) -> Resultado:
     """Tira a nossa e devolve a que havia antes, se havia."""
-    casa = base if base is not None else casa_do_usuario() / PASTA_CLAUDE
+    casa = base if base is not None else Path.home() / PASTA_CLAUDE
     caminho, dados, _ = _alvo(casa)
     atual = dados.get(CHAVE)
     if atual is None:
@@ -261,7 +241,7 @@ def desinstalar(base: Path | None = None) -> Resultado:
     try:
         _gravar(caminho, dados)
     except OSError as erro:
-        return _nao_consegui(caminho, erro)
+        return Resultado(False, f"não consegui escrever em {caminho}: {erro}")
     config.save_statusline_wrapped(None)
     return Resultado(True, recado)
 

@@ -17,7 +17,6 @@ from datetime import datetime
 from pathlib import Path
 
 from ..models import AVISO_FECHADO, REMOCAO_FECHADO, Session, SessionStore, Status, agregar
-from ..paths import casa_do_usuario
 from .source import ProcObs, ProcessSource, PsutilSource, Snapshot
 from .transcript import ERRO, FEITO, FERRAMENTA, PENSANDO, Leitura, Transcripts
 
@@ -55,7 +54,7 @@ def _projeto(cwd: str | None) -> str:
     if not cwd:
         return ""
     caminho = Path(cwd)
-    if caminho == casa_do_usuario():
+    if caminho == Path.home():
         return "~"
     return caminho.name or cwd
 
@@ -70,7 +69,7 @@ def _encurtar(caminho: str | None) -> str:
     if not caminho:
         return ""
     try:
-        relativo = Path(caminho).relative_to(casa_do_usuario())
+        relativo = Path(caminho).relative_to(Path.home())
     except ValueError:
         return caminho
     return "~" if str(relativo) == "." else "~/" + relativo.as_posix()
@@ -197,9 +196,9 @@ class LiveProvider:
         um precisa ver as duas juntas. Perguntando de uma em uma, as duas
         recebiam o mesmo diário — e um card mostrava a atividade do outro.
 
-        Por tipo, e não por pasta, porque **o agente pode não ter pasta**: sob
-        confinamento de snap a tabela de processos vem sem `cwd`, e no macOS
-        ele pode ser negado. Agrupar por pasta descartava esses agentes antes
+        Por tipo, e não por pasta, porque **o agente pode não ter pasta**: no
+        macOS o `cwd` pode ser negado, e processo de outro usuário não o
+        entrega. Agrupar por pasta descartava esses agentes antes
         de perguntar qualquer coisa — sem diário, o card perdia o nome do
         projeto e todo o estado que vem dele (READY, INPUT, ERROR). Agora eles
         entram na mesma rodada de casamento, e quem tem pasta continua usando

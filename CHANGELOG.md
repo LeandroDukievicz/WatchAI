@@ -5,30 +5,22 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
-### Mudado
-- **O snap passou de `classic` para `strict`.** A justificativa escrita para o
-  classic estava meio errada — a notificação **atravessa** o sandbox, com
-  `libnotify-bin` e a interface `desktop`; o que não atravessa é o `⇧A`, que
-  fala com o shell da sessão por D-Bus. E o classic provavelmente seria
-  recusado: um monitor não é nenhuma das categorias que a loja aceita. O que
-  bloqueava o strict de verdade já tinha caído, quando o diretório de cada
-  sessão passou a vir do diário em vez do `cwd` do processo.
-- **A casa do usuário virou uma decisão explícita** (`watchai/paths.py`). Num
-  snap strict o `HOME` é a pasta privada do pacote: **ler o que é do usuário**
-  (`~/.claude`, `~/.codex`, o `~` dos títulos) vai na casa de verdade, via
-  `SNAP_REAL_HOME`; **escrever o que é nosso** (tema, histórico, o recado da
-  statusline) fica na casa confinada, que já é gravável sem pedir permissão
-  nenhuma à loja. Eram seis lugares olhando para `Path.home()` — corrigir só o
-  primeiro deixava o resto mentindo lá dentro.
-- **`--install-statusline` dentro do snap agora explica.** O `~/.claude` é
-  lido e não escrito, de propósito; em vez de um erro de permissão mudo, o
-  comando entrega a linha pronta para colar e aponta o `pipx` como alternativa.
-
 ### Removido
-- **O que existia só por causa do classic**: o Python embarcado
-  (`python3-venv`, `python3.12-minimal`, `libpython3.12-*`), o `patchelf` que
-  reescrevia o rpath dele e o `command: bin/python3 $SNAP/bin/watchai`. Um snap
-  strict usa o interpretador da base, e o comando voltou a ser `bin/watchai`.
+- **O empacotamento para loja saiu inteiro** — `snap/`, o workflow do snap e o
+  workflow de publicação no PyPI. O WatchAI passa a ser instalado da fonte, por
+  quem clonar o repositório, e não vai para loja nenhuma. A decisão é de uso:
+  é um programa pessoal que lê o disco de quem o roda; distribuí-lo trazia
+  revisão de loja, versão irreversível e uma promessa de suporte que não é o
+  caso aqui. O repositório segue público.
+- **E, junto, o que só existia para o confinamento**: o módulo `watchai/paths.py`
+  (`SNAP_REAL_HOME`), os seis desvios de `Path.home()` que ele alimentava, a
+  explicação de confinamento no `--install-statusline` e o `/snap/bin` na lista
+  de diretórios de executável global. Fora de um snap, a casa do usuário é
+  `Path.home()` e pronto — a indireção só tinha razão de ser dentro do pacote.
+
+  Ficou de pé o que era bom independentemente disso: a terceira escrita do
+  `settings.json` continua protegida contra falha de disco, que antes passava
+  sem rede nenhuma.
 
 ## [1.3.1] — 2026-10-14
 
