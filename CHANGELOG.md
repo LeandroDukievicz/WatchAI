@@ -5,6 +5,10 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+Nada ainda.
+
+## [1.3.1] — 2026-10-14
+
 ### Corrigido
 - **Verde com o agente trabalhando — a causa raiz estava na leitura do diário.**
   Um evento sozinho pode ser maior que a janela de 64 KB que lemos do fim do
@@ -578,6 +582,7 @@ detecção de processos nem integração com nenhuma IA (ver "Roadmap" no README
 - Simulador que troca os estados sozinho a cada 5–12 s para avaliar a UI em movimento.
 - Suíte de testes headless (17 testes) e CI no GitHub Actions.
 
+[1.3.1]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.3.1
 [1.3.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.3.0
 [1.2.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.2.0
 [1.1.0]: https://github.com/LeandroDukievicz/WatchAI/releases/tag/1.1.0
