@@ -51,6 +51,8 @@ def sem_limites(monkeypatch):
     máquina onde a suíte roda."""
 
     class SemLimites:
+        avisos: dict[str, str] = {}
+
         def ler(self, agora):
             return []
 

@@ -13,6 +13,16 @@ As barras de limite moram **aqui, e não no card**: o limite é do plano, não d
 um terminal — num card ele repetiria o mesmo número uma vez por sessão. E
 aparecem só onde há número de verdade: o agente sem dado não ganha linha, e
 ninguém ganha barra derivada de estimativa.
+
+Quando o número **falta e há por quê**, o lugar da barra recebe a razão:
+
+    │ claude  no data · run: watchai --install-statusline                 │
+
+Isso existe porque a falha é silenciosa. O Claude Code só entrega o limite a
+quem for a statusline dele, e essa chave é um lugar que outro programa pode
+tomar sem avisar ninguém. Até aqui a tela era a mesma de quem nunca instalou
+nada, e o aviso só aparece para agente que está **rodando agora**: quem não usa
+o Claude não ganha recado sobre o Claude.
 """
 
 from __future__ import annotations
@@ -24,7 +34,7 @@ from rich.text import Text
 from textual.message import Message
 from textual.widget import Widget
 
-from ..format import fmt_clock, fmt_span
+from ..format import ellipsize, fmt_clock, fmt_span
 from ..layout import HEADER_ROWS
 from ..models import SUMMARY_ORDER, Status
 from ..providers.limits import APERTA, ESTOURANDO, IDADE_VISIVEL, Consumo
@@ -100,6 +110,7 @@ class AppHeader(Widget):
     def on_mount(self) -> None:
         self.border_title = self._title()
         self._limites: list[Consumo] = []
+        self._avisos: list[tuple[str, str]] = []
         self._linhas = 0
         self.watch(self.app, "version", lambda _: self._pulso())
         self.watch(self.app, "tick", lambda _: self._pulso())
@@ -117,18 +128,58 @@ class AppHeader(Widget):
     def _pulso(self) -> None:
         """Uma volta do relógio: acerta a altura, se preciso, e repinta."""
         self._limites = self._visiveis()
-        if len(self._limites) != self._linhas:
-            self._linhas = len(self._limites)
-            self.styles.height = HEADER_ROWS + self._linhas
-            self.post_message(self.Grew(HEADER_ROWS + self._linhas))
+        self._avisos = self._dicas()
+        linhas = len(self._limites) + len(self._avisos)
+        if linhas != self._linhas:
+            self._linhas = linhas
+            self.styles.height = HEADER_ROWS + linhas
+            self.post_message(self.Grew(HEADER_ROWS + linhas))
         self.refresh()
+
+    def _cabe(self) -> bool:
+        """Se a tela tem altura e largura para as linhas de limite.
+
+        Elas custam uma linha por agente, e essa linha sairia do EVENT STREAM —
+        limite de plano é a informação menos urgente da tela.
+        """
+        return self.app.size.height >= ALTURA_MINIMA and self.size.width >= 40
 
     def _visiveis(self) -> list[Consumo]:
         """Os limites que cabem nesta janela. Lista vazia é resposta boa."""
         limites = getattr(self.app, "consumos", None) or []
-        if self.app.size.height < ALTURA_MINIMA or self.size.width < 40:
+        if not self._cabe():
             return []
         return [c for c in limites if c.janelas]
+
+    def _rodando(self) -> set[str]:
+        """Os tipos de agente que estão abertos agora."""
+        store = getattr(self.app, "store", None)
+        if store is None:
+            return set()
+        return {
+            agent.kind
+            for session in store.sessions
+            if session.online
+            for agent in session.agents
+        }
+
+    def _dicas(self) -> list[tuple[str, str]]:
+        """Os avisos que ocupam o lugar da barra: `(agente, razão)`.
+
+        Só para agente **rodando agora** e **sem número**: um aviso sobre o
+        Claude na tela de quem está usando só o codex é ruído, e repetir a razão
+        ao lado de uma barra que já apareceu é contradição.
+        """
+        avisos = getattr(self.app, "avisos_limite", None) or {}
+        if not avisos or not self._cabe():
+            return []
+        com_barra = {c.kind for c in self._limites}
+        rodando = self._rodando()
+        return [
+            (kind, razao)
+            for kind, razao in sorted(avisos.items())
+            if razao and kind in rodando and kind not in com_barra
+        ]
 
     def _title(self) -> Text:
         title = Text(no_wrap=True)
@@ -234,10 +285,26 @@ class AppHeader(Widget):
             linha.append(f"  ({fmt_span(idade)} ago)", Style(color=palette.ghost))
         return linha
 
+    def _linha_aviso(self, kind: str, razao: str, rotulo: int, width: int) -> Text:
+        """A razão da ausência, onde estaria a barra. Sem cor de alarme: isto não
+        é uma sessão em perigo, é uma configuração faltando."""
+        palette = colors()
+        linha = Text(no_wrap=True)
+        linha.append(kind.ljust(rotulo), Style(color=palette.muted))
+        linha.append("  ")
+        linha.append(ellipsize(razao, max(8, width - rotulo - 2)), Style(color=palette.ghost))
+        return linha
+
     def render(self) -> Text:
         width = self.size.width
         linhas = [self._resumo(width)]
-        rotulo = max((len(c.kind) for c in self._limites), default=0)
+        rotulo = max(
+            (len(c.kind) for c in self._limites),
+            default=0,
+        )
+        rotulo = max([rotulo] + [len(kind) for kind, _ in self._avisos])
         for consumo in self._limites:
             linhas.append(self._linha_limite(consumo, rotulo, width))
+        for kind, razao in self._avisos:
+            linhas.append(self._linha_aviso(kind, razao, rotulo, width))
         return Text("\n", no_wrap=True).join(linhas)

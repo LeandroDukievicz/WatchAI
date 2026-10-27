@@ -55,7 +55,7 @@ def test_maquina_limpa_ganha_a_statusline(tmp_path):
     assert linha["type"] == "command"
     # Sem `refreshInterval` o número congela quando a sessão fica parada — e é a
     # sessão parada que envelhece o dado.
-    assert linha["refreshInterval"] == statusline.REFRESH_MS
+    assert linha["refreshInterval"] == statusline.REFRESH_SEGUNDOS
 
 
 def test_as_outras_preferencias_do_agente_ficam_intactas(tmp_path):
@@ -84,6 +84,112 @@ def test_backup_do_settings_antes_de_mexer(tmp_path):
 
 
 # ---- a máquina de quem JÁ tinha uma statusline --------------------------------
+
+
+def test_o_refresh_e_em_segundos_e_nao_em_milissegundos(tmp_path):
+    """O conserto de um número que parecia detalhe e desligava a barra.
+
+    O campo é descrito pelo Claude Code como "re-run the status line command
+    every N **seconds**", e ele o multiplica por mil para agendar. Aqui havia
+    30000, que não são trinta segundos: são oito horas e vinte. O refresh que
+    existe justamente para a sessão parada não acontecia uma vez por dia de
+    trabalho, a janela virava, e o painel passava a mostrar dois traços.
+    """
+    casa = claude(tmp_path, model="opus")
+    statusline.instalar(casa, nosso="watchai --statusline")
+    segundos = lido(casa)["statusLine"]["refreshInterval"]
+    assert segundos == 30
+    # A faixa é o que protege o conserto: qualquer coisa em milissegundos cai
+    # fora dela, e um minuto já é mais do que a tela precisa esperar.
+    assert 1 <= segundos <= 60
+
+
+def test_instalar_de_novo_conserta_o_refresh_que_ficou_em_milissegundos(tmp_path):
+    """Quem instalou antes do conserto tem 30000 gravado no arquivo. Rodar o
+    instalar outra vez é o caminho que ele já conhece para arrumar."""
+    casa = claude(
+        tmp_path,
+        statusLine={"type": "command", "command": "watchai --statusline", "refreshInterval": 30000},
+    )
+    config.save_statusline_refresh(True)  # era nosso
+    r = statusline.instalar(casa, nosso="watchai --statusline")
+    assert r.ok
+    assert lido(casa)["statusLine"]["refreshInterval"] == statusline.REFRESH_SEGUNDOS
+
+
+def test_o_refresh_de_quem_ja_tinha_statusline_nao_e_tocado(tmp_path):
+    casa = claude(
+        tmp_path, statusLine={"type": "command", "command": MINHA, "refreshInterval": 5}
+    )
+    statusline.instalar(casa, nosso="watchai --statusline")
+    assert lido(casa)["statusLine"]["refreshInterval"] == 5  # a escolha é dela
+    assert not config.load_statusline_refresh()
+    # E continua dela depois de desinstalar.
+    statusline.desinstalar(casa)
+    assert lido(casa)["statusLine"] == {
+        "type": "command", "command": MINHA, "refreshInterval": 5
+    }
+
+
+def test_embrulhar_statusline_sem_refresh_ganha_o_nosso_e_devolve_sem_ele(tmp_path):
+    """O furo que o "não acrescenta nada" cobrava: embrulhando uma statusline
+    sem o campo, a barra congelava do mesmo jeito. Agora o campo entra — e sai
+    no desinstalar, porque devolver o arquivo com uma chave que ele não tinha é
+    deixar resíduo nosso na configuração de outro programa."""
+    casa = claude(tmp_path, statusLine={"type": "command", "command": MINHA})
+    statusline.instalar(casa, nosso="watchai --statusline")
+    assert lido(casa)["statusLine"]["refreshInterval"] == statusline.REFRESH_SEGUNDOS
+    assert config.load_statusline_refresh()
+
+    statusline.desinstalar(casa)
+    assert lido(casa)["statusLine"] == {"type": "command", "command": MINHA}
+    assert not config.load_statusline_refresh()
+
+
+# ---- saber que parou de funcionar --------------------------------------------
+
+
+def test_o_diagnostico_reconhece_a_nossa(tmp_path):
+    casa = claude(tmp_path, statusLine={"type": "command", "command": "watchai --statusline"})
+    situacao = statusline.estado(casa)
+    assert situacao.ligada and situacao.chave == statusline.LIGADA
+    assert situacao.dica == ""  # nada a avisar: o dado chega
+
+
+def test_o_diagnostico_ve_a_statusline_de_outro_programa(tmp_path):
+    """O caso que apagou a barra nesta máquina: outro programa quis o mesmo
+    lugar, escreveu por cima, e o consumo do Claude passou a ir para ele."""
+    casa = claude(tmp_path, statusLine={"type": "command", "command": "outro-prog linha"})
+    situacao = statusline.estado(casa)
+    assert not situacao.ligada and situacao.chave == statusline.DE_OUTRO
+    assert "outro-prog linha" in situacao.mensagem
+    assert "--install-statusline" in situacao.dica
+
+
+def test_o_diagnostico_ve_a_falta_de_statusline(tmp_path):
+    casa = claude(tmp_path, model="opus")
+    situacao = statusline.estado(casa)
+    assert situacao.chave == statusline.AUSENTE
+    assert "--install-statusline" in situacao.dica and "--install-statusline" in situacao.mensagem
+
+
+def test_o_diagnostico_sem_claude_code_nao_manda_instalar_nada(tmp_path):
+    """Quem não tem o agente não tem o que ligar: mandar rodar um comando ali
+    seria recado para um problema que a pessoa não tem."""
+    situacao = statusline.estado(tmp_path / "nao-existe")
+    assert situacao.chave == statusline.SEM_CLAUDE
+    assert situacao.dica == ""
+    assert "não achei o Claude Code" in situacao.mensagem
+
+
+def test_o_diagnostico_le_o_arquivo_que_manda(tmp_path):
+    casa = claude(tmp_path, statusLine={"type": "command", "command": "watchai --statusline"})
+    (casa / "settings.local.json").write_text(
+        json.dumps({"statusLine": {"type": "command", "command": "a-do-local"}}), encoding="utf-8"
+    )
+    situacao = statusline.estado(casa)
+    assert situacao.chave == statusline.DE_OUTRO  # é o `.local` quem vale
+    assert situacao.arquivo.name == "settings.local.json"
 
 
 def test_a_statusline_que_ja_existia_nao_e_perdida(tmp_path):

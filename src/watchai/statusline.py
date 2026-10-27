@@ -22,9 +22,18 @@ a `statusLine`, é nele que se mexe — escrever no `settings.json` seria escrev
 num lugar que o outro sobrescreve, e a barra nunca apareceria, sem erro nenhum na
 tela para explicar por quê.
 
-Nada aqui roda sozinho: só pelos comandos `--install-statusline` e
-`--uninstall-statusline`. Mexer no arquivo de configuração de outro programa é
-coisa que se faz quando a pessoa pede, e uma vez.
+E **sabemos dizer quando deixou de funcionar**: `estado()` olha o
+`settings.json` e responde se a linha de lá ainda é a nossa. Essa pergunta tem
+resposta porque a falha é silenciosa e acontece de verdade — outro programa que
+também quer a statusline sobrescreve a chave, o agente passa a empurrar o
+consumo para ele, e o arquivo que alimenta a barra do Claude apenas envelhece.
+O painel, que antes mostrava dois traços sem explicar nada, agora mostra o que
+rodar; o `--check-statusline` conta a história inteira.
+
+Nada aqui roda sozinho: só pelos comandos `--install-statusline`,
+`--uninstall-statusline` e `--check-statusline` (que não escreve nada). Mexer no
+arquivo de configuração de outro programa é coisa que se faz quando a pessoa
+pede, e uma vez.
 """
 
 from __future__ import annotations
@@ -43,12 +52,21 @@ PASTA_CLAUDE = ".claude"
 # vale quando os dois dizem a mesma coisa.
 ARQUIVOS = ("settings.json", "settings.local.json")
 CHAVE = "statusLine"
+REFRESH = "refreshInterval"
 SUFIXO_BACKUP = ".watchai.bak"
 
 # De quanto em quanto tempo o agente reexecuta a statusline mesmo sem render
 # novo. Sem isto o número congela quando a sessão fica parada — e é justamente
 # a sessão parada que envelhece o dado.
-REFRESH_MS = 30_000
+#
+# **Em segundos.** Aqui havia `REFRESH_MS = 30_000`, e o campo não é em
+# milissegundos: o esquema do Claude Code o descreve como "re-run the status
+# line command every N seconds" e o multiplica por mil para agendar
+# (`Math.max(1, n) * 1000`). Trinta mil segundos são oito horas e vinte: o
+# refresh que existe justamente para a sessão parada não acontecia uma vez por
+# dia de trabalho. Era o conserto mais barato do painel — a barra do Claude
+# envelhecia sozinha e virava traço.
+REFRESH_SEGUNDOS = 30
 
 # Diretórios cujo conteúdo um shell de login acha sem ajuda nenhuma — é onde o
 # O `pipx` e os gerenciadores de pacote põem executável aqui. Estando aqui, vale
@@ -161,8 +179,14 @@ def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
     atual = dados.get(CHAVE)
 
     if e_nosso(atual):
-        # Já é nossa: atualiza só o comando, que pode ter mudado de caminho.
+        # Já é nossa: atualiza o comando, que pode ter mudado de caminho, e o
+        # `refreshInterval` **se ele é nosso** — quem instalou antes do conserto
+        # da unidade tem 30000 gravado ali, que são oito horas, não trinta
+        # segundos. Rodar o instalar de novo é o que conserta.
         dados[CHAVE] = {**atual, "command": linha} if isinstance(atual, dict) else {"type": "command", "command": linha}
+        if _refresh_nosso(dados[CHAVE]):
+            dados[CHAVE][REFRESH] = REFRESH_SEGUNDOS
+            config.save_statusline_refresh(True)
         try:
             _gravar(caminho, dados)
         except OSError as erro:
@@ -195,15 +219,22 @@ def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
             pass  # cópia de segurança é bônus; não pode impedir a instalação
 
     if isinstance(atual, dict):
-        # Embrulhando a de alguém: troca só o comando e **não acrescenta nada**.
-        # Chave nossa esquecida ali vira resíduo no arquivo de outro programa, e
-        # o desinstalar deixaria de devolver exatamente o que havia antes.
+        # Embrulhando a de alguém: troca o comando e preserva o resto dela.
         dados[CHAVE] = {**atual, "command": linha}
         dados[CHAVE].setdefault("type", "command")
     else:
-        # Slot vazio: aí sim o `refreshInterval` é nosso, e é ele que mantém o
-        # número fresco enquanto a sessão fica parada.
-        dados[CHAVE] = {"type": "command", "command": linha, "refreshInterval": REFRESH_MS}
+        dados[CHAVE] = {"type": "command", "command": linha}
+    # O `refreshInterval` é o que mantém o número fresco enquanto a sessão fica
+    # parada — e sessão parada é exatamente quando a janela vira e o percentual
+    # guardado deixa de valer. Antes ele só entrava no slot vazio, para não
+    # deixar chave nossa no arquivo de outro programa; o preço era a barra
+    # congelar na máquina de quem já tinha statusline sem o campo. Agora entra
+    # sempre, e a marca na config é o que deixa o desinstalar devolver o
+    # arquivo exatamente como estava.
+    nosso_refresh = REFRESH not in dados[CHAVE]
+    if nosso_refresh:
+        dados[CHAVE][REFRESH] = REFRESH_SEGUNDOS
+    config.save_statusline_refresh(nosso_refresh)
     try:
         caminho.parent.mkdir(parents=True, exist_ok=True)
         _gravar(caminho, dados)
@@ -216,6 +247,96 @@ def instalar(base: Path | None = None, nosso: str | None = None) -> Resultado:
             f"  {caminho.name}. Tire a de lá, ou rode este comando com ela já removida."
         )
     return Resultado(True, f"statusline ligada em {caminho} com `{linha}`.{aviso}")
+
+
+def _refresh_nosso(linha: dict) -> bool:
+    """Se o `refreshInterval` desta `statusLine` pode ser reescrito por nós.
+
+    Vale quando a marca da config diz que fomos nós que o pusemos, e também
+    quando ele simplesmente não está lá.
+    """
+    return REFRESH not in linha or config.load_statusline_refresh()
+
+
+# O que o diagnóstico pode encontrar. São os quatro motivos pelos quais a barra
+# do Claude não aparece — e cada um tem uma saída diferente, que é a razão de
+# existirem como estados em vez de um booleano.
+LIGADA = "ligada"  # a statusline é a nossa: o dado chega
+AUSENTE = "ausente"  # não há statusLine nenhuma configurada
+DE_OUTRO = "de-outro"  # há uma, e não é a nossa: o dado vai para ela
+SEM_CLAUDE = "sem-claude"  # não há Claude Code nesta máquina
+
+# A linha curta que o painel mostra no lugar da barra. Cabe no cabeçalho, diz o
+# que fazer e não finge número nenhum.
+DICAS = {
+    AUSENTE: "no data · run: watchai --install-statusline",
+    DE_OUTRO: "statusline is not ours · run: watchai --install-statusline",
+}
+
+
+@dataclass(frozen=True)
+class Estado:
+    """De onde (e se) o consumo do Claude Code chega nesta máquina.
+
+    O limite do Claude só existe no WatchAI porque o agente o empurra para a
+    statusline. Quando essa linha deixa de ser a nossa — desinstalada, ou
+    sobrescrita por outro programa que também queria o lugar —, o arquivo que
+    alimenta a barra para de ser escrito e envelhece calado. O painel passava a
+    mostrar dois traços e a idade do dado, que é a mesma tela de quem nunca
+    instalou nada: informação suficiente para ver que algo está errado e
+    nenhuma para saber o quê.
+    """
+
+    chave: str
+    arquivo: Path | None = None
+    comando: str = ""  # o que está configurado lá, quando não é o nosso
+
+    @property
+    def ligada(self) -> bool:
+        return self.chave == LIGADA
+
+    @property
+    def dica(self) -> str:
+        """A linha curta para o painel. Vazia quando não há nada a dizer."""
+        return DICAS.get(self.chave, "")
+
+    @property
+    def mensagem(self) -> str:
+        """O relato do `--check-statusline`, em uma ou duas linhas."""
+        if self.chave == SEM_CLAUDE:
+            return "não achei o Claude Code nesta máquina — não há limite dele para ler."
+        if self.chave == LIGADA:
+            return f"a statusline do WatchAI está ligada em {self.arquivo}."
+        if self.chave == DE_OUTRO:
+            return (
+                f"a statusLine de {self.arquivo} é de outro programa:\n"
+                f"    {self.comando}\n"
+                "  O consumo do Claude Code vai para ela, e o WatchAI não o vê.\n"
+                "  O --install-statusline embrulha a dela: ela continua aparecendo\n"
+                "  no agente, e a barra volta ao painel.\n"
+                "  Para ligar: watchai --install-statusline"
+            )
+        return (
+            f"não há statusLine configurada em {self.arquivo}.\n"
+            "  É por ela que o Claude Code empurra o consumo das janelas de limite;\n"
+            "  sem ela o painel mostra o codex e não o Claude.\n"
+            "  Para ligar: watchai --install-statusline"
+        )
+
+
+def estado(base: Path | None = None) -> Estado:
+    """Se o consumo do Claude Code tem como chegar até aqui, e por que não."""
+    casa = base if base is not None else Path.home() / PASTA_CLAUDE
+    if not casa.is_dir():
+        return Estado(SEM_CLAUDE)
+    caminho, dados, _ = _alvo(casa)
+    atual = dados.get(CHAVE)
+    if e_nosso(atual):
+        return Estado(LIGADA, caminho)
+    if atual is None:
+        return Estado(AUSENTE, caminho)
+    linha = atual.get("command") if isinstance(atual, dict) else atual
+    return Estado(DE_OUTRO, caminho, linha if isinstance(linha, str) else "")
 
 
 def desinstalar(base: Path | None = None) -> Resultado:
@@ -234,6 +355,10 @@ def desinstalar(base: Path | None = None) -> Resultado:
             "type": "command",
             "command": guardada,
         }
+        # O `refreshInterval` que **nós** pusemos sai junto: devolver a
+        # statusline de alguém com um campo que ela não tinha é deixar resíduo.
+        if config.load_statusline_refresh():
+            dados[CHAVE].pop(REFRESH, None)
         recado = f"statusline devolvida para `{guardada}` em {caminho}."
     else:
         dados.pop(CHAVE)
@@ -243,7 +368,21 @@ def desinstalar(base: Path | None = None) -> Resultado:
     except OSError as erro:
         return Resultado(False, f"não consegui escrever em {caminho}: {erro}")
     config.save_statusline_wrapped(None)
+    config.save_statusline_refresh(False)
     return Resultado(True, recado)
 
 
-__all__ = ["REFRESH_MS", "Resultado", "comando", "desinstalar", "e_nosso", "instalar"]
+__all__ = [
+    "AUSENTE",
+    "DE_OUTRO",
+    "Estado",
+    "LIGADA",
+    "REFRESH_SEGUNDOS",
+    "Resultado",
+    "SEM_CLAUDE",
+    "comando",
+    "desinstalar",
+    "e_nosso",
+    "estado",
+    "instalar",
+]

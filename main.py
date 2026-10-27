@@ -16,4 +16,7 @@ if SRC.is_dir() and str(SRC) not in sys.path:
 from watchai.__main__ import main  # noqa: E402  (precisa do path acima)
 
 if __name__ == "__main__":
-    main()
+    # Com o código de saída, como o `python -m watchai` já fazia. Sem ele, um
+    # `--install-statusline` que falhou saía com 0 e qualquer script que
+    # encadeasse o comando seguia adiante achando que tinha dado certo.
+    raise SystemExit(main())

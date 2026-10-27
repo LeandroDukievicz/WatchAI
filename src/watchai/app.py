@@ -102,6 +102,11 @@ class WatchAIApp(App):
         # Quanto já foi gasto das janelas de limite do plano. Lista vazia é
         # resposta boa: agente sem número não ganha barra.
         self.consumos = []
+        # E, quando falta número, por que falta — `{"claude": "no data · run: …"}`.
+        # Sem isto a ausência era indistinguível de uma falha: o painel mostrava
+        # dois traços, e quem olhava não tinha como saber que a statusline do
+        # agente havia sido sobrescrita por outro programa.
+        self.avisos_limite: dict[str, str] = {}
         if mock:
             self.store = build_store()
             self.simulator = MockSimulator(self.store, seed=seed)
@@ -197,19 +202,30 @@ class WatchAIApp(App):
         # Junto, e na mesma thread: abrir rollout é disco, e disco não pode
         # acontecer no laço da UI. O cache dos limites devolve o que já sabia
         # na maioria das voltas.
-        try:
-            consumos = self.limites.ler(monotonic()) if self.limites is not None else []
-        except Exception:
-            consumos = []
-        self.call_from_thread(self._scan_done, snapshot, consumos)
+        consumos, avisos = [], {}
+        if self.limites is not None:
+            try:
+                consumos = self.limites.ler(monotonic())
+            except Exception:
+                consumos = []
+            # Por `getattr`, e separado da leitura: a razão da ausência é um
+            # extra, e um `Limites` injetado (teste, ou leitor de outra pessoa)
+            # que não a tenha não pode custar a barra de quem tem número.
+            try:
+                avisos = dict(getattr(self.limites, "avisos", None) or {})
+            except Exception:
+                avisos = {}
+        self.call_from_thread(self._scan_done, snapshot, consumos, avisos)
 
-    def _scan_done(self, snapshot, consumos=()) -> None:
+    def _scan_done(self, snapshot, consumos=(), avisos=None) -> None:
         self._scanning = False
         # A barra de limite não depende da varredura ter dado certo: são duas
         # leituras independentes, e uma falhar não pode apagar a outra.
-        mudou = list(consumos) != self.consumos
+        avisos = dict(avisos or {})
+        mudou = list(consumos) != self.consumos or avisos != self.avisos_limite
         if mudou:
             self.consumos = list(consumos)
+            self.avisos_limite = avisos
         if snapshot is not None:
             try:
                 mudou = self.provider.apply(snapshot, datetime.now()) or mudou

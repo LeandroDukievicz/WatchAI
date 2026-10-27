@@ -79,6 +79,26 @@ ESTOURANDO = 90.0
 # qualquer efeito prático e a idade só faria ruído.
 IDADE_VISIVEL = 300.0
 
+# Quantas janelas **curtas** de silêncio da fonte aposentam um retrato cujas
+# janelas já viraram todas.
+#
+# Uma janela que virou guarda um percentual que não vale mais, e para isso já
+# existe o traço: a barra fica vazia e a idade do dado explica. Só que o traço
+# supõe um retrato de **algumas horas** — o de ontem de madrugada, com a janela
+# de 5 h já zerada e a fonte viva, pronta para escrever o número novo. Quando a
+# fonte para de escrever (statusline desinstalada, ou sobrescrita por outro
+# programa), o mesmo arquivo fica ali por dias e a tela mostra para sempre dois
+# traços e um "(2d16h ago)": a mesma tela de quem nunca instalou nada, só mais
+# confusa. Isso não é dado velho, é dado nenhum com a cara de dado.
+#
+# A conta é contra a janela **mais curta**, e não a mais longa, porque é ela que
+# mede o silêncio: a fonte escreve a cada render do agente, então passada uma
+# janela curta inteira sem uma linha nova — com tudo vencido — não há mais
+# ninguém escrevendo. Pela janela mais longa, o retrato do Claude só venceria
+# depois de dez dias, que é tempo de sobra para alguém concluir que o painel
+# está quebrado. Uma janela e meia é folga para relógio torto.
+VALIDADE_JANELAS_CURTAS = 1.5
+
 # O nome do percentual **diverge entre os dois**: `used_percent` no codex,
 # `used_percentage` no Claude Code. O normalizador aceita os dois — e é este o
 # tipo de detalhe que, esquecido, faz a barra do Claude nunca aparecer.
@@ -180,6 +200,26 @@ class Consumo:
         if self.medido is None:
             return None
         return max(0.0, agora - self.medido)
+
+    def morto(self, agora: float) -> bool:
+        """O retrato não guarda mais informação nenhuma.
+
+        Duas condições, e as duas juntas: **toda** janela já virou (o percentual
+        de nenhuma vale) e o retrato é mais velho que a janela mais curta dele
+        mais uma folga (ninguém está mais escrevendo o arquivo). Uma só não
+        basta — janela vencida com dado recente é o caso normal de quem usou o
+        agente há duas horas, e dado antigo com janela aberta ainda informa.
+
+        Sem carimbo de medida não se afirma nada: quem não sabe quando mediu não
+        pode decidir que o dado morreu.
+        """
+        janelas = self.janelas
+        if not janelas or self.medido is None:
+            return False
+        if not all(j.vencida(agora) for j in janelas):
+            return False
+        prazo = min(j.minutos for j in janelas) * 60 * VALIDADE_JANELAS_CURTAS
+        return agora - self.medido > prazo
 
 
 def _numero(bruto, campos) -> float | None:
@@ -300,17 +340,22 @@ class LeitorCodex:
 
     def __init__(self, home: Path) -> None:
         self.raiz = home / ".codex" / "sessions"
+        self.motivo = ""  # o codex não precisa de configuração: nunca há o que dizer
 
-    def ler(self) -> Consumo | None:
+    def ler(self, agora: float | None = None) -> Consumo | None:
         if not self.raiz.is_dir():
             return None
         try:
             candidatos = _por_mtime(self.raiz.glob("*/*/*/rollout-*.jsonl"), ARQUIVOS_VISTOS)
         except OSError:
             return None
+        quando = agora if agora is not None else time.time()
         for caminho in candidatos:
             achado = self._do_arquivo(caminho)
-            if achado is not None:
+            # Rollout da semana passada, com as duas janelas viradas, é a mesma
+            # linha de dois traços para sempre — aqui sem nada a configurar: quem
+            # não usa o codex há dias não tem notícia nenhuma, e a linha sai.
+            if achado is not None and not achado.morto(quando):
                 return achado
         return None
 
@@ -331,21 +376,61 @@ class LeitorClaude:
     Sem a statusline configurada não há arquivo, e não há barra do Claude. É
     assim de propósito: o app funciona inteiro sem, e inventar o número seria
     pior que não ter.
+
+    O que **não** era de propósito é não contar isso a ninguém. Este leitor
+    devolve `None` em três situações bem diferentes — nunca instalado, instalado
+    e sobrescrito por outro programa, instalado e ainda sem o primeiro render —
+    e cada uma tem uma saída própria. Quando não há número, `motivo` diz o que
+    rodar; é o que o painel mostra no lugar da barra.
     """
 
     kind = "claude"
 
-    def __init__(self, pasta: Path) -> None:
+    def __init__(self, pasta: Path, casa: Path | None = None) -> None:
         self.arquivo = pasta / ARQUIVO_CLAUDE
+        self.casa = casa
+        self.motivo = ""
 
-    def ler(self) -> Consumo | None:
+    def ler(self, agora: float | None = None) -> Consumo | None:
+        achado = self._ler(agora if agora is not None else time.time())
+        self.motivo = "" if achado is not None else self._motivo()
+        return achado
+
+    def _ler(self, agora: float) -> Consumo | None:
         try:
             dados = json.loads(self.arquivo.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
         if not isinstance(dados, dict):
             return None
-        return consumo(self.kind, dados.get("rate_limits"), _epoch_plausivel(dados.get("medido")))
+        achado = consumo(self.kind, dados.get("rate_limits"), _epoch_plausivel(dados.get("medido")))
+        if achado is not None and achado.morto(agora):
+            return None  # o arquivo está ali e não diz mais nada
+        return achado
+
+    def _motivo(self) -> str:
+        """A linha curta que explica a ausência, ou "" se não houver o que dizer."""
+        from .. import statusline
+
+        try:
+            situacao = statusline.estado(self.casa)
+        except OSError:
+            return ""
+        if situacao.dica:
+            return situacao.dica
+        if situacao.ligada and not self.arquivo.exists():
+            # Ligada e sem arquivo: o agente ainda não renderizou nenhuma tela
+            # desde a instalação. É espera, não falha — e dizer isso evita que
+            # alguém rode o instalar de novo achando que não pegou.
+            return "waiting for the agent's first render"
+        if situacao.ligada:
+            # Ligada, arquivo existe e não vale mais, e há agente rodando (quem
+            # filtra isso é o painel): ninguém está escrevendo o arquivo com a
+            # linha configurada. A causa provável é a que este módulo já
+            # documenta — o agente executa a statusline com o PATH **dele**, e
+            # um `watchai` que só existe dentro de um venv não está ali.
+            return "stale data · can the agent run `watchai`?"
+        return ""
 
 
 class Limites:
@@ -361,9 +446,13 @@ class Limites:
         destino = pasta if pasta is not None else limits_dir()
         self.leitores = list(leitores) if leitores is not None else [
             LeitorCodex(casa),
-            LeitorClaude(destino),
+            LeitorClaude(destino, casa / ".claude"),
         ]
         self._cache: list[Consumo] = []
+        # Por que falta o número de algum agente, quando falta e quando se sabe.
+        # Fica ao lado do cache e no mesmo ritmo dele: é a outra metade da mesma
+        # resposta, e o painel precisa das duas na mesma volta.
+        self.avisos: dict[str, str] = {}
         self._lido: float | None = None
 
     def ler(self, agora: float) -> list[Consumo]:
@@ -371,7 +460,7 @@ class Limites:
         if self._lido is not None and agora - self._lido < INTERVALO:
             return self._cache
         self._lido = agora
-        achados = []
+        achados, avisos = [], {}
         for leitor in self.leitores:
             try:
                 achado = leitor.ler()
@@ -379,7 +468,12 @@ class Limites:
                 achado = None  # leitor quebrado apaga a barra dele, não o app
             if achado is not None:
                 achados.append(achado)
+                continue
+            motivo = getattr(leitor, "motivo", "")
+            if motivo:
+                avisos[leitor.kind] = motivo
         self._cache = achados
+        self.avisos = avisos
         return achados
 
     def invalidar(self) -> None:
@@ -532,6 +626,7 @@ __all__ = [
     "LeitorClaude",
     "LeitorCodex",
     "Limites",
+    "VALIDADE_JANELAS_CURTAS",
     "consumo",
     "gravar",
     "limits_dir",

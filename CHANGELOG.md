@@ -5,6 +5,54 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Corrigido
+- **A barra do Claude Code envelhecia sozinha porque o `refreshInterval` ia em
+  milissegundos.** O campo é em **segundos** — o esquema do Claude Code o
+  descreve como "re-run the status line command every N seconds" e o multiplica
+  por mil para agendar. O WatchAI gravava `30000` ali: oito horas e vinte, não
+  trinta segundos. O refresh que existe justamente para a sessão parada não
+  acontecia uma vez por dia de trabalho, a janela virava, e o painel passava a
+  mostrar `—` nas duas janelas em vez do consumo da sessão e do limite semanal.
+  Rodar `watchai --install-statusline` de novo acerta o valor de quem já o
+  tinha instalado.
+- **E o `refreshInterval` passou a entrar também quando embrulhamos a statusline
+  de outra pessoa.** Antes ele só entrava no slot vazio, para não deixar chave
+  nossa no arquivo de outro programa — mas o preço era a barra congelar na
+  máquina de quem já tinha statusline sem o campo. Agora entra sempre, e uma
+  marca na config (`statusline_refresh_nosso`) é o que deixa o
+  `--uninstall-statusline` devolver o arquivo exatamente como estava.
+- **A statusline tomada por outro programa deixou de ser uma falha silenciosa.**
+  A `statusLine` do `settings.json` é um lugar que qualquer programa pode
+  sobrescrever, e quando isso acontece o consumo do Claude passa a ir para ele:
+  o arquivo que alimenta a barra para de ser escrito e apenas envelhece. O
+  painel mostrava dois traços e um `(2d16h ago)` — a mesma tela de quem nunca
+  instalou nada, só mais confusa. Agora o lugar da barra recebe a razão
+  (`claude  statusline is not ours · run: watchai --install-statusline`), e só
+  para agente **rodando agora**: quem usa só o codex não recebe recado sobre o
+  Claude.
+- **Retrato de limite que não guarda mais nada sai da tela.** Com **todas** as
+  janelas viradas e a fonte calada por mais de uma janela curta, nenhum
+  percentual ali vale — e linha de dois traços para sempre é dado nenhum com a
+  cara de dado. A conta é contra a janela **curta**, que é a que mede o
+  silêncio: pela longa, o retrato do Claude só venceria depois de dez dias.
+  Vale para os dois agentes, inclusive o rollout do codex da semana passada.
+- **`sorted(..., key=lambda p: p.stat().st_mtime)` em dois leitores de diário**
+  — o furo que `_por_mtime` já havia fechado nos outros. O `stat` dentro da
+  chave levanta quando um arquivo some entre o glob e a ordenação, e sumir é
+  rotina numa sessão que dispara muitos sub-agentes; a exceção subia até
+  `atribuir`, que devolvia `None` para **todos** os agentes daquele tipo. Um
+  arquivo apagado em outra pasta apagava o estado do seu card por um ciclo.
+- **`python main.py` descartava o código de saída.** Um
+  `--install-statusline` que falhou saía com `0`, e qualquer script que
+  encadeasse o comando seguia adiante achando que tinha dado certo. O
+  `python -m watchai` já fazia certo.
+
+### Adicionado
+- **`watchai --check-statusline`** — diz se o consumo do Claude Code tem como
+  chegar até aqui e, quando não tem, o que está no lugar. É para a pergunta que
+  antes só se respondia lendo o `settings.json` na mão: "por que a barra do
+  Claude não aparece?". Não escreve nada e sai com `1` quando a resposta é não.
+
 ### Removido
 - **O empacotamento para loja saiu inteiro** — `snap/`, o workflow do snap e o
   workflow de publicação no PyPI. O WatchAI passa a ser instalado da fonte, por

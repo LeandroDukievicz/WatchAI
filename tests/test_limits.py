@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import os
+import re
+import tempfile
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 from watchai.format import fmt_span
 from watchai.providers import limits
@@ -27,6 +30,7 @@ from watchai.providers.limits import (
     Limites,
     consumo,
 )
+from watchai.providers.transcript import Transcripts
 from watchai.widgets.header import barra, cor_do_uso
 
 AGORA = 1_790_700_000.0
@@ -67,7 +71,7 @@ def rollout(tmp_path, nome, rate_limits=None, quando=AGORA, mtime=None):
 def test_o_codex_entrega_o_limite_do_proprio_rollout(tmp_path):
     """Zero configuração: é o mesmo arquivo que o leitor de diário já abre."""
     rollout(tmp_path, "a", CODEX)
-    achado = LeitorCodex(tmp_path).ler()
+    achado = LeitorCodex(tmp_path).ler(AGORA)
     assert achado is not None
     assert achado.kind == "codex" and achado.plano == "plus"
     assert (achado.curta.usado, achado.curta.minutos) == (16.0, 300)
@@ -83,7 +87,7 @@ def test_rollout_de_sessao_nova_nao_apaga_a_barra(tmp_path):
     trabalhar."""
     rollout(tmp_path, "velho", CODEX, mtime=AGORA - 600)
     rollout(tmp_path, "novinho", None, mtime=AGORA)
-    achado = LeitorCodex(tmp_path).ler()
+    achado = LeitorCodex(tmp_path).ler(AGORA)
     assert achado is not None and achado.curta.usado == 16.0
 
 
@@ -199,6 +203,174 @@ def test_janela_que_ja_virou_nao_mostra_percentual():
     assert not Janela(usado=18.0, minutos=300).vencida(AGORA)
 
 
+# ---- retrato que não guarda mais nada ----------------------------------------
+
+
+def test_retrato_vencido_e_recente_continua_na_tela():
+    """O caso normal: você usou o agente de madrugada, a janela de 5 h virou, e
+    o percentual guardado não vale mais. Para isso existe o traço — o dado é de
+    três horas atrás, a fonte está viva, e a tela diz a idade."""
+    vencido = Consumo(
+        kind="claude",
+        curta=Janela(47.0, 300, AGORA - 3600),
+        medido=AGORA - 3 * 3600,
+    )
+    assert vencido.janelas and not vencido.morto(AGORA)
+
+
+def test_retrato_de_dias_com_tudo_vencido_sai_da_tela():
+    """Dado nenhum com a cara de dado. Quando a fonte para de escrever, o mesmo
+    arquivo fica ali por dias e a tela mostra para sempre dois traços e um
+    "(2d16h ago)" — que é a tela de quem nunca instalou nada, só mais confusa.
+
+    O retrato é o desta máquina, do dia em que outro programa tomou a
+    statusline: medido há quase três dias, as duas janelas viradas."""
+    morto = Consumo(
+        kind="claude",
+        curta=Janela(47.0, 300, AGORA - 2.6 * 86400),
+        longa=Janela(87.0, 10080, AGORA - 1.3 * 86400),
+        medido=AGORA - 2.7 * 86400,
+    )
+    assert morto.morto(AGORA)
+    # A folga é contra a janela curta: o mesmo retrato, de duas horas atrás,
+    # ainda é o caso normal de quem usou o agente de madrugada.
+    assert not replace(morto, medido=AGORA - 2 * 3600).morto(AGORA)
+
+
+def test_uma_janela_ainda_aberta_segura_o_retrato_inteiro():
+    """Vencer **todas** é a condição: a semana que ainda corre é informação boa
+    mesmo com a janela de 5 h virada."""
+    meio = Consumo(
+        kind="claude",
+        curta=Janela(47.0, 300, AGORA - 86400),
+        longa=Janela(87.0, 10080, AGORA + 86400),
+        medido=AGORA - 20 * 86400,
+    )
+    assert not meio.morto(AGORA)
+
+
+def test_sem_carimbo_de_medida_nao_se_afirma_que_morreu():
+    """Quem não sabe quando mediu não pode decidir que o dado venceu de velho."""
+    sem = Consumo(kind="claude", curta=Janela(47.0, 300, AGORA - 10 * 86400))
+    assert not sem.morto(AGORA)
+
+
+def test_o_rollout_da_semana_passada_tambem_sai(tmp_path):
+    """O codex não precisa de configuração nenhuma, mas envelhece igual: quem
+    não o usa há dias não tem notícia dele, e linha de dois traços não é
+    notícia."""
+    medido = AGORA - 9 * 86400
+    rate = {
+        "primary": {"used_percent": 22.0, "window_minutes": 300, "resets_at": medido + 3600},
+        "secondary": {"used_percent": 17.0, "window_minutes": 10080, "resets_at": medido + 4 * 86400},
+    }
+    rollout(tmp_path, "velho", rate, quando=medido)
+    assert LeitorCodex(tmp_path).ler(AGORA) is None
+    # O de hoje continua aparecendo.
+    rollout(tmp_path, "hoje", CODEX, quando=AGORA)
+    assert LeitorCodex(tmp_path).ler(AGORA) is not None
+
+
+def test_o_leitor_descarta_o_arquivo_que_nao_diz_mais_nada(tmp_path):
+    medido = AGORA - 2.7 * 86400
+    limits.gravar(
+        {
+            "kind": "claude",
+            "medido": medido,
+            # Como o Claude Code manda, e com os resets que ele mandaria: dentro
+            # do próprio tamanho de cada janela a partir da medição.
+            "rate_limits": {
+                "five_hour": {"used_percentage": 47, "resets_at": medido + 2 * 3600},
+                "seven_day": {"used_percentage": 87, "resets_at": medido + 1.3 * 86400},
+            },
+        },
+        pasta=tmp_path,
+    )
+    leitor = LeitorClaude(tmp_path, tmp_path / "sem-claude")
+    assert leitor.ler(AGORA) is None
+
+
+# ---- por que falta o número --------------------------------------------------
+
+
+def test_sem_statusline_o_leitor_diz_o_que_rodar(tmp_path):
+    """A ausência tinha a mesma cara da falha. Agora ela se explica."""
+    casa = tmp_path / "claude"
+    casa.mkdir()
+    (casa / "settings.json").write_text('{"model": "opus"}', encoding="utf-8")
+    leitor = LeitorClaude(tmp_path / "lim", casa)
+    assert leitor.ler(AGORA) is None
+    assert "--install-statusline" in leitor.motivo
+
+
+def test_statusline_de_outro_programa_e_dito_com_esse_nome(tmp_path):
+    casa = tmp_path / "claude"
+    casa.mkdir()
+    (casa / "settings.json").write_text(
+        json.dumps({"statusLine": {"type": "command", "command": "outro-prog"}}), encoding="utf-8"
+    )
+    leitor = LeitorClaude(tmp_path / "lim", casa)
+    assert leitor.ler(AGORA) is None
+    assert "not ours" in leitor.motivo
+
+
+def test_ligada_e_ainda_sem_arquivo_e_espera_e_nao_falha(tmp_path):
+    """Instalou agora: o agente ainda não renderizou tela nenhuma. Dizer "rode o
+    instalar" aqui faria a pessoa rodar duas vezes à procura de um problema que
+    não existe."""
+    casa = tmp_path / "claude"
+    casa.mkdir()
+    (casa / "settings.json").write_text(
+        json.dumps({"statusLine": {"type": "command", "command": "watchai --statusline"}}),
+        encoding="utf-8",
+    )
+    leitor = LeitorClaude(tmp_path / "lim", casa)
+    assert leitor.ler(AGORA) is None
+    assert "first render" in leitor.motivo
+
+
+def test_com_numero_na_mao_nao_ha_aviso_nenhum(tmp_path):
+    limits.statusline(json.dumps(ENTRADA), pasta=tmp_path, agora=AGORA)
+    leitor = LeitorClaude(tmp_path)
+    assert leitor.ler(AGORA) is not None
+    assert leitor.motivo == ""
+
+
+def test_os_avisos_andam_junto_com_a_leitura():
+    """O painel precisa dos dois na mesma volta: o que há, e por que falta o
+    resto."""
+
+    class SemNada:
+        kind = "claude"
+        motivo = "no data · run: watchai --install-statusline"
+
+        def ler(self):
+            return None
+
+    class ComNumero:
+        kind = "codex"
+        motivo = ""
+
+        def ler(self):
+            return Consumo(kind="codex", curta=Janela(16.0, 300), medido=AGORA)
+
+    lim = Limites(leitores=[SemNada(), ComNumero()])
+    achados = lim.ler(1000.0)
+    assert [c.kind for c in achados] == ["codex"]
+    assert lim.avisos == {"claude": "no data · run: watchai --install-statusline"}
+
+
+def test_leitor_quebrado_nao_inventa_aviso():
+    class Quebrado:
+        kind = "claude"
+
+        def ler(self):
+            raise RuntimeError("sem chance")
+
+    lim = Limites(leitores=[Quebrado()])
+    assert lim.ler(1000.0) == [] and lim.avisos == {}
+
+
 # ---- o modo statusline -------------------------------------------------------
 
 
@@ -226,7 +398,7 @@ def test_a_statusline_grava_o_consumo_e_imprime_a_linha(tmp_path):
 def test_o_leitor_do_claude_le_o_que_a_statusline_gravou(tmp_path):
     """O caminho inteiro: o agente empurra, o WatchAI lê arquivo local."""
     limits.statusline(json.dumps(ENTRADA), pasta=tmp_path, agora=AGORA)
-    achado = LeitorClaude(tmp_path).ler()
+    achado = LeitorClaude(tmp_path).ler(AGORA)
     assert achado is not None and achado.kind == "claude"
     assert (achado.curta.usado, achado.longa.usado) == (8.0, 31.0)
     assert achado.medido == AGORA
@@ -362,8 +534,9 @@ def test_fmt_span_le_de_relance():
 class LimitesFixos:
     """Um `Limites` que devolve o que o teste mandou, sem tocar em disco."""
 
-    def __init__(self, *consumos):
+    def __init__(self, *consumos, avisos=None):
         self.consumos = list(consumos)
+        self.avisos = dict(avisos or {})
 
     def ler(self, agora):
         return self.consumos
@@ -372,18 +545,40 @@ class LimitesFixos:
         pass
 
 
-def header_texto(*consumos, size=(150, 40)):
+def _snapshot(*kinds):
+    """Um snapshot com um agente de cada tipo pedido, num terminal cada."""
+    from watchai.providers.source import ProcObs, Snapshot, TermObs
+
+    nascimento = time.time() - 3600
+    agentes, terminais = [], {}
+    for i, kind in enumerate(kinds):
+        tty = f"/dev/pts/{i + 1}"
+        agentes.append(ProcObs(
+            pid=1000 + i, kind=kind, label=kind, terminal=tty,
+            terminal_label=tty.replace("/dev/", ""), terminal_started=nascimento,
+            created=nascimento, cpu=10.0, cwd="/home/eu/proj", tool_children=0,
+            ancestors=(), window_pid=None, window_app="",
+        ))
+        terminais[tty] = TermObs(tty, tty.replace("/dev/", ""), nascimento)
+    return Snapshot(agents=tuple(agentes), terminals=terminais)
+
+
+def header_texto(*consumos, size=(150, 40), avisos=None, rodando=()):
     """O que o header mostra, como texto, com estes limites."""
     from watchai.app import WatchAIApp
     from watchai.providers.source import Snapshot
 
     class Fonte:
         def snapshot(self):
-            return Snapshot()
+            return _snapshot(*rodando) if rodando else Snapshot()
 
     async def main():
         app = WatchAIApp(mock=False, source=Fonte(), theme_key="watchai",
-                         limites=LimitesFixos(*consumos))
+                         limites=LimitesFixos(*consumos, avisos=avisos))
+        # Os diários vêm de uma pasta vazia: com agente na varredura, o leitor
+        # iria procurar transcript no `~/.claude` de quem roda a suíte — que é
+        # justamente o que nenhum teste daqui faz.
+        app.provider.transcripts = Transcripts(Path(tempfile.gettempdir()) / "watchai-sem-diario")
         async with app.run_test(size=size) as pilot:
             app.scan()
             await app.workers.wait_for_complete()
@@ -452,6 +647,48 @@ def test_janela_vencida_aparece_com_traco_e_nao_com_numero():
     ))
     assert texto.count(" 18%") == 1  # só a janela que ainda vale
     assert "—" in texto
+
+
+def test_o_aviso_ocupa_o_lugar_da_barra_que_nao_veio():
+    """A tela de dois traços sem explicação era a mesma de quem nunca instalou
+    nada. Agora o painel diz o que rodar."""
+    texto, altura, rows = header_texto(
+        avisos={"claude": "no data · run: watchai --install-statusline"},
+        rodando=("claude",),
+    )
+    assert "claude" in texto and "--install-statusline" in texto
+    assert altura == 4 and rows == 4  # o aviso custa a mesma linha que a barra
+
+
+def test_aviso_de_agente_que_nao_esta_rodando_nao_aparece():
+    """Recado sobre o Claude na tela de quem usa só o codex é ruído."""
+    texto, altura, _ = header_texto(
+        avisos={"claude": "no data · run: watchai --install-statusline"},
+        rodando=("codex",),
+    )
+    assert "--install-statusline" not in texto
+    assert altura == 3
+
+
+def test_quem_tem_barra_nao_ganha_aviso_tambem():
+    """Dizer "sem dado" ao lado do dado é contradição na mesma tela."""
+    agora = time.time()
+    texto, altura, _ = header_texto(
+        Consumo(kind="claude", curta=Janela(12.0, 300, agora + 3600), medido=agora),
+        avisos={"claude": "no data · run: watchai --install-statusline"},
+        rodando=("claude",),
+    )
+    assert " 12%" in texto and "--install-statusline" not in texto
+    assert altura == 4
+
+
+def test_terminal_baixo_tambem_nao_paga_o_aviso():
+    _, altura, _ = header_texto(
+        avisos={"claude": "no data · run: watchai --install-statusline"},
+        rodando=("claude",),
+        size=(150, 18),
+    )
+    assert altura == 3
 
 
 def test_sem_numero_o_header_nao_cresce():

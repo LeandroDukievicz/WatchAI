@@ -25,6 +25,11 @@ AGENTS_KEY = "agents"
 # O comando de statusline que existia no Claude Code antes de o WatchAI entrar.
 # Guardado para ser chamado no lugar do nosso e devolvido no desinstalar.
 WRAPPED_KEY = "statusline_wrapped"
+# Se o `refreshInterval` que está no settings.json do agente foi posto por nós.
+# Sem esta marca, o desinstalar não sabe se deve tirá-lo: deixá-lo é resíduo
+# nosso no arquivo de outro programa, e tirá-lo às cegas é apagar a escolha de
+# quem já tinha o campo.
+REFRESH_KEY = "statusline_refresh_nosso"
 
 
 def config_dir() -> Path:
@@ -164,6 +169,15 @@ def save_statusline_wrapped(comando: str | None) -> bool:
     return save(**{WRAPPED_KEY: comando if comando else None})
 
 
+def load_statusline_refresh() -> bool:
+    """Se o `refreshInterval` do settings.json do agente é nosso."""
+    return load().get(REFRESH_KEY) is True
+
+
+def save_statusline_refresh(nosso: bool) -> bool:
+    return save(**{REFRESH_KEY: bool(nosso)})
+
+
 def load_notify(default: bool = False) -> bool:
     """Se a notificação do sistema está ligada — interruptor próprio, separado
     do bip.
@@ -205,12 +219,14 @@ __all__ = [
     "load_alerts",
     "load_notify",
     "load_sort",
+    "load_statusline_refresh",
     "load_statusline_wrapped",
     "load_theme",
     "save",
     "save_alerts",
     "save_notify",
     "save_sort",
+    "save_statusline_refresh",
     "save_statusline_wrapped",
     "save_theme",
 ]

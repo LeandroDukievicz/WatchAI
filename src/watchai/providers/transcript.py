@@ -522,9 +522,13 @@ class ClaudeCode(Diario):
         pasta = self._pasta_subagentes(caminho)
         if not pasta.is_dir():
             return 0, 0.0
-        recentes = sorted(
-            pasta.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
-        )[: self.SUBAGENTES_MAX]
+        # Por `_por_mtime`, e não por um `sorted(key=...stat())`: o `stat` dentro
+        # da chave levanta quando um arquivo some no meio da ordenação, e sumir é
+        # rotina numa sessão que dispara muitos sub-agentes. A exceção subia até
+        # `atribuir`, que devolvia `None` para **todos** os agentes do tipo — um
+        # arquivo apagado em outra pasta apagava o estado do seu card por um
+        # ciclo. É o mesmo furo que `_por_mtime` fechou nos outros leitores.
+        recentes = _por_mtime(pasta.glob("*.jsonl"), self.SUBAGENTES_MAX)
         vivos, mtime = 0, 0.0
         for arquivo in recentes:
             aberto, quando = self._aberto(arquivo)
@@ -745,18 +749,25 @@ class OpenCode(Diario):
         mensagens = self.raiz / "message" / sessao
         if not mensagens.is_dir():
             return None
-        try:
-            ultima = max(mensagens.glob("*.json"), key=lambda p: p.stat().st_mtime)
-        except ValueError:
+        # Pelo `_por_mtime`: o `max(..., key=...stat())` pegava o `ValueError` da
+        # pasta vazia e deixava passar o `OSError` do arquivo que sumiu entre o
+        # glob e o stat — e essa exceção subia até `atribuir`, que então devolvia
+        # `None` para todos os agentes do tipo.
+        recentes = _por_mtime(mensagens.glob("*.json"), 1)
+        if not recentes:
             return None
-        mtime = ultima.stat().st_mtime
+        ultima = recentes[0]
+        try:
+            mtime = ultima.stat().st_mtime
+        except OSError:
+            return None
         msg = _primeira_linha(ultima) or {}
         quando = _epoch_ms(((msg.get("time") or {}).get("created")))
 
         # Uma ferramenta ainda rodando aparece nas "partes" da mensagem.
         partes = self.raiz / "part" / sessao / ultima.stem
         if partes.is_dir():
-            for parte in sorted(partes.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            for parte in _por_mtime(partes.glob("*.json")):
                 dados = _primeira_linha(parte) or {}
                 if dados.get("type") != "tool":
                     continue

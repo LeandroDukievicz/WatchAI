@@ -46,12 +46,25 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="desfaz o --install-statusline, devolvendo a statusline que havia antes",
     )
+    parser.add_argument(
+        "--check-statusline",
+        action="store_true",
+        help="diz se o consumo do Claude Code tem como chegar até aqui. Não "
+        "escreve nada: é para quando a barra do Claude não aparece no painel",
+    )
     parser.add_argument("--version", action="version", version=f"watchai {__version__}")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int | None:
     args = parse(argv)
+    if args.check_statusline:
+        # Só pergunta e conta. A barra do Claude depende de uma chave no
+        # settings.json do agente, e essa chave é um lugar que outro programa
+        # pode tomar: sem este comando, descobrir isso era ler o JSON na mão.
+        situacao = statusline.estado()
+        print(("✓ " if situacao.ligada else "✗ ") + situacao.mensagem)
+        return 0 if situacao.ligada else 1
     if args.install_statusline or args.uninstall_statusline:
         resultado = (
             statusline.instalar() if args.install_statusline else statusline.desinstalar()

@@ -132,6 +132,8 @@ watchai --theme vampire # tema só desta execução
 watchai --install-statusline    # liga o consumo do Claude Code (não sobrescreve
                                 # a statusline que você já tiver)
 watchai --uninstall-statusline  # desliga, devolvendo a de antes
+watchai --check-statusline      # diz se o consumo do Claude tem como chegar
+                                # até aqui — para quando a barra dele não aparece
 watchai --statusline            # não abre a interface: é o modo que o agente
                                 # chama a cada render (veja ① Cabeçalho)
 ```
@@ -276,11 +278,18 @@ do pacote (`@anthropic-ai/claude-code`).
   idade do dado. Não há como conferir sem chamar API, e o WatchAI não chama.
 - **O número é tão fresco quanto o último uso daquele agente.** Sem sessão
   rodando, ele envelhece: a linha diz de quando é, e a janela que já virou
-  aparece com `—` em vez de um percentual velho.
+  aparece com `—` em vez de um percentual velho. Passada a janela curta com
+  **tudo** vencido, o retrato sai da tela: a essa altura ninguém está mais
+  escrevendo o arquivo, e uma linha de dois traços para sempre é dado nenhum
+  com a cara de dado.
 - **O consumo do Claude Code depende da statusline dele** estar apontada para o
   `watchai --statusline` (`watchai --install-statusline` faz isso). Sem isso não
   há linha do Claude — e não há estimativa no lugar dela, porque o mapeamento de
   tokens para o limite da Anthropic não é público e o número sairia inventado.
+  Essa chave do `settings.json` é um lugar que **outro programa pode tomar** sem
+  avisar ninguém, e aí o consumo passa a ir para ele. Quando isso acontece, o
+  painel diz o que rodar no lugar da barra, e o `watchai --check-statusline`
+  conta a história inteira.
 - **O consumo do Claude Code é da conta, não da sessão.** Duas contas diferentes
   usando o mesmo computador escrevem no mesmo arquivo, e vale a última que
   rodou.
@@ -352,6 +361,18 @@ número uma vez por sessão.
   (fica só o percentual, que é o dado); abaixo de 20 linhas de terminal ela
   desaparece, para não tirar linhas do EVENT STREAM.
 - **Sem número, sem linha.** Nada aqui é estimado.
+- **Mas quando há por quê, a razão ocupa o lugar da barra.** O limite do Claude
+  só chega aqui porque o agente o empurra para a statusline, e essa chave é um
+  lugar que outro programa pode tomar sem avisar — quando isso acontece, o
+  arquivo que alimenta a barra simplesmente para de ser escrito:
+
+  ```
+  │ codex    5h ▓░░░░░░░░░   7% · 4h57m   7d ▓▓░░░░░░░░  19% · 5d14h           │
+  │ claude   statusline is not ours · run: watchai --install-statusline         │
+  ```
+
+  O aviso só aparece para agente **rodando agora**: quem usa só o codex não
+  recebe recado sobre o Claude. O `watchai --check-statusline` conta o resto.
 
 **De onde vem cada um:**
 
@@ -365,7 +386,15 @@ Para ligar a do Claude Code, **um comando**:
 ```bash
 watchai --install-statusline     # liga
 watchai --uninstall-statusline   # desliga, e devolve o que havia antes
+watchai --check-statusline       # diz se está ligada, e o que está lá se não está
 ```
+
+Rodar o `--install-statusline` de novo é seguro e é o conserto de quem já o
+tinha rodado: ele reaponta o comando (útil depois de trocar de clone por `pipx`)
+e acerta o `refreshInterval`, que o WatchAI gravava em milissegundos nas versões
+anteriores — o campo é em **segundos**, e 30000 ali são oito horas, não trinta.
+Com o valor errado o número congelava justamente na sessão parada, que é quando
+a janela vira.
 
 **Se você já tem uma statusline, ela não é perdida.** Instalar não sobrescreve a
 sua: o WatchAI passa a ser chamado no lugar dela, guarda o consumo, **executa a
