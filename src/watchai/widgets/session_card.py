@@ -102,7 +102,7 @@ class CardBody(Widget):
             row.append(" " + agent.label, Style(color=colors().text2))
         return row
 
-    def _closing(self, falta, width: int) -> Text:
+    def _closing_row(self, falta, width: int) -> Text:
         """Aviso de que o card do terminal fechado está de saída."""
         row = Text(no_wrap=True, overflow="ellipsis")
         row.append("closing".ljust(LABEL_W), Style(color=colors().yellow))
@@ -138,7 +138,7 @@ class CardBody(Widget):
             ]
         else:
             if falta is not None:
-                primeira = self._closing(falta, width)
+                primeira = self._closing_row(falta, width)
             elif terminal:
                 primeira = self._agents(width)
             else:
