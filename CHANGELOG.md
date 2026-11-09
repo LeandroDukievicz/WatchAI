@@ -6,6 +6,10 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Corrigido
+- **A varredura real falhava inteira no Windows antes de olhar qualquer
+  processo.** `psutil.process_iter()` recebia o atributo Unix-only `uids`; no
+  Windows isso levanta `ValueError` e virava diagnóstico genérico `erro`. O
+  teste com processo real da nova matriz encontrou a falha no primeiro run.
 - **A barra do Claude Code envelhecia sozinha porque o `refreshInterval` ia em
   milissegundos.** O campo é em **segundos** — o esquema do Claude Code o
   descreve como "re-run the status line command every N seconds" e o multiplica

@@ -18,16 +18,18 @@ def test_psutil_encontra_agente_real_e_identifica_o_terminal(tmp_path):
     process = subprocess.Popen([sys.executable, str(fake_cli)])
     try:
         found = None
+        last = None
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline:
+            last = PsutilSource().snapshot()
             found = next(
-                (agent for agent in PsutilSource().snapshot().agents if agent.pid == process.pid),
+                (agent for agent in last.agents if agent.pid == process.pid),
                 None,
             )
             if found is not None:
                 break
             time.sleep(0.2)
-        assert found is not None
+        assert found is not None, f"diagnostic={last.diagnostico if last else 'no snapshot'}"
         assert found.kind == "claude"
         assert found.terminal and found.terminal_label
         if sys.platform == "win32":

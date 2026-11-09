@@ -181,9 +181,14 @@ class PsutilSource:
 
         tabela: dict[int, dict] = {}
         vistos = 0  # antes de filtrar por usuário: mede o que dá para enxergar
-        for p in psutil.process_iter(
-            ["pid", "ppid", "name", "cmdline", "create_time", "cpu_times", "username", "uids"]
-        ):
+        campos = ["pid", "ppid", "name", "cmdline", "create_time", "cpu_times", "username"]
+        # `uids()` não existe no Windows. Pedir o atributo mesmo sem usá-lo faz
+        # `process_iter(attrs=...)` levantar ValueError e transforma **toda** a
+        # leitura numa Snapshot(diagnostico="erro") — algo que os testes com
+        # tabela injetada nunca revelaram.
+        if hasattr(psutil.Process, "uids"):
+            campos.append("uids")
+        for p in psutil.process_iter(campos):
             vistos += 1
             info = p.info
             if eu is not None:
