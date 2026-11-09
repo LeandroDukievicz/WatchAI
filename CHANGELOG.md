@@ -48,6 +48,19 @@ versionamento conforme [SemVer](https://semver.org/lang/pt-BR/).
   `python -m watchai` já fazia certo.
 
 ### Adicionado
+- **Saída `watchai --json` em NDJSON**, contínua por padrão e com `--once` para
+  scripts. Cada linha é um snapshot completo das sessões, agentes, estados,
+  PIDs e terminais, reutilizando o `LiveProvider` em vez de criar uma segunda
+  detecção para integrações.
+- **Extensão do VS Code em `vscode-extension/`**: árvore lateral, resumo na
+  status bar, notificações de atenção e revelação da aba integrada por
+  `Terminal.processId`. O CI compila, empacota e guarda o VSIX instalável.
+- **Teste de processo real nos três sistemas do CI** e capturas SVG das quatro
+  telas como artifacts. No Windows, o runner também prova que os tipos WinRT do
+  toast carregam.
+- **Pareamento exato do Claude Code por PID** via
+  `~/.claude/sessions/<pid>.json`, com `sessionId`, `cwd`, `kind` e `status` como
+  sinais conservadores. A heurística anterior continua como fallback.
 - **`watchai --check-statusline`** — diz se o consumo do Claude Code tem como
   chegar até aqui e, quando não tem, o que está no lugar. É para a pergunta que
   antes só se respondia lendo o `settings.json` na mão: "por que a barra do

@@ -160,6 +160,7 @@ class Session:
     tty: str = ""  # caminho do terminal, quando existe: "/dev/pts/10"
     window_pid: int | None = None  # processo dono da janela (o emulador)
     window_app: str = ""  # nome dele, para achar o app no D-Bus
+    terminal_pid: int | None = None  # shell da aba (Terminal.processId no VS Code)
     closed_at: datetime | None = None  # quando o terminal sumiu
 
     @property

@@ -62,6 +62,11 @@ Python do sistema. Se o comando não aparecer logo após instalar, rode
 Windows**, e o CI verifica isso a cada commit: instala o pacote por `pipx` e
 roda o comando nos três.
 
+> A instalação e a detecção básica passam no CI dos três sistemas, inclusive
+> com um processo real. O uso visual, o foco de janela e a notificação foram
+> verificados manualmente apenas no **Linux**; Windows e macOS ainda precisam de
+> validação numa máquina real antes de serem anunciados como suporte completo.
+
 O comando acima lê o repositório na hora da instalação, então você leva sempre
 o estado atual do `main`. Para atualizar depois, ou remover:
 
@@ -136,6 +141,8 @@ watchai --check-statusline      # diz se o consumo do Claude tem como chegar
                                 # até aqui — para quando a barra dele não aparece
 watchai --statusline            # não abre a interface: é o modo que o agente
                                 # chama a cada render (veja ① Cabeçalho)
+watchai --json                  # snapshots contínuos em NDJSON, para integrações
+watchai --json --once           # um snapshot e encerra, para scripts
 ```
 
 Dentro de um clone para desenvolvimento, `python main.py` e
@@ -145,6 +152,32 @@ Truecolor (`COLORTERM=truecolor`) dá as cores exatas; sem ele o Textual aproxim
 para 256/16 cores. Nada depende de ligatures — só símbolos Unicode simples
 (`● ○ ◐ ◓ ◑ ◒ ◆ ◇ ▲ ▸ ▶ ─ │ ╭ ╮ ╰ ╯`). Testado com JetBrains Mono, Fira Code,
 Cascadia, Hack, Meslo e Ubuntu Mono.
+
+### VS Code
+
+A extensão em [`vscode-extension/`](vscode-extension/) reutiliza exatamente a
+mesma detecção pelo `watchai --json`: não reimplementa o monitor em TypeScript e
+não envia dados para fora da máquina. Ela oferece:
+
+- árvore lateral com um item por terminal e seus agentes;
+- resumo de estados na barra inferior;
+- notificações nativas em READY, INPUT e STOP;
+- clique para revelar a aba quando a sessão roda num terminal integrado desta
+  janela do VS Code.
+
+Enquanto ela não é publicada no Marketplace, o CI gera um `watchai.vsix`
+instalável no artifact **watchai-vscode-extension**. Para construir localmente:
+
+```bash
+cd vscode-extension
+npm ci
+npm run package
+code --install-extension watchai.vsix
+```
+
+O núcleo Python continua sendo necessário e deve estar no PATH do VS Code. Se
+não estiver, a extensão oferece copiar o comando de instalação por `pipx`; um
+caminho absoluto também pode ser definido em `watchai.command`.
 
 ---
 
@@ -159,7 +192,7 @@ A detecção tem duas camadas, e é a combinação que faz sentido:
 | Camada | De onde vem | O que responde |
 |---|---|---|
 | **Processos** | varredura da tabela de processos (`psutil`), a cada 2 s | quem existe, em que terminal, desde quando — e se está gastando CPU. O `cwd` daqui é onde a sessão **abriu**: serve de atalho para achar o diário, e o WatchAI funciona sem ele |
-| **Diário** | o `.jsonl` que o próprio agente grava (`~/.claude/projects/…`, `~/.codex/sessions/…`) | **o que** ele está fazendo agora, se terminou ou se travou esperando você — e **em que projeto está**, que o processo não sabe quando o agente troca de pasta |
+| **Diário** | o `.jsonl` que o próprio agente grava (`~/.claude/projects/…`, `~/.codex/sessions/…`); no Claude, `~/.claude/sessions/<pid>.json` liga o processo ao diário exato | **o que** ele está fazendo agora, se terminou ou se travou esperando você — e **em que projeto está**, que o processo não sabe quando o agente troca de pasta |
 | **Limite** | o mesmo diário do codex; e, para o Claude Code, o que a statusline dele deixa em `~/.config/watchai/limits/` | quanto já foi gasto das janelas de 5 h e de 7 dias do plano — lido a cada 30 s, não a cada varredura |
 
 Nenhuma das duas sozinha resolve. O processo não distingue **READY** ("terminou,

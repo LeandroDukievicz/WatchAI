@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, statusline, termtitle
+from . import __version__, jsonstream, statusline, termtitle
 from .app import WatchAIApp
 from .providers import limits
 
@@ -19,6 +19,16 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
         "--mock",
         action="store_true",
         help="roda com dados simulados, sem olhar os processos da máquina",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emite snapshots das sessões como NDJSON, sem abrir a interface",
+    )
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="com --json, emite apenas um snapshot e encerra",
     )
     parser.add_argument(
         "--theme",
@@ -53,7 +63,12 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
         "escreve nada: é para quando a barra do Claude não aparece no painel",
     )
     parser.add_argument("--version", action="version", version=f"watchai {__version__}")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.once and not args.json:
+        parser.error("--once só pode ser usado junto de --json")
+    if args.json and args.mock:
+        parser.error("--json lê sessões reais; --mock é exclusivo da interface")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int | None:
@@ -81,6 +96,8 @@ def main(argv: list[str] | None = None) -> int | None:
             entrada = ""
         print(limits.statusline(entrada))
         return
+    if args.json:
+        return jsonstream.stream(sys.stdout, once=args.once)
     # A janela passa a se chamar WatchAI enquanto o app está no ar, e volta ao
     # nome de antes na saída. Fica aqui, e não dentro do app, para não disputar
     # a saída com o Textual: a troca acontece antes de ele assumir a tela e

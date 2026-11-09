@@ -3,7 +3,7 @@
 Onde o WatchAI está e o que falta. Cada item diz **o que é**, **por que importa**
 e **onde mexer** — para dar para pegar um e fazer sem redescobrir o contexto.
 
-Atualizado em 2026-09-28.
+Atualizado em 2026-11-09.
 
 ---
 
@@ -364,12 +364,24 @@ Fora do escopo do item, e continua valendo: não derivar percentual somando
 tokens, não rodar `claude -p` para perguntar, não raspar a TUI, não ler
 credencial.
 
+
+### M15 — integração sem duplicar o núcleo
+
+- [x] **`watchai --json`** em NDJSON contínuo, com `--once` para scripts
+- [x] **Extensão do VS Code**: árvore de sessões, status bar, notificações e
+      revelação do terminal integrado por PID; VSIX construído no CI
+- [x] **Pareamento Claude Code PID → sessionId → JSONL**, mantendo o casamento
+      por diretório/relógio como fallback
+- [x] **CI com processo real** nos três sistemas, prova dos tipos WinRT do toast
+      e artifacts visuais de dashboard, detalhes, ajuda e temas
+
 ---
 
-## O que ainda falta
+## Fila auditada
 
-Em ordem de prioridade. Cada item diz **de quem é a vez** — o que depende de
-você e o que é código.
+Em ordem de prioridade. Itens marcados foram concluídos na revisão de
+2026-11-09; os abertos dizem **de quem é a vez** — o que depende de você,
+hardware externo ou decisão de produto.
 
 > **Distribuir saiu da lista em 2026-10-15.** O WatchAI não vai para o PyPI nem
 > para a Snap Store: é instalado da fonte, por quem clonar o repositório, que
@@ -395,7 +407,7 @@ notificação aparecendo. Os riscos concretos, por ordem de probabilidade:
 
 **Como testar tendo só Linux.** Em três faixas, da mais barata para a mais cara:
 
-- [ ] **(a) Fazer o CI provar muito mais do que prova hoje — é onde está o maior
+- [x] **(a) Fazer o CI provar muito mais do que prova hoje — é onde está o maior
       retorno, e é só código.** Hoje **nenhum teste toca a tabela de processos
       real**: todos injetam uma fonte falsa. Dá para mudar isso e roda igual nos
       três sistemas: suba um processo cuja linha de comando o `identify` casa —
@@ -406,7 +418,9 @@ notificação aparecendo. Os riscos concretos, por ordem de probabilidade:
       número um. Junto: invocar o script do toast no runner e conferir que o tipo
       WinRT carrega (é exatamente a falha silenciosa), e anexar um
       `app.export_screenshot()` por sistema como artefato do CI, para dar para
-      olhar a renderização de cada um.
+      olhar a renderização de cada um. Implementado com um processo real
+      reconhecido por `PsutilSource`, prova dos tipos WinRT e quatro SVGs
+      (dashboard, detalhes, ajuda e temas) por sistema.
 - [ ] **(b) VM de Windows local, grátis e legal.** ISO de avaliação de 90 dias da
       Microsoft em QEMU/KVM (ou no LXD, que você já tem). Cobre o que o CI nunca
       vai cobrir: janela minimizada voltando, `AppActivate` indo para a janela
@@ -444,20 +458,22 @@ Três desenhos foram considerados; o escolhido é o terceiro:
 | B | reimplementar a detecção em TypeScript | semanas | duplica ~1.500 linhas de lógica |
 | **C** | **núcleo Python emite JSON, extensão desenha** | ~1 semana | **o certo** |
 
-- [ ] **`watchai --json`** (lado Python, e útil sozinho): imprime o snapshot de
+- [x] **`watchai --json`** (lado Python, e útil sozinho): imprime o snapshot de
       sessões como NDJSON. Reaproveita o `LiveProvider` inteiro — hoje não existe
       nenhuma saída que não seja a TUI. ~100–150 linhas. Serve também para
       scripts, barra do waybar/i3 e teste de integração.
-- [ ] **Extensão** (TypeScript): `TreeView` na barra lateral com um item por
+- [x] **Extensão** (TypeScript): `TreeView` na barra lateral com um item por
       sessão e o semáforo como ícone, `StatusBarItem` com o resumo (`◐2 ●1`),
       clique revelando o terminal, notificação nativa em READY/INPUT/ERROR.
-- [ ] Armadilhas de publicação já levantadas: o nome `watchai.watchai` está livre
+- [x] Armadilhas de empacotamento resolvidas: o nome `watchai.watchai` estava livre
       no Marketplace; **o ícone do `package.json` não pode ser SVG** (o
       `docs/brand/watchai-icon.svg` precisa virar PNG 128×128, e imagens do
-      README precisam ser URLs https não-SVG); e **a partir de 1º/12/2026 os PATs
-      globais do Azure DevOps são aposentados** — a publicação automatizada tem
-      que nascer em Microsoft Entra ID.
-- [ ] Atrito honesto: a extensão é Node e o núcleo é Python. Ela procura
+      README precisam ser URLs https não-SVG). O pacote usa PNG 256×256, URLs
+      HTTPS e o CI gera um VSIX instalável. **Publicar no Marketplace ainda
+      depende de conta/publisher e revisão**; quando isso for decidido, deve
+      usar Trusted Publishing/Entra ID, pois os PATs globais do Azure DevOps
+      serão aposentados em 1º/12/2026.
+- [x] Atrito honesto: a extensão é Node e o núcleo é Python. Ela procura
       `watchai` no PATH e, se não achar, manda instalar da fonte:
       `pipx install git+https://github.com/LeandroDukievicz/WatchAI.git`. Sem
       pacote em loja, é esse o comando que a extensão oferece.
@@ -488,9 +504,9 @@ interessa.
 a pasta só existe para o Claude Code. O ganho é precisão num caso conhecido (duas
 sessões na mesma pasta), não um bug aberto.
 
-- [ ] `ClaudeCode.arquivos()` passa a preferir o `sessionId` do PID quando houver
-- [ ] `status` e `kind` do arquivo entram como sinal na decisão de estado
-- [ ] a heurística de relógio continua, para quem não tem esse arquivo
+- [x] `ClaudeCode` passa a preferir o `sessionId` do PID quando houver
+- [x] `status` e `kind` do arquivo entram como sinal conservador na decisão de estado
+- [x] a heurística de relógio continua, para quem não tem esse arquivo
 
 ---
 

@@ -38,6 +38,20 @@ jobs:
       - name: Testes
         run: pytest
 
+      # Um SVG por tela e por sistema: teste verde não revela fonte quebrada,
+      # modal cortado ou diferença do renderizador do Windows/macOS.
+      - name: Exportar todas as telas
+        if: matrix.python-version == '3.13'
+        run: python scripts/ci_screenshots.py artifacts/screens
+
+      - name: Guardar capturas para inspeção
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: screens-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: artifacts/screens/*.svg
+          if-no-files-found: error
+
       - name: Lint (imports mortos)
         run: pyflakes src tests main.py
 
@@ -68,3 +82,30 @@ jobs:
       - name: O comando roda
         shell: bash
         run: pipx run --spec . watchai --version
+
+  vscode-extension:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Instalar, conferir tipos e empacotar
+        working-directory: vscode-extension
+        run: |
+          npm ci
+          npm run check
+          npm run package
+
+      - name: Guardar VSIX instalável
+        uses: actions/upload-artifact@v4
+        with:
+          name: watchai-vscode-extension
+          path: vscode-extension/watchai.vsix
+          if-no-files-found: error

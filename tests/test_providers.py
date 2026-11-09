@@ -822,6 +822,58 @@ def test_duas_sessoes_na_mesma_pasta_nao_dividem_o_diario(tmp_path):
     assert atividade[11] == "Bash: npm test"
 
 
+def test_claude_casa_pid_com_session_id_sem_heuristica(tmp_path):
+    """O registro por PID manda mesmo quando os relógios induziriam a troca."""
+    cwd = "/home/eu/proj"
+    primeiro = escreve_transcript(tmp_path, cwd, [
+        abertura(AGORA - timedelta(hours=2)),
+        assistente({"type": "text", "text": "pronto"}),
+    ], nome="id-primeiro.jsonl")
+    segundo = escreve_transcript(tmp_path, cwd, [
+        abertura(AGORA - timedelta(minutes=20)),
+        assistente({"type": "tool_use", "id": "t1", "name": "Bash",
+                    "input": {"command": "npm test"}}, parou="tool_use"),
+    ], nome="id-segundo.jsonl")
+    # Inverte mtimes: sem o índice exato, a sessão mais nova escolheria primeiro.
+    os.utime(primeiro, (AGORA.timestamp(), AGORA.timestamp()))
+    os.utime(segundo, ((AGORA - timedelta(minutes=1)).timestamp(),) * 2)
+    sessions = tmp_path / ".claude" / "sessions"
+    sessions.mkdir(parents=True)
+    for pid, sid, started in (
+        (10, "id-primeiro", AGORA - timedelta(hours=2)),
+        (11, "id-segundo", AGORA - timedelta(minutes=20)),
+    ):
+        (sessions / f"{pid}.json").write_text(json.dumps({
+            "pid": pid, "sessionId": sid, "cwd": cwd,
+            "kind": "interactive", "status": "shell",
+            "statusUpdatedAt": int(started.timestamp() * 1000),
+        }), encoding="utf-8")
+
+    store = SessionStore()
+    provider(store, Fonte(snap(
+        obs(10, terminal="/dev/pts/1", created=(AGORA - timedelta(minutes=3)).timestamp()),
+        obs(11, terminal="/dev/pts/2", created=(AGORA - timedelta(hours=3)).timestamp()),
+    )), Transcripts(tmp_path)).poll(AGORA)
+
+    activity = {s.agents[0].pid: s.agents[0].activity for s in store.sessions}
+    assert activity == {10: "task completed", 11: "Bash: npm test"}
+
+
+def test_registro_claude_invalido_recua_para_heuristica(tmp_path):
+    cwd = "/home/eu/proj"
+    escreve_transcript(tmp_path, cwd, [
+        abertura(AGORA - timedelta(minutes=2)),
+        assistente({"type": "text", "text": "pronto"}),
+    ], nome="certo.jsonl")
+    sessions = tmp_path / ".claude" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / "10.json").write_text("{quebrado", encoding="utf-8")
+    store = SessionStore()
+    provider(store, Fonte(snap(obs(10, created=(AGORA - timedelta(minutes=2)).timestamp()))),
+             Transcripts(tmp_path)).poll(AGORA)
+    assert store.sessions[0].agents[0].activity == "task completed"
+
+
 def test_diario_unico_nao_e_emprestado_para_a_sessao_vizinha(tmp_path):
     """Com um diário só para duas sessões, a segunda fica sem — e cai nos
     sinais de processo. Menos informação, mas informação certa: mostrar a

@@ -1,0 +1,110 @@
+{
+  "name": "watchai",
+  "displayName": "WatchAI",
+  "description": "Acompanhe sessões locais de agentes de IA na barra lateral do VS Code.",
+  "version": "0.1.0",
+  "publisher": "watchai",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "agents",
+    "claude",
+    "codex",
+    "terminal",
+    "monitor"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LeandroDukievicz/WatchAI.git",
+    "directory": "vscode-extension"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:watchai.sessions",
+    "onCommand:watchai.refresh",
+    "onCommand:watchai.revealSession",
+    "onCommand:watchai.copyInstallCommand"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "watchai",
+          "title": "WatchAI",
+          "icon": "media/watchai.svg"
+        }
+      ]
+    },
+    "views": {
+      "watchai": [
+        {
+          "id": "watchai.sessions",
+          "name": "Sessions",
+          "icon": "media/watchai.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "watchai.refresh",
+        "title": "WatchAI: Refresh Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "watchai.revealSession",
+        "title": "WatchAI: Reveal Session Terminal"
+      },
+      {
+        "command": "watchai.copyInstallCommand",
+        "title": "WatchAI: Copy Core Installation Command"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "watchai.refresh",
+          "when": "view == watchai.sessions",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "WatchAI",
+      "properties": {
+        "watchai.command": {
+          "type": "string",
+          "default": "watchai",
+          "description": "Executável do núcleo WatchAI. Use um caminho absoluto quando ele não estiver no PATH do VS Code."
+        },
+        "watchai.notifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mostra notificações do VS Code quando uma sessão muda para READY, INPUT ou STOP."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "check": "tsc -p ./ --noEmit",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package --out watchai.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^4.1.0",
+    "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
+  }
+}

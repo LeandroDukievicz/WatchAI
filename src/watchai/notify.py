@@ -45,11 +45,16 @@ TIMEOUT = 5.0
 # ferramentas de linha de comando usam para não precisar instalar um atalho.
 TOAST_AUMID = r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
 
-# Toast do Windows sem instalar módulo nenhum: WinRT puro.
-TOAST_PS = """
+# A menor prova possível de que o runner projeta os tipos WinRT usados pelo
+# toast. O CI executa este trecho no Windows sem precisar mostrar notificação.
+TOAST_TYPES_PS = """
 $ErrorActionPreference = 'Stop'
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType=WindowsRuntime] | Out-Null
+"""
+
+# Toast do Windows sem instalar módulo nenhum: WinRT puro.
+TOAST_PS = TOAST_TYPES_PS + """
 $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(
     [Windows.UI.Notifications.ToastTemplateType]::ToastText02)
 $texts = $xml.GetElementsByTagName('text')
@@ -161,4 +166,6 @@ class Notifier:
             self._desligar((saida or b"").decode("utf-8", "replace") or f"código {process.returncode}")
 
 
-__all__ = ["APP_NAME", "Notifier", "TIMEOUT", "TOAST_AUMID", "find_notifier"]
+__all__ = [
+    "APP_NAME", "Notifier", "TIMEOUT", "TOAST_AUMID", "TOAST_TYPES_PS", "find_notifier"
+]

@@ -1,7 +1,8 @@
 """De onde vêm os processos — a única parte que conhece o sistema operacional.
 
 `ProcessSource` é o contrato; `PsutilSource` é a implementação real. Os testes
-injetam uma fonte falsa e nunca tocam na tabela de processos da máquina.
+unitários injetam uma fonte falsa; um teste de integração pequeno também passa
+pela tabela de processos real nos runners Linux, macOS e Windows.
 
 O que é portátil e o que não é:
 
@@ -86,6 +87,7 @@ class ProcObs:
     tool_label: str = ""  # a ferramenta mais recente ("npm test", "rg foo")
     window_pid: int | None = None  # processo que **tem a janela** (o emulador)
     window_app: str = ""  # nome dele: "gnome-terminal-server", "ptyxis"…
+    terminal_pid: int | None = None  # shell da aba; permite ao VS Code revelar o terminal
     ancestors: tuple[int, ...] = field(default=())  # para desduplicar por árvore
 
 
@@ -352,6 +354,7 @@ class PsutilSource:
                     tool_label=rotulo,
                     window_pid=janela_pid or shell_pid,
                     window_app=nome_de(janela_pid) if janela_pid else "",
+                    terminal_pid=shell_pid,
                     ancestors=tuple(linha),
                 )
             )

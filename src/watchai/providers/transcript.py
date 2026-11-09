@@ -122,6 +122,12 @@ class Leitura:
     # começou: quem abre o agente na home e depois entra no projeto mantém o
     # processo na home para sempre. O diário grava o diretório a cada mensagem.
     cwd: str = ""
+    # Sinal de primeira mão do registro de processo do Claude Code. Fica junto
+    # da leitura para o provider poder preferir um "working" mais novo que um
+    # fim de turno ainda parado no JSONL, sem transformar estados desconhecidos
+    # em certezas.
+    session_status: str = ""
+    session_kind: str = ""
 
     def fresca(self, agora: float) -> bool:
         return agora - self.mtime <= FRESCOR_SEGUNDOS
@@ -214,6 +220,18 @@ class Cabecalho:
 
     cwd: str = ""
     inicio: float | None = None
+
+
+@dataclass(frozen=True)
+class ClaudeSession:
+    """Registro efêmero de ``~/.claude/sessions/<pid>.json``."""
+
+    pid: int
+    session_id: str
+    cwd: str = ""
+    kind: str = ""
+    status: str = ""
+    status_since: float | None = None
 
 
 # O começo de um diário não muda: ele só cresce. Guardar o que já foi lido
@@ -466,7 +484,46 @@ class ClaudeCode(Diario):
 
     def __init__(self, home: Path) -> None:
         self.raiz = home / ".claude" / "projects"
+        self.sessoes = home / ".claude" / "sessions"
         self._vivos: dict[Path, tuple[float, bool]] = {}  # sub-agente -> rodada aberta?
+
+    def sessao(self, pid: int) -> ClaudeSession | None:
+        """O vínculo exato PID → sessionId, quando esta versão do Claude o grava.
+
+        O arquivo é dado auxiliar: truncado, antigo ou sem permissão simplesmente
+        devolve ``None`` e preserva o casamento por pasta/relógio.
+        """
+        caminho = self.sessoes / f"{pid}.json"
+        try:
+            dado = json.loads(caminho.read_text(encoding="utf-8"))
+            gravado = int(dado.get("pid", pid))
+            session_id = dado.get("sessionId")
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return None
+        if gravado != pid or not isinstance(session_id, str) or not session_id:
+            return None
+        cwd = dado.get("cwd") if isinstance(dado.get("cwd"), str) else ""
+        return ClaudeSession(
+            pid=pid,
+            session_id=session_id,
+            cwd=_caminho(cwd) if cwd else "",
+            kind=str(dado.get("kind") or "").lower(),
+            status=str(dado.get("status") or "").lower(),
+            status_since=_epoch_ms(dado.get("statusUpdatedAt")),
+        )
+
+    def arquivo_da_sessao(self, sessao: ClaudeSession) -> Path | None:
+        """Resolve o JSONL apontado pelo sessionId sem varrer todos os diários."""
+        nome = f"{sessao.session_id}.jsonl"
+        if sessao.cwd:
+            direto = self.raiz / slug(sessao.cwd) / nome
+            if direto.is_file():
+                return direto
+        if not self.raiz.is_dir():
+            return None
+        # O cwd pode ter mudado e o registro já saber o novo caminho enquanto o
+        # JSONL ainda mora no slug em que a sessão nasceu.
+        return next((p for p in self.raiz.glob(f"*/{nome}") if p.is_file()), None)
 
     def recentes(self) -> list[Path]:
         if not self.raiz.is_dir():
@@ -793,10 +850,10 @@ class OpenCode(Diario):
 class Transcripts:
     """Resolve o diário de cada agente e guarda o que já leu.
 
-    O casamento é por diretório de trabalho: o mesmo `cwd` que o processo
-    expõe é o que o agente grava no arquivo. Dois agentes do mesmo tipo no
-    mesmo diretório compartilham o diário mais recente — o segundo cai nos
-    sinais de processo, que é a degradação certa.
+    Para o Claude Code, o índice ``sessions/<pid>.json`` é a primeira escolha.
+    Sem ele — e para os outros agentes — o casamento usa diretório de trabalho
+    e relógio. Cada diário só pode ganhar um dono; quem sobra cai nos sinais de
+    processo, que é a degradação certa.
     """
 
     def __init__(self, home: Path | None = None) -> None:
@@ -807,6 +864,7 @@ class Transcripts:
         self._cache: dict[Path, tuple[tuple, Leitura | None]] = {}
         self._cwd: dict[Path, str] = {}  # diretório por arquivo, achado uma vez
         self._varrido: dict[tuple[str, str], float] = {}  # quando o disco foi lido
+        self._claude_sessoes: dict[int, ClaudeSession] = {}
 
     def atribuir(
         self, kind: str, agentes: list[tuple[int, float, str]]
@@ -834,9 +892,19 @@ class Transcripts:
         if leitor is None:
             return {pid: None for pid, _, _ in agentes}
         try:
+            self._claude_sessoes = {}
+            if isinstance(leitor, ClaudeCode):
+                self._claude_sessoes = {
+                    pid: sessao
+                    for pid, _, _ in agentes
+                    if (sessao := leitor.sessao(pid)) is not None
+                }
             escolha = self._parear(agentes, self._possiveis(leitor, kind, agentes))
             return {
-                pid: (self._do_arquivo(leitor, caminho) if caminho else None)
+                pid: self._com_sinal_claude(
+                    self._claude_sessoes.get(pid),
+                    self._do_arquivo(leitor, caminho) if caminho else None,
+                )
                 for pid, caminho in escolha.items()
             }
         except OSError:
@@ -855,12 +923,23 @@ class Transcripts:
         """
         conhecidas = {cwd for _, _, cwd in agentes if cwd}
         por_pid: dict[int, list[Path]] = {}
+        # O registro do Claude é a única chave exata disponível: se aponta para
+        # um JSONL existente, não há por que deixá-lo disputar por relógio.
+        exatos: dict[int, Path] = {}
+        if isinstance(leitor, ClaudeCode):
+            for pid, _, _ in agentes:
+                sessao = self._claude_sessoes.get(pid)
+                if sessao is None or (sessao.kind and sessao.kind != "interactive"):
+                    continue
+                caminho = leitor.arquivo_da_sessao(sessao)
+                if caminho is not None:
+                    exatos[pid] = caminho
         for pasta in conhecidas:
             quantos = sum(1 for _, _, cwd in agentes if cwd == pasta)
             achados = self._opcoes(leitor, kind, pasta, quantos)
             for pid, _, cwd in agentes:
                 if cwd == pasta:
-                    por_pid[pid] = achados
+                    por_pid[pid] = [exatos[pid]] if pid in exatos else achados
         cegos = [pid for pid, _, cwd in agentes if not cwd]
         if cegos:
             livres = [
@@ -869,8 +948,56 @@ class Transcripts:
                 if _cabecalho(caminho).cwd not in conhecidas
             ]
             for pid in cegos:
-                por_pid[pid] = livres
+                por_pid[pid] = [exatos[pid]] if pid in exatos else livres
         return por_pid
+
+    @staticmethod
+    def _com_sinal_claude(
+        sessao: ClaudeSession | None, leitura: Leitura | None
+    ) -> Leitura | None:
+        """Acrescenta apenas sinais conservadores do arquivo indexado por PID."""
+        if sessao is None:
+            return leitura
+        if sessao.kind and sessao.kind != "interactive":
+            return None
+        ativos = {"busy", "working", "running", "processing"}
+        if leitura is None:
+            if sessao.status not in ativos:
+                return None
+            quando = sessao.status_since or time.time()
+            return Leitura(
+                PENSANDO,
+                "thinking",
+                quando,
+                quando,
+                sessao.cwd,
+                sessao.status,
+                sessao.kind,
+            )
+        atualizado = leitura
+        if sessao.cwd and not leitura.cwd:
+            atualizado = replace(atualizado, cwd=sessao.cwd)
+        # Um estado ativo mais novo invalida um fim de turno antigo. Estados
+        # como "idle" e "shell" não são convertidos: não distinguem READY de
+        # INPUT/WAITING e inventar essa distinção seria pior que o fallback.
+        if (
+            sessao.status in ativos
+            and leitura.estado == FEITO
+            and sessao.status_since is not None
+            and sessao.status_since >= leitura.mtime
+        ):
+            atualizado = replace(
+                atualizado,
+                estado=PENSANDO,
+                atividade="thinking",
+                mtime=sessao.status_since,
+                desde=sessao.status_since,
+            )
+        return replace(
+            atualizado,
+            session_status=sessao.status,
+            session_kind=sessao.kind,
+        )
 
     def _opcoes(self, leitor, kind: str, cwd: str, quantos: int) -> list[Path]:
         """Os diários possíveis deste diretório, guardados entre voltas.
@@ -1018,6 +1145,7 @@ class Transcripts:
 __all__ = [
     "CABECALHO_LINHAS",
     "Cabecalho",
+    "ClaudeSession",
     "Diario",
     "ENCANAMENTO",
     "ERRO",

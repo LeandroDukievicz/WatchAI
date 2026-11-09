@@ -274,6 +274,7 @@ class LiveProvider:
             tty=key if key.startswith("/dev/") else "",
             window_pid=grupo[0].window_pid,
             window_app=grupo[0].window_app,
+            terminal_pid=grupo[0].terminal_pid,
         )
         self._proximo_id += 1
         self.store.sessions.append(sessao)
@@ -296,6 +297,7 @@ class LiveProvider:
         sessao.closed_at = None
         sessao.window_pid = grupo[0].window_pid
         sessao.window_app = grupo[0].window_app
+        sessao.terminal_pid = grupo[0].terminal_pid
         sessao.agents.clear()
         self.store.log(sessao, now, "terminal detected")
 
